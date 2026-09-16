@@ -5,6 +5,7 @@ import {
   aggregateDashboardSnapshots,
   filterDashboardAggregateCurrency,
 } from "../utils/dashboard-aggregate.ts";
+import { createTrafficMetrics } from "../utils/dashboard-traffic.ts";
 
 test("all-store aggregation sums matching currencies without mixing them", () => {
   const result = aggregateDashboardSnapshots([
@@ -25,6 +26,10 @@ test("all-store aggregation sums matching currencies without mixing them", () =>
     { currency: "THB", amount: 100 },
     { currency: "USD", amount: 50 },
   ]);
+  assert.equal(result.traffic.availableStores, 3);
+  assert.equal(result.traffic.today.sessions, 1545);
+  assert.equal(result.traffic.last30Days.visitors, 1545);
+  assert.equal(result.traffic.sources[0]?.sessions, 1545);
 });
 
 test("currency filtering recalculates counts, rankings, and money series", () => {
@@ -150,6 +155,47 @@ function snapshot(
           },
         ],
       },
+    },
+    traffic: {
+      available: true,
+      availableStores: 1,
+      today: createTrafficMetrics({
+        sessions: revenueAmount,
+        visitors: revenueAmount,
+        pageviews: revenueAmount * 2,
+        bounces: revenueAmount / 2,
+        completedCheckouts: 1,
+        averageSessionDuration: 60,
+      }),
+      last7Days: createTrafficMetrics({
+        sessions: revenueAmount,
+        visitors: revenueAmount,
+        pageviews: revenueAmount * 2,
+      }),
+      last30Days: createTrafficMetrics({
+        sessions: revenueAmount,
+        visitors: revenueAmount,
+        pageviews: revenueAmount * 2,
+      }),
+      hourly: [
+        {
+          period: "2026-08-10T00:00:00Z",
+          sessions: revenueAmount,
+          visitors: revenueAmount,
+          pageviews: revenueAmount * 2,
+        },
+      ],
+      daily: [
+        {
+          period: "2026-08-10",
+          sessions: revenueAmount,
+          visitors: revenueAmount,
+          pageviews: revenueAmount * 2,
+        },
+      ],
+      sources: [{ label: "Search", sessions: revenueAmount, visitors: revenueAmount }],
+      countries: [{ label: "US", sessions: revenueAmount, visitors: revenueAmount }],
+      devices: [{ label: "Mobile", sessions: revenueAmount, visitors: revenueAmount }],
     },
     users: [],
     warnings: [],

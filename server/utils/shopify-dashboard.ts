@@ -17,6 +17,8 @@ import {
 } from "./callShopifyApi";
 import { callShopifyPaginatedApi } from "./callShopifyPaginatedApi";
 import { fetchShopifyPaymentsBalanceTransactions } from "./shopify-payments-graphql";
+import { fetchShopifyTraffic } from "./shopify-traffic";
+import { emptyDashboardTraffic } from "~~/utils/dashboard-traffic";
 import {
   aggregateOrderAnalytics,
   aggregatePaymentAnalytics,
@@ -87,6 +89,7 @@ export async function fetchStoreDashboard({
     payoutsResult,
     transactionsResult,
     usersResult,
+    trafficResult,
   ] = await Promise.allSettled([
     callShopifyPaginatedApi<ShopifyOrder>({
       ...common,
@@ -139,6 +142,7 @@ export async function fetchStoreDashboard({
       preserveUnsafeIntegers: true,
       forwardResponseHeaders: false,
     }),
+    fetchShopifyTraffic(common),
   ]);
 
   const monthOrders = settledValue(ordersResult, [], warnings, {
@@ -208,6 +212,18 @@ export async function fetchStoreDashboard({
     });
   }
 
+  const traffic =
+    trafficResult.status === "fulfilled"
+      ? trafficResult.value
+      : emptyDashboardTraffic();
+  if (trafficResult.status === "rejected") {
+    addWarning(warnings, {
+      resource: "traffic",
+      message:
+        "Traffic analytics are unavailable. Verify read_reports and Level 2 protected customer data access.",
+    });
+  }
+
   const orderAnalytics = aggregateOrderAnalytics(monthOrders, period);
   const storeCookie = resolveStoreCookieData(event, storeId);
   const domain = resolveStoreDomain(storeId, storeCookie?.domain);
@@ -246,6 +262,7 @@ export async function fetchStoreDashboard({
       currencies: paymentCurrencies,
       ...paymentAnalytics,
     },
+    traffic,
     users: mapDashboardUsers(users, profile || null),
     warnings,
   };

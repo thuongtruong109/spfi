@@ -102,6 +102,44 @@ export interface DashboardUser {
   accountOwner: boolean;
 }
 
+export interface DashboardTrafficMetrics {
+  sessions: number;
+  visitors: number;
+  pageviews: number;
+  bounces: number;
+  completedCheckouts: number;
+  pageviewsPerSession: number;
+  averageSessionDuration: number;
+  bounceRate: number;
+  conversionRate: number;
+}
+
+export interface DashboardTrafficPoint {
+  period: string;
+  sessions: number;
+  visitors: number;
+  pageviews: number;
+}
+
+export interface DashboardTrafficBreakdown {
+  label: string;
+  sessions: number;
+  visitors: number;
+}
+
+export interface DashboardTrafficSummary {
+  available: boolean;
+  availableStores: number;
+  today: DashboardTrafficMetrics;
+  last7Days: DashboardTrafficMetrics;
+  last30Days: DashboardTrafficMetrics;
+  hourly: DashboardTrafficPoint[];
+  daily: DashboardTrafficPoint[];
+  sources: DashboardTrafficBreakdown[];
+  countries: DashboardTrafficBreakdown[];
+  devices: DashboardTrafficBreakdown[];
+}
+
 export interface DashboardWarning {
   resource:
     | "orders"
@@ -110,7 +148,8 @@ export interface DashboardWarning {
     | "products"
     | "payments"
     | "profile"
-    | "users";
+    | "users"
+    | "traffic";
   message: string;
 }
 
@@ -140,6 +179,7 @@ export interface StoreDashboardSnapshot {
     payouts: DashboardPayoutSummary;
     transactions: DashboardTransactionSummary;
   };
+  traffic: DashboardTrafficSummary;
   users: DashboardUser[];
   warnings: DashboardWarning[];
 }
@@ -171,4 +211,5 @@ export interface DashboardAggregate {
     payouts: DashboardPayoutSummary;
     transactions: DashboardTransactionSummary;
   };
+  traffic: DashboardTrafficSummary;
 }

@@ -2,10 +2,9 @@
   "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "spfi",
   "version": "2.1.0",
-  "identifier": "me.thuongtruong.spfi",
+  "identifier": "spfi.thuongtruong.me",
   "build": {
     "devUrl": "http://localhost:3000",
-    "frontendDist": "https://spfi.netlify.app",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
@@ -13,7 +12,7 @@
     "windows": [
       {
         "title": "Spfi - Telescope the Shopify storefront in pipeline from one desk",
-        "url": "https://spfi.netlify.app",
+        "url": "http://localhost:3000",
         "width": 1280,
         "height": 800,
         "minWidth": 900,

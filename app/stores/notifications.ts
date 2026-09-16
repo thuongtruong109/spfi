@@ -3,7 +3,6 @@ import { defineStore } from "pinia";
 import { useCredentialVaultStore } from "~/stores/credentialVault";
 import { useDashboardStore } from "~/stores/dashboard";
 import { useFormStore } from "~/stores/form";
-import { useProductStore } from "~/stores/product";
 import type {
   ClientWebhookNotification,
   WebhookNotification,
@@ -15,7 +14,6 @@ import { getAppErrorMessage } from "~~/utils/error";
 import { mapSettledWithConcurrency } from "~~/utils/promise-concurrency";
 import { getStoreTokenState, resolveStoreAccessToken } from "~~/utils/shop-auth";
 import { extractServerSentEvents } from "~~/utils/sse";
-import { forgetStoreResource } from "~~/utils/store-resource-cache";
 
 const NOTIFICATION_STORAGE_KEY = "spf_webhook_notifications";
 const MAX_CLIENT_NOTIFICATIONS = 100;
@@ -25,7 +23,6 @@ type ConnectionState = "idle" | "registering" | "connecting" | "connected" | "er
 
 export const useNotificationStore = defineStore("notifications", () => {
   const formStore = useFormStore();
-  const productStore = useProductStore();
   const credentialVault = useCredentialVaultStore();
   const dashboardStore = useDashboardStore();
   const notifications = ref<ClientWebhookNotification[]>([]);
@@ -243,21 +240,6 @@ export const useNotificationStore = defineStore("notifications", () => {
         (item) => item.storeId !== notification.storeId,
       );
       scheduleSynchronization();
-    }
-
-    if (
-      notification.kind === "collection" ||
-      notification.topic === "PRODUCTS_CREATE" ||
-      notification.topic === "PRODUCTS_UPDATE" ||
-      notification.topic === "PRODUCTS_DELETE"
-    ) {
-      // Flexible collection memberships can change when either a collection
-      // source or a matching product changes. The webhook payload does not
-      // contain the 2026-07 source state, so force a GraphQL requery next load.
-      forgetStoreResource(notification.storeId, "collections");
-    }
-    if (notification.kind === "collection") {
-      productStore.invalidateManagementContext(notification.storeId);
     }
 
     notifications.value = [

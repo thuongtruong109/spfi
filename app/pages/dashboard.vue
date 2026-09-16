@@ -541,6 +541,12 @@ onActivated(ensureLoaded);
         </DashboardMetricCard>
       </section>
 
+      <DashboardTrafficPanel
+        :traffic="aggregate.traffic"
+        :loading="isLoading"
+        :store-count="stores.length || totalStores"
+      />
+
       <section class="dashboard-chart-grid">
         <article class="dashboard-panel dashboard-revenue-panel">
           <header class="dashboard-panel-header">

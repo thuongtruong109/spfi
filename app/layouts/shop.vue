@@ -2,7 +2,6 @@
 import { ArrowLeftToLine, ArrowRightToLine, Search, X } from "@lucide/vue";
 import { useStoreTabData } from "~/composables/useStoreTabData";
 import { useCredentialVaultStore } from "~/stores/credentialVault";
-import { useCollectionStore } from "~/stores/collection";
 import { useMarketStore } from "~/stores/market";
 import { resolveStoreTab } from "~~/types/store";
 import { resolveStoreAccessToken } from "~~/utils/shop-auth";
@@ -14,19 +13,20 @@ import { useOrderStore } from "../stores/order";
 import { usePaymentStore } from "../stores/payment";
 import { useProductStore } from "../stores/product";
 import { useShopProfileStore } from "../stores/shopProfile";
+import { useTrafficStore } from "../stores/traffic";
 
 const formStore = useFormStore();
 const { t } = useLocalization();
 const { requestConfirmation } = useConfirmDialog();
 const credentialVault = useCredentialVaultStore();
 const customerStore = useCustomerStore();
-const collectionStore = useCollectionStore();
 const marketStore = useMarketStore();
 const commerceOpsStore = useCommerceOpsStore();
 const paymentStore = usePaymentStore(); // Moved up and ensured it's available
 const orderStore = useOrderStore();
 const productStore = useProductStore();
 const shopProfileStore = useShopProfileStore();
+const trafficStore = useTrafficStore();
 const route = useRoute();
 const router = useRouter();
 const { hydrateStoreData, loadStoreTabData } = useStoreTabData();
@@ -74,19 +74,10 @@ const isFetching = computed(() => {
     if (route.query.tab === "markets") {
       return marketStore.isLoading || marketStore.isMutating || marketStore.isResolving;
     }
+    if (route.query.tab === "traffic") return trafficStore.isLoading;
     if (route.query.tab === "profile") {
       return (
         shopProfileStore.isLoading || paymentStore.isLoading || orderStore.isLoading
-      );
-    }
-    if (
-      route.query.tab === "collections" ||
-      (route.query.tab === "products" && route.query.resource === "collections")
-    ) {
-      return (
-        collectionStore.isLoading ||
-        collectionStore.isLoadingDetail ||
-        collectionStore.isMutating
       );
     }
     if (route.query.tab === "products") return productStore.isLoading;
@@ -206,11 +197,7 @@ function fetchCurrent(force = false) {
 
   if (route.path === "/store") {
     if (force) {
-      void loadStoreTabData(
-        resolveStoreTab(route.query.tab, route.query.resource),
-        sid,
-        true,
-      );
+      void loadStoreTabData(resolveStoreTab(route.query.tab), sid, true);
     }
     return;
   }
@@ -434,11 +421,11 @@ async function deleteStoreOption(id: string) {
             title="Refresh data for current store"
             :loading="isFetching"
             @click="fetchCurrent(true)"
-            iconOnly
           >
             <template #icon>
               <IconsRefresh />
             </template>
+            {{ isFetching ? t("common.loading") : t("common.refresh") }}
           </BaseButton>
           <BaseButton
             variant="primary"

@@ -31,15 +31,6 @@ test("Shopify webhook metadata is normalized through strict allowlists", () => {
     "FULFILLMENTS_UPDATE",
   );
   assert.equal(resolveShopifyWebhookTopic("products/update"), "PRODUCTS_UPDATE");
-  assert.equal(resolveShopifyWebhookTopic("collections/update"), "COLLECTIONS_UPDATE");
-  assert.equal(
-    resolveShopifyWebhookTopic("collection_publications/update"),
-    "COLLECTION_PUBLICATIONS_UPDATE",
-  );
-  assert.equal(
-    resolveShopifyWebhookTopic("collection_listings/remove"),
-    "COLLECTION_LISTINGS_REMOVE",
-  );
   assert.equal(resolveShopifyWebhookTopic("app/uninstalled"), "APP_UNINSTALLED");
   assert.equal(resolveShopifyWebhookTopic("orders/delete"), "ORDERS_DELETE");
   assert.equal(resolveShopifyWebhookTopic("payouts/paid"), null);
@@ -48,33 +39,6 @@ test("Shopify webhook metadata is normalized through strict allowlists", () => {
     "example-store.myshopify.com",
   );
   assert.equal(normalizeShopifyShopDomain("example.com"), "");
-});
-
-test("flexible collection webhooks are normalized without trusting source payloads", () => {
-  const notification = buildWebhookNotification({
-    webhookId: "collection-1",
-    storeId: "example-store",
-    shopDomain: "example-store.myshopify.com",
-    topic: "COLLECTIONS_UPDATE",
-    payload: { id: "9007199254740993123", title: "Summer", rules: [] },
-  });
-
-  assert.equal(notification.kind, "collection");
-  assert.equal(notification.resourceId, "9007199254740993123");
-  assert.equal(notification.orderName, "Summer");
-});
-
-test("collection publication webhooks route by collection ID", () => {
-  const notification = buildWebhookNotification({
-    webhookId: "publication-1",
-    storeId: "example-store",
-    shopDomain: "example-store.myshopify.com",
-    topic: "COLLECTION_PUBLICATIONS_UPDATE",
-    payload: { id: "publication-record", collection_id: "9007199254740993" },
-  });
-
-  assert.equal(notification.kind, "collection");
-  assert.equal(notification.resourceId, "9007199254740993");
 });
 
 test("resource-deletion webhooks are represented explicitly", () => {

@@ -1,5 +1,4 @@
 import { useCredentialVaultStore } from "~/stores/credentialVault";
-import { useCollectionStore } from "~/stores/collection";
 import { useCustomerStore } from "~/stores/customers";
 import { useCommerceOpsStore } from "~/stores/commerceOps";
 import { useDataRetentionStore } from "~/stores/dataRetention";
@@ -10,6 +9,7 @@ import { useOrderStore } from "~/stores/order";
 import { usePaymentStore } from "~/stores/payment";
 import { useProductStore } from "~/stores/product";
 import { useShopProfileStore } from "~/stores/shopProfile";
+import { useTrafficStore } from "~/stores/traffic";
 import type { StoreTab } from "~~/types/store";
 import { getStoreTokenState, resolveStoreAccessToken } from "~~/utils/shop-auth";
 import {
@@ -30,16 +30,15 @@ const TAB_RESOURCES: Record<StoreTab, StoreDataResource[]> = {
   disputes: ["payment", "disputes"],
   orders: ["orders", "payment"],
   products: ["products", "locations"],
-  collections: ["collections"],
   customers: ["customers"],
   markets: ["markets"],
+  traffic: ["traffic"],
   operations: ["commerceOps"],
   profile: ["profile", "payment", "orders"],
 };
 
 export function useStoreTabData() {
   const formStore = useFormStore();
-  const collectionStore = useCollectionStore();
   const credentialVault = useCredentialVaultStore();
   const dataRetention = useDataRetentionStore();
   const customerStore = useCustomerStore();
@@ -50,6 +49,7 @@ export function useStoreTabData() {
   const paymentStore = usePaymentStore();
   const productStore = useProductStore();
   const profileStore = useShopProfileStore();
+  const trafficStore = useTrafficStore();
 
   function isResourceExpired(storeId: string, resource: StoreDataResource) {
     return !dataRetention.isAlive(getStoreResourceLoadedAt(storeId, resource));
@@ -71,12 +71,12 @@ export function useStoreTabData() {
       paymentStore.evictStore(storeId);
     }
     if (expiredSet.has("products")) productStore.evictStore(storeId);
-    if (expiredSet.has("collections")) collectionStore.evictStore(storeId);
     if (expiredSet.has("locations")) locationStore.evictStore(storeId);
     if (expiredSet.has("markets")) marketStore.evictStore(storeId);
     if (expiredSet.has("customers")) customerStore.evictStore(storeId);
     if (expiredSet.has("commerceOps")) commerceOpsStore.evictStore(storeId);
     if (expiredSet.has("profile")) profileStore.evictStore(storeId);
+    if (expiredSet.has("traffic")) trafficStore.evictStore(storeId);
     for (const resource of expired) forgetStoreResource(storeId, resource);
   }
 
@@ -84,12 +84,12 @@ export function useStoreTabData() {
     orderStore.hydrate(storeId);
     paymentStore.hydrate(storeId);
     productStore.hydrate(storeId);
-    collectionStore.hydrate(storeId);
     locationStore.hydrate(storeId);
     marketStore.hydrate(storeId);
     customerStore.hydrate(storeId);
     commerceOpsStore.hydrate(storeId);
     profileStore.hydrate(storeId);
+    trafficStore.hydrate(storeId);
   }
 
   function ensureStoreScope(storeId: string) {
@@ -97,12 +97,12 @@ export function useStoreTabData() {
       orderStore.isStoreActive(storeId) &&
       paymentStore.isStoreActive(storeId) &&
       productStore.isStoreActive(storeId) &&
-      collectionStore.isStoreActive(storeId) &&
       locationStore.isStoreActive(storeId) &&
       marketStore.isStoreActive(storeId) &&
       customerStore.isStoreActive(storeId) &&
       commerceOpsStore.isStoreActive(storeId) &&
-      profileStore.isStoreActive(storeId);
+      profileStore.isStoreActive(storeId) &&
+      trafficStore.isStoreActive(storeId);
 
     if (!isCurrentStore) hydrateStoreData(storeId);
   }
@@ -126,14 +126,14 @@ export function useStoreTabData() {
       orderStore.error = message;
     } else if (tab === "products") {
       productStore.error = message;
-    } else if (tab === "collections") {
-      collectionStore.error = message;
     } else if (tab === "customers") {
       customerStore.error = message;
     } else if (tab === "operations") {
       commerceOpsStore.mutationError = message;
     } else if (tab === "markets") {
       marketStore.error = message;
+    } else if (tab === "traffic") {
+      trafficStore.error = message;
     } else {
       profileStore.error = message;
     }
@@ -162,10 +162,10 @@ export function useStoreTabData() {
     const hadPaymentError = Boolean(paymentStore.error);
     const hadOrderError = Boolean(orderStore.error);
     const hadProductError = Boolean(productStore.error);
-    const hadCollectionError = Boolean(collectionStore.error);
     const hadCustomerError = Boolean(customerStore.error);
     const hadMarketError = Boolean(marketStore.error);
     const hadProfileError = Boolean(profileStore.error);
+    const hadTrafficError = Boolean(trafficStore.error);
     if (!force) clearExpiredResources(storeId, resources);
 
     const { token, error: tokenError } = getToken(storeId);
@@ -228,19 +228,6 @@ export function useStoreTabData() {
       return !productStore.error;
     }
 
-    if (tab === "collections") {
-      const collectionForce =
-        force || hadCollectionError || isResourceExpired(storeId, "collections");
-      if (collectionForce || !collectionStore.hasFetchedAll) {
-        await collectionStore.fetchAll(storeId, token);
-      }
-      if (force && collectionStore.activeJobs.length) {
-        collectionStore.retryActiveJobs(storeId, token);
-      }
-      if (!collectionStore.error) markResourceLoaded(storeId, "collections");
-      return !collectionStore.error;
-    }
-
     if (tab === "customers") {
       const customerForce =
         force || hadCustomerError || isResourceExpired(storeId, "customers");
@@ -259,6 +246,16 @@ export function useStoreTabData() {
       }
       if (!marketStore.error) markResourceLoaded(storeId, "markets");
       return !marketStore.error;
+    }
+
+    if (tab === "traffic") {
+      const trafficForce =
+        force || hadTrafficError || isResourceExpired(storeId, "traffic");
+      if (trafficForce || !trafficStore.hasFetched) {
+        await trafficStore.fetchTraffic(storeId, token, trafficForce);
+      }
+      if (!trafficStore.error) markResourceLoaded(storeId, "traffic");
+      return !trafficStore.error;
     }
 
     if (tab === "operations") {

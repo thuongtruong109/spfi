@@ -1,0 +1,490 @@
+<script setup lang="ts">
+import { ChartLine, Eye, MousePointerClick, UsersRound } from "@lucide/vue";
+import type {
+  DashboardTrafficBreakdown,
+  DashboardTrafficSummary,
+} from "~~/types/dashboard";
+
+const props = defineProps<{
+  traffic: DashboardTrafficSummary;
+  loading?: boolean;
+  storeCount: number;
+}>();
+
+const { locale, t } = useLocalization();
+const range = ref<"24h" | "7d" | "30d">("24h");
+const breakdown = ref<"sources" | "countries" | "devices">("sources");
+
+const rangeOptions = [
+  { value: "24h" as const, label: "24H" },
+  { value: "7d" as const, label: "7D" },
+  { value: "30d" as const, label: "30D" },
+];
+
+const breakdownOptions = computed(() => [
+  { value: "sources" as const, label: t("dashboard.trafficSources") },
+  { value: "countries" as const, label: t("dashboard.trafficCountries") },
+  { value: "devices" as const, label: t("dashboard.trafficDevices") },
+]);
+
+const points = computed(() => {
+  if (range.value === "24h") return props.traffic.hourly;
+  return range.value === "7d" ? props.traffic.daily.slice(-7) : props.traffic.daily;
+});
+const granularity = computed(() => (range.value === "24h" ? "hour" : "day"));
+const breakdownRows = computed<DashboardTrafficBreakdown[]>(
+  () => props.traffic[breakdown.value],
+);
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat(locale.value, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function formatPercent(value: number) {
+  return new Intl.NumberFormat(locale.value, {
+    style: "percent",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function formatDuration(value: number) {
+  const seconds = Math.max(0, Math.round(value));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
+}
+
+function share(row: DashboardTrafficBreakdown) {
+  return props.traffic.last30Days.sessions
+    ? row.sessions / props.traffic.last30Days.sessions
+    : 0;
+}
+
+function barWidth(row: DashboardTrafficBreakdown) {
+  return `${Math.max(0, Math.min(100, share(row) * 100))}%`;
+}
+</script>
+
+<template>
+  <article class="dashboard-panel traffic-panel">
+    <header class="traffic-header">
+      <div>
+        <span class="panel-kicker">Shopify Analytics</span>
+        <h2><ChartLine /> {{ t("dashboard.trafficTitle") }}</h2>
+        <p>{{ t("dashboard.trafficSubtitle") }}</p>
+      </div>
+      <span v-if="traffic.available" class="traffic-availability">
+        {{
+          t("dashboard.trafficStoresReporting", {
+            available: traffic.availableStores,
+            total: storeCount,
+          })
+        }}
+      </span>
+    </header>
+
+    <div v-if="loading && !traffic.available" class="traffic-state">
+      {{ t("dashboard.trafficLoading") }}
+    </div>
+    <div v-else-if="!traffic.available" class="traffic-state traffic-unavailable">
+      <ChartLine />
+      <strong>{{ t("dashboard.trafficUnavailable") }}</strong>
+      <span>{{ t("dashboard.trafficPermissionHint") }}</span>
+    </div>
+    <template v-else>
+      <section class="traffic-metric-grid">
+        <div>
+          <span><MousePointerClick />{{ t("dashboard.trafficTodaySessions") }}</span>
+          <strong>{{ formatNumber(traffic.today.sessions) }}</strong>
+          <small>
+            {{
+              t("dashboard.trafficBounceRate", {
+                value: formatPercent(traffic.today.bounceRate),
+              })
+            }}
+          </small>
+        </div>
+        <div>
+          <span><UsersRound />{{ t("dashboard.trafficTodayVisitors") }}</span>
+          <strong>{{ formatNumber(traffic.today.visitors) }}</strong>
+          <small>{{ t("dashboard.trafficUniqueShopify") }}</small>
+        </div>
+        <div>
+          <span><Eye />{{ t("dashboard.trafficTodayPageviews") }}</span>
+          <strong>{{ formatNumber(traffic.today.pageviews) }}</strong>
+          <small>
+            {{
+              t("dashboard.trafficViewsPerSession", {
+                value: traffic.today.pageviewsPerSession.toFixed(1),
+              })
+            }}
+          </small>
+        </div>
+        <div>
+          <span>{{ t("dashboard.trafficSevenDaySessions") }}</span>
+          <strong>{{ formatNumber(traffic.last7Days.sessions) }}</strong>
+          <small>
+            {{
+              t("dashboard.trafficVisitorsDetail", {
+                count: formatNumber(traffic.last7Days.visitors),
+              })
+            }}
+          </small>
+        </div>
+        <div>
+          <span>{{ t("dashboard.trafficThirtyDaySessions") }}</span>
+          <strong>{{ formatNumber(traffic.last30Days.sessions) }}</strong>
+          <small>
+            {{
+              t("dashboard.trafficVisitorsDetail", {
+                count: formatNumber(traffic.last30Days.visitors),
+              })
+            }}
+          </small>
+        </div>
+        <div>
+          <span>{{ t("dashboard.trafficConversion") }}</span>
+          <strong>{{ formatPercent(traffic.last30Days.conversionRate) }}</strong>
+          <small>
+            {{
+              t("dashboard.trafficAverageDuration", {
+                value: formatDuration(traffic.last30Days.averageSessionDuration),
+              })
+            }}
+          </small>
+        </div>
+      </section>
+
+      <section class="traffic-content-grid">
+        <div class="traffic-chart-card">
+          <div class="traffic-section-heading">
+            <strong>{{ t("dashboard.trafficTrend") }}</strong>
+            <div
+              class="dashboard-segmented-control"
+              :aria-label="t('dashboard.trafficRange')"
+            >
+              <button
+                v-for="option in rangeOptions"
+                :key="option.value"
+                type="button"
+                :class="{ active: range === option.value }"
+                @click="range = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </div>
+          <DashboardTrafficChart :points="points" :granularity="granularity" />
+        </div>
+
+        <div class="traffic-breakdown-card">
+          <div class="traffic-section-heading traffic-breakdown-heading">
+            <strong>{{ t("dashboard.trafficBreakdown") }}</strong>
+            <div
+              class="dashboard-segmented-control"
+              :aria-label="t('dashboard.trafficBreakdown')"
+            >
+              <button
+                v-for="option in breakdownOptions"
+                :key="option.value"
+                type="button"
+                :class="{ active: breakdown === option.value }"
+                @click="breakdown = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </div>
+          <div v-if="breakdownRows.length" class="traffic-breakdown-list">
+            <div v-for="row in breakdownRows" :key="row.label">
+              <span
+                ><strong>{{ row.label }}</strong
+                ><small>{{ formatPercent(share(row)) }}</small></span
+              >
+              <span class="traffic-bar"><i :style="{ width: barWidth(row) }" /></span>
+              <b>{{ formatNumber(row.sessions) }}</b>
+            </div>
+          </div>
+          <div v-else class="traffic-breakdown-empty">
+            {{ t("dashboard.trafficNoBreakdown") }}
+          </div>
+        </div>
+      </section>
+
+      <footer class="traffic-note">
+        {{ t("dashboard.trafficDataNote") }}
+      </footer>
+    </template>
+  </article>
+</template>
+
+<style scoped>
+.traffic-panel {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  margin-top: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.traffic-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.traffic-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.traffic-header h2 svg {
+  width: 19px;
+  color: var(--green);
+}
+
+.traffic-header p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.traffic-availability {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.traffic-state {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.traffic-unavailable {
+  align-content: center;
+  gap: 6px;
+  padding: 24px;
+  border: 1px dashed var(--border);
+  border-radius: 13px;
+  background: var(--surface-soft);
+  text-align: center;
+}
+
+.traffic-unavailable svg {
+  width: 28px;
+  color: var(--amber);
+}
+
+.traffic-unavailable strong {
+  color: var(--text);
+}
+
+.traffic-unavailable span {
+  max-width: 560px;
+}
+
+.traffic-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.traffic-metric-grid > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.traffic-metric-grid span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.traffic-metric-grid span svg {
+  width: 12px;
+  height: 12px;
+  color: var(--green);
+}
+
+.traffic-metric-grid strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+}
+
+.traffic-metric-grid small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.traffic-content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.85fr);
+  gap: 12px;
+}
+
+.traffic-chart-card,
+.traffic-breakdown-card {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+}
+
+.traffic-section-heading {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.traffic-section-heading > strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.traffic-breakdown-list {
+  display: grid;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.traffic-breakdown-list > div {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.9fr) minmax(70px, 1fr) 42px;
+  align-items: center;
+  gap: 8px;
+}
+
+.traffic-breakdown-list > div > span:first-child {
+  display: flex;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 5px;
+}
+
+.traffic-breakdown-list strong,
+.traffic-breakdown-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.traffic-breakdown-list strong {
+  color: var(--text);
+  font-size: 9px;
+}
+
+.traffic-breakdown-list small {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.traffic-breakdown-list b {
+  color: var(--text);
+  font-size: 9px;
+  text-align: right;
+}
+
+.traffic-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-low);
+}
+
+.traffic-bar i {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green), var(--blue));
+}
+
+.traffic-breakdown-empty {
+  display: grid;
+  min-height: 210px;
+  place-items: center;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.traffic-note {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+@media (max-width: 1120px) {
+  .traffic-metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 850px) {
+  .traffic-content-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .traffic-header,
+  .traffic-section-heading.traffic-breakdown-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .traffic-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .traffic-availability {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 390px) {
+  .traffic-metric-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

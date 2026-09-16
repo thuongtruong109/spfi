@@ -34,7 +34,7 @@
 | `/setup`     | Setup Guide     | Documents the Shopify custom app setup flow and required access scopes.                                                            |
 | `/manager`   | Shop Management | Stores Shopify credentials locally, tests proxies, and generates or rotates access tokens.                                         |
 | `/store`     | Store Console   | Opens one saved store profile with tabs for transactions, payouts, disputes, orders, products, customers, markets, and operations. |
-| `/dashboard` | Dashboard       | Aggregates month-to-date revenue, fulfillment, customer, product, and payment signals across saved stores.                         |
+| `/dashboard` | Dashboard       | Aggregates revenue, traffic, fulfillment, customer, product, and payment signals across saved stores.                              |
 | `/payment`   | Payments        | Reads Shopify Payments payouts, balance transactions, orders, and related product data through server APIs.                        |
 | `/status`    | Status Checker  | Batch-checks Shopify storefront availability with direct, common-proxy, or per-row proxy modes.                                    |
 | `/settings`  | Settings        | Manages Tracktaco, Google Sheets, cache retention, and per-store Shopify webhook diagnostics.                                      |
@@ -215,7 +215,19 @@ same exports through reusable buttons.
 with a concurrency limit and calls `POST /api/dashboard` once per store. Each
 response aggregates the current calendar month's orders, daily revenue, top
 products, pending fulfillments, customer and product totals, Shopify Payments,
-and staff access. Totals remain separated by currency, date boundaries follow
+staff access, and ShopifyQL traffic analytics. Traffic includes human sessions,
+unique visitors, pageviews, 24-hour and 30-day trends, plus source, country, and
+device breakdowns. It requires `read_reports`, Level 2 protected customer data
+access, and Admin GraphQL API `2025-10` or newer. Traffic permission failures
+degrade to a per-store warning and do not hide the other metrics. See
+`docs/shopify-traffic-analytics.md` for the query and metric semantics.
+
+The same Shopify Analytics report is available for the currently selected shop
+from `/store?tab=traffic`. Traffic snapshots are cached independently per shop,
+so switching the store selector never mixes traffic between stores and Refresh
+reloads only the active shop.
+
+Financial totals remain separated by currency, date boundaries follow
 the viewer's timezone, and restricted resources degrade independently instead
 of hiding the rest of a store's dashboard. Dashboard snapshots live in Pinia and
 respect the configurable data-retention lifetime, so keep-alive navigation does

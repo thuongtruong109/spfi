@@ -2,23 +2,11 @@ import type { H3Event } from "h3";
 import { assertNoGraphqlUserErrors, callShopifyGraphql } from "./callShopifyGraphql";
 import type { prepareShopifyMetafieldsSetInputs } from "./shopify-metafields-set-input";
 
-export interface ShopifyMetafieldSetInput {
-  ownerId: string;
-  namespace: string;
-  key: string;
-  type: string;
-  value: string;
-  compareDigest?: string | null;
-}
-
 export async function setShopifyMetafields(options: {
   event: H3Event;
   storeId: string;
   token: string;
-  inputs:
-    ReturnType<typeof prepareShopifyMetafieldsSetInputs> | ShopifyMetafieldSetInput[];
-  operationName?: string;
-  fallbackMessage?: string;
+  inputs: ReturnType<typeof prepareShopifyMetafieldsSetInputs>;
 }) {
   if (!options.inputs.length) return [];
   const data = await callShopifyGraphql<
@@ -41,10 +29,10 @@ export async function setShopifyMetafields(options: {
     { metafields: typeof options.inputs }
   >({
     ...options,
-    operationName: options.operationName || "SetMetafields",
+    operationName: "SetProductMetafields",
     retryTransport: false,
     query: `#graphql
-      mutation SetMetafields($metafields: [MetafieldsSetInput!]!) {
+      mutation SetProductMetafields($metafields: [MetafieldsSetInput!]!) {
         metafieldsSet(metafields: $metafields) {
           metafields { id namespace key value type }
           userErrors { field message code }
@@ -55,7 +43,7 @@ export async function setShopifyMetafields(options: {
   });
   assertNoGraphqlUserErrors(
     data.metafieldsSet.userErrors,
-    options.fallbackMessage || "Failed to update metafields.",
+    "Failed to update product metafields.",
   );
   return data.metafieldsSet.metafields || [];
 }

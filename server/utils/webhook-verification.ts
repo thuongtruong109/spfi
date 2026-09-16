@@ -15,15 +15,6 @@ const HEADER_TOPIC_MAP: Record<string, ShopifyWebhookTopic> = {
   "products/create": "PRODUCTS_CREATE",
   "products/update": "PRODUCTS_UPDATE",
   "products/delete": "PRODUCTS_DELETE",
-  "collections/create": "COLLECTIONS_CREATE",
-  "collections/update": "COLLECTIONS_UPDATE",
-  "collections/delete": "COLLECTIONS_DELETE",
-  "collection_listings/add": "COLLECTION_LISTINGS_ADD",
-  "collection_listings/remove": "COLLECTION_LISTINGS_REMOVE",
-  "collection_listings/update": "COLLECTION_LISTINGS_UPDATE",
-  "collection_publications/create": "COLLECTION_PUBLICATIONS_CREATE",
-  "collection_publications/update": "COLLECTION_PUBLICATIONS_UPDATE",
-  "collection_publications/delete": "COLLECTION_PUBLICATIONS_DELETE",
   "inventory_levels/update": "INVENTORY_LEVELS_UPDATE",
   "customers/create": "CUSTOMERS_CREATE",
   "customers/delete": "CUSTOMERS_DELETE",
@@ -116,7 +107,6 @@ function resolveNotificationKind(
   if (topic === "REFUNDS_CREATE") return "refund";
   if (topic.startsWith("DISPUTES_")) return "dispute";
   if (topic.startsWith("PRODUCTS_")) return "product";
-  if (topic.startsWith("COLLECTION")) return "collection";
   if (topic === "INVENTORY_LEVELS_UPDATE") return "inventory";
   if (topic.startsWith("CUSTOMERS_")) return "customer";
   return "order";
@@ -128,13 +118,6 @@ function resolveResourceId(
 ) {
   if (kind === "inventory") {
     return readScalar(payload.inventory_item_id) || readScalar(payload.id);
-  }
-  if (kind === "collection") {
-    return (
-      readScalar(payload.collection_id) ||
-      readScalar(payload.collectionId) ||
-      readScalar(payload.id)
-    );
   }
   return readScalar(payload.id);
 }
@@ -167,7 +150,6 @@ function resolveNotificationName(
     refund: orderId ? `#${orderId}` : `Refund ${resourceId}`,
     dispute: orderId ? `#${orderId}` : `Dispute ${resourceId}`,
     product: `Product ${resourceId}`,
-    collection: `Collection ${resourceId}`,
     inventory: `Inventory item ${resourceId}`,
     customer: fullName || readScalar(payload.email) || `Customer ${resourceId}`,
   };
@@ -186,7 +168,6 @@ function resolveNotificationStatus(
   payload: Record<string, unknown>,
 ) {
   if (topic.endsWith("_DELETE")) return "deleted";
-  if (topic.endsWith("_REMOVE")) return "removed";
   if (kind === "fulfillment") {
     return readScalar(payload.shipment_status) || readScalar(payload.status);
   }
