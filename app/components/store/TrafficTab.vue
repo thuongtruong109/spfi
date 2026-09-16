@@ -13,6 +13,7 @@ const trafficStore = useTrafficStore();
       :traffic="trafficStore.traffic"
       :loading="trafficStore.isLoading"
       :store-count="1"
+      show-insights
     />
   </section>
 </template>

@@ -689,6 +689,29 @@ const messages: Record<MessageKey, string> = {
   "dashboard.trafficPageviews": "Lượt xem",
   "dashboard.trafficNoData": "Không có traffic được ghi nhận trong khoảng này.",
   "dashboard.trafficNoBreakdown": "Chưa có dữ liệu phân nhóm.",
+  "dashboard.trafficThirtyDays": "30 ngày gần nhất",
+  "dashboard.trafficFunnelTitle": "Phễu chuyển đổi",
+  "dashboard.trafficFunnelSubtitle":
+    "Theo dõi session người thật tiếp tục hay rời đi ở bước nào.",
+  "dashboard.trafficFunnelSessions": "Session",
+  "dashboard.trafficFunnelCart": "Thêm vào giỏ",
+  "dashboard.trafficFunnelCheckout": "Đến checkout",
+  "dashboard.trafficFunnelPurchase": "Hoàn tất checkout",
+  "dashboard.trafficSessionShare": "{value} tổng session",
+  "dashboard.trafficAcquisitionTitle": "Cơ cấu nguồn truy cập",
+  "dashboard.trafficAcquisitionSubtitle":
+    "Khách đã đến storefront bằng cách nào trong 30 ngày gần nhất.",
+  "dashboard.trafficTypes": "Loại traffic",
+  "dashboard.trafficPlatforms": "Nền tảng",
+  "dashboard.trafficAiReferrals": "Nguồn AI",
+  "dashboard.trafficDiscoveryTitle": "Trang vào và công nghệ",
+  "dashboard.trafficDiscoverySubtitle":
+    "Landing page, chiến dịch UTM và trình duyệt hàng đầu.",
+  "dashboard.trafficLandingPages": "Landing page",
+  "dashboard.trafficCampaigns": "Chiến dịch",
+  "dashboard.trafficBrowsers": "Trình duyệt",
+  "dashboard.trafficNoInsightData":
+    "Shopify chưa ghi nhận dữ liệu cho chiều phân tích này.",
   "dashboard.trafficChartLabel": "Biểu đồ traffic gồm {count} mốc thời gian",
   "dashboard.trafficDataNote":
     "Shopify Analytics có thể cập nhật trễ và chỉ đếm session theo quy tắc quyền riêng tư/cookie consent của Shopify. Số khách 30 ngày được query trực tiếp, không cộng từ khách duy nhất từng ngày.",

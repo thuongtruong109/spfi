@@ -226,6 +226,10 @@ The same Shopify Analytics report is available for the currently selected shop
 from `/store?tab=traffic`. Traffic snapshots are cached independently per shop,
 so switching the store selector never mixes traffic between stores and Refresh
 reloads only the active shop.
+The per-shop tab also includes a 30-day conversion funnel plus traffic type,
+referring platform, AI referral, landing page, UTM campaign, and browser
+breakdowns. These extended queries are not run for every shop on the aggregate
+dashboard.
 
 Financial totals remain separated by currency, date boundaries follow
 the viewer's timezone, and restricted resources degrade independently instead

@@ -196,6 +196,16 @@ function snapshot(
       sources: [{ label: "Search", sessions: revenueAmount, visitors: revenueAmount }],
       countries: [{ label: "US", sessions: revenueAmount, visitors: revenueAmount }],
       devices: [{ label: "Mobile", sessions: revenueAmount, visitors: revenueAmount }],
+      trafficTypes: [
+        { label: "Organic", sessions: revenueAmount, visitors: revenueAmount },
+      ],
+      platforms: [
+        { label: "Google", sessions: revenueAmount, visitors: revenueAmount },
+      ],
+      browsers: [{ label: "Chrome", sessions: revenueAmount, visitors: revenueAmount }],
+      landingPages: [{ label: "/", sessions: revenueAmount, visitors: revenueAmount }],
+      campaigns: [],
+      aiReferrals: [],
     },
     users: [],
     warnings: [],

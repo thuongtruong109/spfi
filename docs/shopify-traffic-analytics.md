@@ -26,6 +26,10 @@ One GraphQL request executes bounded ShopifyQL queries for:
 - Hourly sessions and visitors for the latest 24 hours.
 - Daily sessions and visitors for the latest 30 days.
 - Top referrer sources, countries, and device types for the latest 30 days.
+- Per-store conversion funnel counts for cart additions, reached checkouts, and
+  completed checkouts.
+- Per-store acquisition details by traffic type, referring platform, browser,
+  landing page, UTM campaign, and AI referring channel.
 
 The 7-day and 30-day unique visitor totals are queried directly for their full
 period. They are never calculated by adding daily unique visitor rows.
@@ -41,3 +45,6 @@ period. They are never calculated by adding daily unique visitor rows.
   consent rules. They are not raw HTTP requests.
 - Cross-store totals add the independent totals reported by each store; they do
   not deduplicate the same person across different stores.
+- Extended acquisition dimensions are queried only for the per-store Traffic
+  tab. If a newer dimension such as AI referrals is unavailable for the selected
+  API version, that section stays empty without hiding the core traffic report.

@@ -19,6 +19,12 @@ export function emptyDashboardTraffic(): DashboardTrafficSummary {
     sources: [],
     countries: [],
     devices: [],
+    trafficTypes: [],
+    platforms: [],
+    browsers: [],
+    landingPages: [],
+    campaigns: [],
+    aiReferrals: [],
   };
 }
 
@@ -35,6 +41,12 @@ export function cloneDashboardTraffic(
     sources: traffic.sources.map((row) => ({ ...row })),
     countries: traffic.countries.map((row) => ({ ...row })),
     devices: traffic.devices.map((row) => ({ ...row })),
+    trafficTypes: traffic.trafficTypes.map((row) => ({ ...row })),
+    platforms: traffic.platforms.map((row) => ({ ...row })),
+    browsers: traffic.browsers.map((row) => ({ ...row })),
+    landingPages: traffic.landingPages.map((row) => ({ ...row })),
+    campaigns: traffic.campaigns.map((row) => ({ ...row })),
+    aiReferrals: traffic.aiReferrals.map((row) => ({ ...row })),
   };
 }
 
@@ -45,6 +57,8 @@ export function createTrafficMetrics(
   const visitors = finiteNonNegative(input.visitors);
   const pageviews = finiteNonNegative(input.pageviews);
   const bounces = finiteNonNegative(input.bounces);
+  const cartAdditions = finiteNonNegative(input.cartAdditions);
+  const reachedCheckouts = finiteNonNegative(input.reachedCheckouts);
   const completedCheckouts = finiteNonNegative(input.completedCheckouts);
   const averageSessionDuration = finiteNonNegative(input.averageSessionDuration);
 
@@ -53,6 +67,8 @@ export function createTrafficMetrics(
     visitors,
     pageviews,
     bounces,
+    cartAdditions,
+    reachedCheckouts,
     completedCheckouts,
     pageviewsPerSession: sessions ? pageviews / sessions : 0,
     averageSessionDuration,
@@ -81,6 +97,12 @@ export function aggregateDashboardTraffic(
     sources: aggregateBreakdowns(available.flatMap((item) => item.sources)),
     countries: aggregateBreakdowns(available.flatMap((item) => item.countries)),
     devices: aggregateBreakdowns(available.flatMap((item) => item.devices)),
+    trafficTypes: aggregateBreakdowns(available.flatMap((item) => item.trafficTypes)),
+    platforms: aggregateBreakdowns(available.flatMap((item) => item.platforms)),
+    browsers: aggregateBreakdowns(available.flatMap((item) => item.browsers)),
+    landingPages: aggregateBreakdowns(available.flatMap((item) => item.landingPages)),
+    campaigns: aggregateBreakdowns(available.flatMap((item) => item.campaigns)),
+    aiReferrals: aggregateBreakdowns(available.flatMap((item) => item.aiReferrals)),
   };
 }
 
@@ -95,6 +117,8 @@ function aggregateMetrics(rows: DashboardTrafficMetrics[]) {
       result.visitors += finiteNonNegative(row.visitors);
       result.pageviews += finiteNonNegative(row.pageviews);
       result.bounces += finiteNonNegative(row.bounces);
+      result.cartAdditions += finiteNonNegative(row.cartAdditions);
+      result.reachedCheckouts += finiteNonNegative(row.reachedCheckouts);
       result.completedCheckouts += finiteNonNegative(row.completedCheckouts);
       result.weightedDuration +=
         finiteNonNegative(row.averageSessionDuration) * finiteNonNegative(row.sessions);
@@ -105,6 +129,8 @@ function aggregateMetrics(rows: DashboardTrafficMetrics[]) {
       visitors: 0,
       pageviews: 0,
       bounces: 0,
+      cartAdditions: 0,
+      reachedCheckouts: 0,
       completedCheckouts: 0,
       weightedDuration: 0,
     },

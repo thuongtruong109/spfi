@@ -471,6 +471,28 @@ const messages = {
   "dashboard.trafficPageviews": "Pageviews",
   "dashboard.trafficNoData": "No traffic was reported for this period.",
   "dashboard.trafficNoBreakdown": "No breakdown data is available.",
+  "dashboard.trafficThirtyDays": "Last 30 days",
+  "dashboard.trafficFunnelTitle": "Conversion funnel",
+  "dashboard.trafficFunnelSubtitle":
+    "See where human sessions move forward or drop out.",
+  "dashboard.trafficFunnelSessions": "Sessions",
+  "dashboard.trafficFunnelCart": "Added to cart",
+  "dashboard.trafficFunnelCheckout": "Reached checkout",
+  "dashboard.trafficFunnelPurchase": "Completed checkout",
+  "dashboard.trafficSessionShare": "{value} of sessions",
+  "dashboard.trafficAcquisitionTitle": "Acquisition mix",
+  "dashboard.trafficAcquisitionSubtitle":
+    "How visitors reached the storefront during the last 30 days.",
+  "dashboard.trafficTypes": "Traffic type",
+  "dashboard.trafficPlatforms": "Platforms",
+  "dashboard.trafficAiReferrals": "AI referrals",
+  "dashboard.trafficDiscoveryTitle": "Entry and technology",
+  "dashboard.trafficDiscoverySubtitle":
+    "Top landing pages, UTM campaigns, and browsers.",
+  "dashboard.trafficLandingPages": "Landing pages",
+  "dashboard.trafficCampaigns": "Campaigns",
+  "dashboard.trafficBrowsers": "Browsers",
+  "dashboard.trafficNoInsightData": "Shopify did not report data for this dimension.",
   "dashboard.trafficChartLabel": "Traffic chart with {count} reporting periods",
   "dashboard.trafficDataNote":
     "Shopify Analytics can be delayed and counts only sessions captured under Shopify's privacy and cookie-consent rules. Thirty-day visitors are queried directly and are not a sum of daily unique visitors.",

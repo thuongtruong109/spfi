@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildTrafficInsightQueryVariables,
   buildTrafficQueryVariables,
   parseShopifyTrafficResponse,
 } from "~~/server/utils/shopify-traffic";
@@ -22,8 +23,22 @@ describe("Shopify traffic analytics", () => {
     expect(queries.last30Days).toContain("SINCE -29d UNTIL now");
     expect(queries.hourly).toContain("TIMESERIES hour");
     expect(queries.daily).toContain("TIMESERIES day");
+    expect(queries.today).toContain("sessions_with_cart_additions");
+    expect(queries.today).toContain("sessions_that_reached_checkout");
     expect(
       Object.values(queries).every((query) =>
+        query.includes("human_or_bot_session = 'human'"),
+      ),
+    ).toBe(true);
+
+    const insights = buildTrafficInsightQueryVariables();
+    expect(insights.trafficTypes).toContain("GROUP BY traffic_type");
+    expect(insights.platforms).toContain("GROUP BY referring_platform");
+    expect(insights.landingPages).toContain("GROUP BY landing_page_path");
+    expect(insights.campaigns).toContain("GROUP BY utm_campaign");
+    expect(insights.aiReferrals).toContain("GROUP BY agentic_referring_channel");
+    expect(
+      Object.values(insights).every((query) =>
         query.includes("human_or_bot_session = 'human'"),
       ),
     ).toBe(true);
@@ -37,6 +52,8 @@ describe("Shopify traffic analytics", () => {
           online_store_visitors: "8",
           pageviews: "25",
           bounces: "4",
+          sessions_with_cart_additions: "5",
+          sessions_that_reached_checkout: "3",
           sessions_that_completed_checkout: "2",
           average_session_duration: "75.5",
         },
@@ -69,6 +86,28 @@ describe("Shopify traffic analytics", () => {
       devices: result([
         { session_device_type: "Mobile", sessions: "9", online_store_visitors: "7" },
       ]),
+      trafficTypes: result([
+        { traffic_type: "Organic", sessions: "6", online_store_visitors: "5" },
+      ]),
+      platforms: result([
+        { referring_platform: "Google", sessions: "6", online_store_visitors: "5" },
+      ]),
+      browsers: result([
+        {
+          session_device_browser: "Chrome",
+          sessions: "7",
+          online_store_visitors: "6",
+        },
+      ]),
+      landingPages: result([{ landing_page_path: "/products/tee", sessions: "4" }]),
+      campaigns: result([
+        { utm_campaign: "spring", sessions: "3" },
+        { utm_campaign: null, sessions: "7" },
+      ]),
+      aiReferrals: {
+        tableData: null,
+        parseErrors: ["Dimension unavailable on this API version"],
+      },
     });
 
     expect(traffic.available).toBe(true);
@@ -78,11 +117,17 @@ describe("Shopify traffic analytics", () => {
       pageviews: 25,
       pageviewsPerSession: 2.5,
       bounceRate: 0.4,
+      cartAdditions: 5,
+      reachedCheckouts: 3,
       conversionRate: 0.2,
       averageSessionDuration: 75.5,
     });
     expect(traffic.hourly[0]).toMatchObject({ sessions: 3, visitors: 2 });
     expect(traffic.sources[1]?.label).toBe("Direct / unknown");
+    expect(traffic.trafficTypes[0]?.label).toBe("Organic");
+    expect(traffic.landingPages[0]?.label).toBe("/products/tee");
+    expect(traffic.campaigns).toHaveLength(1);
+    expect(traffic.aiReferrals).toEqual([]);
   });
 
   it("surfaces ShopifyQL parse errors instead of treating them as empty data", () => {

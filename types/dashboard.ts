@@ -107,6 +107,8 @@ export interface DashboardTrafficMetrics {
   visitors: number;
   pageviews: number;
   bounces: number;
+  cartAdditions: number;
+  reachedCheckouts: number;
   completedCheckouts: number;
   pageviewsPerSession: number;
   averageSessionDuration: number;
@@ -138,6 +140,12 @@ export interface DashboardTrafficSummary {
   sources: DashboardTrafficBreakdown[];
   countries: DashboardTrafficBreakdown[];
   devices: DashboardTrafficBreakdown[];
+  trafficTypes: DashboardTrafficBreakdown[];
+  platforms: DashboardTrafficBreakdown[];
+  browsers: DashboardTrafficBreakdown[];
+  landingPages: DashboardTrafficBreakdown[];
+  campaigns: DashboardTrafficBreakdown[];
+  aiReferrals: DashboardTrafficBreakdown[];
 }
 
 export interface DashboardWarning {

@@ -9,6 +9,7 @@ const props = defineProps<{
   traffic: DashboardTrafficSummary;
   loading?: boolean;
   storeCount: number;
+  showInsights?: boolean;
 }>();
 
 const { locale, t } = useLocalization();
@@ -215,6 +216,8 @@ function barWidth(row: DashboardTrafficBreakdown) {
         </div>
       </section>
 
+      <DashboardTrafficInsights v-if="showInsights" :traffic="traffic" />
+
       <footer class="traffic-note">
         {{ t("dashboard.trafficDataNote") }}
       </footer>
@@ -379,6 +382,44 @@ function barWidth(row: DashboardTrafficBreakdown) {
 .traffic-section-heading > strong {
   color: var(--text);
   font-size: 11px;
+}
+
+.dashboard-segmented-control {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-low);
+}
+
+.dashboard-segmented-control button {
+  min-height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.dashboard-segmented-control button:hover {
+  color: var(--text);
+}
+
+.dashboard-segmented-control button.active {
+  background: var(--surface);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--green);
+}
+
+.dashboard-segmented-control button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .traffic-breakdown-list {

@@ -12,7 +12,12 @@ export default defineEventHandler(async (event) => {
   const { storeId, token } = requireShopifyCredentials(body);
 
   setResponseHeader(event, "cache-control", "private, no-store");
-  const traffic = await fetchShopifyTraffic({ event, storeId, token });
+  const traffic = await fetchShopifyTraffic({
+    event,
+    storeId,
+    token,
+    includeInsights: true,
+  });
   setResponseHeader(event, "x-spf-field-convention", "app-camel-case");
   return traffic;
 });

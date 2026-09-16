@@ -32,6 +32,12 @@ interface TrafficQueryResponse {
   sources: ShopifyqlResult;
   countries: ShopifyqlResult;
   devices: ShopifyqlResult;
+  trafficTypes?: ShopifyqlResult;
+  platforms?: ShopifyqlResult;
+  browsers?: ShopifyqlResult;
+  landingPages?: ShopifyqlResult;
+  campaigns?: ShopifyqlResult;
+  aiReferrals?: ShopifyqlResult;
 }
 
 type TrafficQueryVariables = Record<
@@ -43,6 +49,16 @@ type TrafficQueryVariables = Record<
   | "sources"
   | "countries"
   | "devices",
+  string
+>;
+
+type TrafficInsightQueryVariables = Record<
+  | "trafficTypes"
+  | "platforms"
+  | "browsers"
+  | "landingPages"
+  | "campaigns"
+  | "aiReferrals",
   string
 >;
 
@@ -80,12 +96,48 @@ export const DASHBOARD_TRAFFIC_QUERY = `#graphql
   }
 `;
 
+export const STORE_TRAFFIC_QUERY = `#graphql
+  query StoreTraffic(
+    $today: String!
+    $last7Days: String!
+    $last30Days: String!
+    $hourly: String!
+    $daily: String!
+    $sources: String!
+    $countries: String!
+    $devices: String!
+    $trafficTypes: String!
+    $platforms: String!
+    $browsers: String!
+    $landingPages: String!
+    $campaigns: String!
+    $aiReferrals: String!
+  ) {
+    today: shopifyqlQuery(query: $today) { ${SHOPIFYQL_RESULT_FIELDS} }
+    last7Days: shopifyqlQuery(query: $last7Days) { ${SHOPIFYQL_RESULT_FIELDS} }
+    last30Days: shopifyqlQuery(query: $last30Days) { ${SHOPIFYQL_RESULT_FIELDS} }
+    hourly: shopifyqlQuery(query: $hourly) { ${SHOPIFYQL_RESULT_FIELDS} }
+    daily: shopifyqlQuery(query: $daily) { ${SHOPIFYQL_RESULT_FIELDS} }
+    sources: shopifyqlQuery(query: $sources) { ${SHOPIFYQL_RESULT_FIELDS} }
+    countries: shopifyqlQuery(query: $countries) { ${SHOPIFYQL_RESULT_FIELDS} }
+    devices: shopifyqlQuery(query: $devices) { ${SHOPIFYQL_RESULT_FIELDS} }
+    trafficTypes: shopifyqlQuery(query: $trafficTypes) { ${SHOPIFYQL_RESULT_FIELDS} }
+    platforms: shopifyqlQuery(query: $platforms) { ${SHOPIFYQL_RESULT_FIELDS} }
+    browsers: shopifyqlQuery(query: $browsers) { ${SHOPIFYQL_RESULT_FIELDS} }
+    landingPages: shopifyqlQuery(query: $landingPages) { ${SHOPIFYQL_RESULT_FIELDS} }
+    campaigns: shopifyqlQuery(query: $campaigns) { ${SHOPIFYQL_RESULT_FIELDS} }
+    aiReferrals: shopifyqlQuery(query: $aiReferrals) { ${SHOPIFYQL_RESULT_FIELDS} }
+  }
+`;
+
 const HUMAN_FILTER = "WHERE human_or_bot_session = 'human'";
 const SUMMARY_METRICS = [
   "sessions",
   "online_store_visitors",
   "pageviews",
   "bounces",
+  "sessions_with_cart_additions",
+  "sessions_that_reached_checkout",
   "sessions_that_completed_checkout",
   "average_session_duration",
 ].join(", ");
@@ -94,19 +146,42 @@ export async function fetchShopifyTraffic(input: {
   event: H3Event;
   storeId: string;
   token: string;
+  includeInsights?: boolean;
 }): Promise<DashboardTrafficSummary> {
-  const response = await callShopifyGraphql<
-    TrafficQueryResponse,
-    TrafficQueryVariables
-  >({
-    ...input,
-    query: DASHBOARD_TRAFFIC_QUERY,
-    operationName: "DashboardTraffic",
-    variables: buildTrafficQueryVariables(),
-    timeoutMs: 30_000,
-  });
+  const response = input.includeInsights
+    ? await callShopifyGraphql<
+        TrafficQueryResponse,
+        TrafficQueryVariables & TrafficInsightQueryVariables
+      >({
+        ...input,
+        query: STORE_TRAFFIC_QUERY,
+        operationName: "StoreTraffic",
+        variables: {
+          ...buildTrafficQueryVariables(),
+          ...buildTrafficInsightQueryVariables(),
+        },
+        timeoutMs: 30_000,
+      })
+    : await callShopifyGraphql<TrafficQueryResponse, TrafficQueryVariables>({
+        ...input,
+        query: DASHBOARD_TRAFFIC_QUERY,
+        operationName: "DashboardTraffic",
+        variables: buildTrafficQueryVariables(),
+        timeoutMs: 30_000,
+      });
 
   return parseShopifyTrafficResponse(response);
+}
+
+export function buildTrafficInsightQueryVariables(): TrafficInsightQueryVariables {
+  return {
+    trafficTypes: breakdownQuery("traffic_type"),
+    platforms: breakdownQuery("referring_platform"),
+    browsers: breakdownQuery("session_device_browser"),
+    landingPages: breakdownQuery("landing_page_path"),
+    campaigns: breakdownQuery("utm_campaign"),
+    aiReferrals: breakdownQuery("agentic_referring_channel"),
+  };
 }
 
 export function buildTrafficQueryVariables(): TrafficQueryVariables {
@@ -136,6 +211,20 @@ export function parseShopifyTrafficResponse(
     sources: parseBreakdown(response.sources, "referrer_source", "traffic sources"),
     countries: parseBreakdown(response.countries, "session_country", "countries"),
     devices: parseBreakdown(response.devices, "session_device_type", "devices"),
+    trafficTypes: parseOptionalBreakdown(response.trafficTypes, "traffic_type"),
+    platforms: parseOptionalBreakdown(response.platforms, "referring_platform"),
+    browsers: parseOptionalBreakdown(response.browsers, "session_device_browser"),
+    landingPages: parseOptionalBreakdown(
+      response.landingPages,
+      "landing_page_path",
+      false,
+    ),
+    campaigns: parseOptionalBreakdown(response.campaigns, "utm_campaign", true),
+    aiReferrals: parseOptionalBreakdown(
+      response.aiReferrals,
+      "agentic_referring_channel",
+      true,
+    ),
   };
 }
 
@@ -158,6 +247,8 @@ function parseMetrics(result: ShopifyqlResult, label: string): DashboardTrafficM
     visitors: numberValue(row.online_store_visitors),
     pageviews: numberValue(row.pageviews),
     bounces: numberValue(row.bounces),
+    cartAdditions: numberValue(row.sessions_with_cart_additions),
+    reachedCheckouts: numberValue(row.sessions_that_reached_checkout),
     completedCheckouts: numberValue(row.sessions_that_completed_checkout),
     averageSessionDuration: numberValue(row.average_session_duration),
   });
@@ -193,6 +284,32 @@ function parseBreakdown(
     sessions: numberValue(row.sessions),
     visitors: numberValue(row.online_store_visitors),
   }));
+}
+
+function parseOptionalBreakdown(
+  result: ShopifyqlResult | undefined,
+  dimension: string,
+  omitEmpty = false,
+): DashboardTrafficBreakdown[] {
+  if (
+    !result?.tableData ||
+    !Array.isArray(result.tableData.rows) ||
+    (result.parseErrors?.length || 0) > 0
+  ) {
+    return [];
+  }
+
+  return result.tableData.rows.flatMap((row) => {
+    const label = stringValue(row[dimension]);
+    if (!label && omitEmpty) return [];
+    return [
+      {
+        label: label || "Unknown / unattributed",
+        sessions: numberValue(row.sessions),
+        visitors: numberValue(row.online_store_visitors),
+      },
+    ];
+  });
 }
 
 function readRows(result: ShopifyqlResult | undefined, label: string) {
