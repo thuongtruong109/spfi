@@ -88,6 +88,10 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
 }
+.brand img {
+  width: 22px;
+  height: 22px;
+}
 .topbar-title {
   color: var(--text);
   font-weight: 600;

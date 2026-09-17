@@ -25,6 +25,8 @@ export function emptyDashboardTraffic(): DashboardTrafficSummary {
     landingPages: [],
     campaigns: [],
     aiReferrals: [],
+    details: [],
+    detailLimitReached: false,
   };
 }
 
@@ -47,6 +49,7 @@ export function cloneDashboardTraffic(
     landingPages: traffic.landingPages.map((row) => ({ ...row })),
     campaigns: traffic.campaigns.map((row) => ({ ...row })),
     aiReferrals: traffic.aiReferrals.map((row) => ({ ...row })),
+    details: traffic.details.map((row) => ({ ...row })),
   };
 }
 
@@ -103,6 +106,8 @@ export function aggregateDashboardTraffic(
     landingPages: aggregateBreakdowns(available.flatMap((item) => item.landingPages)),
     campaigns: aggregateBreakdowns(available.flatMap((item) => item.campaigns)),
     aiReferrals: aggregateBreakdowns(available.flatMap((item) => item.aiReferrals)),
+    details: [],
+    detailLimitReached: false,
   };
 }
 

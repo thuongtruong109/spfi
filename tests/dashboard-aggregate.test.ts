@@ -206,6 +206,8 @@ function snapshot(
       landingPages: [{ label: "/", sessions: revenueAmount, visitors: revenueAmount }],
       campaigns: [],
       aiReferrals: [],
+      details: [],
+      detailLimitReached: false,
     },
     users: [],
     warnings: [],

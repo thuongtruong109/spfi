@@ -218,6 +218,12 @@ function barWidth(row: DashboardTrafficBreakdown) {
 
       <DashboardTrafficInsights v-if="showInsights" :traffic="traffic" />
 
+      <DashboardTrafficDetailTable
+        v-if="showInsights"
+        :rows="traffic.details"
+        :limit-reached="traffic.detailLimitReached"
+      />
+
       <footer class="traffic-note">
         {{ t("dashboard.trafficDataNote") }}
       </footer>

@@ -129,6 +129,42 @@ export interface DashboardTrafficBreakdown {
   visitors: number;
 }
 
+export interface DashboardTrafficDetailRow {
+  source: string;
+  referrerDomain: string;
+  referrerTerms: string;
+  country: string;
+  countryCode: string;
+  region: string;
+  city: string;
+  browser: string;
+  browserVersion: string;
+  operatingSystem: string;
+  operatingSystemVersion: string;
+  deviceType: string;
+  apiClient: string;
+  trafficType: string;
+  platform: string;
+  channel: string;
+  medium: string;
+  landingPageType: string;
+  landingPagePath: string;
+  campaign: string;
+  campaignContent: string;
+  aiReferral: string;
+  sessions: number;
+  visitors: number;
+  pageviews: number;
+  pageviewsPerSession: number;
+  bounces: number;
+  cartAdditions: number;
+  reachedCheckouts: number;
+  completedCheckouts: number;
+  averageSessionDuration: number;
+  bounceRate: number;
+  conversionRate: number;
+}
+
 export interface DashboardTrafficSummary {
   available: boolean;
   availableStores: number;
@@ -146,6 +182,8 @@ export interface DashboardTrafficSummary {
   landingPages: DashboardTrafficBreakdown[];
   campaigns: DashboardTrafficBreakdown[];
   aiReferrals: DashboardTrafficBreakdown[];
+  details: DashboardTrafficDetailRow[];
+  detailLimitReached: boolean;
 }
 
 export interface DashboardWarning {

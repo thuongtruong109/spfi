@@ -37,6 +37,11 @@ describe("Shopify traffic analytics", () => {
     expect(insights.landingPages).toContain("GROUP BY landing_page_path");
     expect(insights.campaigns).toContain("GROUP BY utm_campaign");
     expect(insights.aiReferrals).toContain("GROUP BY agentic_referring_channel");
+    expect(insights.details).toContain("GROUP BY referrer_source");
+    expect(insights.details).toContain("session_device_browser_version");
+    expect(insights.details).toContain("sessions_with_cart_additions");
+    expect(insights.details).toContain("ORDER BY sessions DESC");
+    expect(insights.details).toContain("LIMIT 250");
     expect(
       Object.values(insights).every((query) =>
         query.includes("human_or_bot_session = 'human'"),
@@ -108,6 +113,38 @@ describe("Shopify traffic analytics", () => {
         tableData: null,
         parseErrors: ["Dimension unavailable on this API version"],
       },
+      details: result([
+        {
+          referrer_source: "Facebook",
+          referrer_domain: "facebook.com",
+          session_country: "Vietnam",
+          session_country_code: "VN",
+          session_region: "Ho Chi Minh",
+          session_city: "Ho Chi Minh City",
+          session_device_browser: "Chrome Mobile",
+          session_device_browser_version: "140",
+          session_device_os: "Android",
+          session_device_os_version: "15",
+          session_device_type: "Mobile",
+          session_api_client: "online_store",
+          traffic_type: "Paid",
+          referring_platform: "Meta",
+          referring_channel: "Social",
+          referring_medium: "social",
+          landing_page_type: "product",
+          landing_page_path: "/products/tee",
+          utm_campaign: "spring",
+          utm_content: "hero-a",
+          sessions: "5",
+          online_store_visitors: "4",
+          pageviews: "12",
+          bounces: "2",
+          sessions_with_cart_additions: "3",
+          sessions_that_reached_checkout: "2",
+          sessions_that_completed_checkout: "1",
+          average_session_duration: "82",
+        },
+      ]),
     });
 
     expect(traffic.available).toBe(true);
@@ -128,6 +165,16 @@ describe("Shopify traffic analytics", () => {
     expect(traffic.landingPages[0]?.label).toBe("/products/tee");
     expect(traffic.campaigns).toHaveLength(1);
     expect(traffic.aiReferrals).toEqual([]);
+    expect(traffic.details[0]).toMatchObject({
+      source: "Facebook",
+      countryCode: "VN",
+      browser: "Chrome Mobile",
+      operatingSystem: "Android",
+      sessions: 5,
+      bounceRate: 0.4,
+      conversionRate: 0.2,
+    });
+    expect(traffic.detailLimitReached).toBe(false);
   });
 
   it("surfaces ShopifyQL parse errors instead of treating them as empty data", () => {

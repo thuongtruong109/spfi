@@ -1,6 +1,7 @@
 import type { H3Event } from "h3";
 import type {
   DashboardTrafficBreakdown,
+  DashboardTrafficDetailRow,
   DashboardTrafficMetrics,
   DashboardTrafficPoint,
   DashboardTrafficSummary,
@@ -38,6 +39,7 @@ interface TrafficQueryResponse {
   landingPages?: ShopifyqlResult;
   campaigns?: ShopifyqlResult;
   aiReferrals?: ShopifyqlResult;
+  details?: ShopifyqlResult;
 }
 
 type TrafficQueryVariables = Record<
@@ -58,7 +60,8 @@ type TrafficInsightQueryVariables = Record<
   | "browsers"
   | "landingPages"
   | "campaigns"
-  | "aiReferrals",
+  | "aiReferrals"
+  | "details",
   string
 >;
 
@@ -112,6 +115,7 @@ export const STORE_TRAFFIC_QUERY = `#graphql
     $landingPages: String!
     $campaigns: String!
     $aiReferrals: String!
+    $details: String!
   ) {
     today: shopifyqlQuery(query: $today) { ${SHOPIFYQL_RESULT_FIELDS} }
     last7Days: shopifyqlQuery(query: $last7Days) { ${SHOPIFYQL_RESULT_FIELDS} }
@@ -127,9 +131,11 @@ export const STORE_TRAFFIC_QUERY = `#graphql
     landingPages: shopifyqlQuery(query: $landingPages) { ${SHOPIFYQL_RESULT_FIELDS} }
     campaigns: shopifyqlQuery(query: $campaigns) { ${SHOPIFYQL_RESULT_FIELDS} }
     aiReferrals: shopifyqlQuery(query: $aiReferrals) { ${SHOPIFYQL_RESULT_FIELDS} }
+    details: shopifyqlQuery(query: $details) { ${SHOPIFYQL_RESULT_FIELDS} }
   }
 `;
 
+const DETAIL_ROW_LIMIT = 250;
 const HUMAN_FILTER = "WHERE human_or_bot_session = 'human'";
 const SUMMARY_METRICS = [
   "sessions",
@@ -181,6 +187,7 @@ export function buildTrafficInsightQueryVariables(): TrafficInsightQueryVariable
     landingPages: breakdownQuery("landing_page_path"),
     campaigns: breakdownQuery("utm_campaign"),
     aiReferrals: breakdownQuery("agentic_referring_channel"),
+    details: detailQuery(),
   };
 }
 
@@ -200,6 +207,7 @@ export function buildTrafficQueryVariables(): TrafficQueryVariables {
 export function parseShopifyTrafficResponse(
   response: TrafficQueryResponse,
 ): DashboardTrafficSummary {
+  const details = parseTrafficDetails(response.details);
   return {
     available: true,
     availableStores: 1,
@@ -225,6 +233,8 @@ export function parseShopifyTrafficResponse(
       "agentic_referring_channel",
       true,
     ),
+    details,
+    detailLimitReached: details.length >= DETAIL_ROW_LIMIT,
   };
 }
 
@@ -238,6 +248,45 @@ function seriesQuery(dimension: "hour" | "day", period: string) {
 
 function breakdownQuery(dimension: string) {
   return `FROM sessions\nSHOW sessions, online_store_visitors\n${HUMAN_FILTER}\nGROUP BY ${dimension}\nSINCE -29d UNTIL now\nORDER BY sessions DESC\nLIMIT 8`;
+}
+
+function detailQuery() {
+  const dimensions = [
+    "referrer_source",
+    "referrer_domain",
+    "referrer_terms",
+    "session_country",
+    "session_country_code",
+    "session_region",
+    "session_city",
+    "session_device_browser",
+    "session_device_browser_version",
+    "session_device_os",
+    "session_device_os_version",
+    "session_device_type",
+    "session_api_client",
+    "traffic_type",
+    "referring_platform",
+    "referring_channel",
+    "referring_medium",
+    "landing_page_type",
+    "landing_page_path",
+    "utm_campaign",
+    "utm_content",
+    "agentic_referring_channel",
+  ];
+  const metrics = [
+    "sessions",
+    "online_store_visitors",
+    "pageviews",
+    "bounces",
+    "sessions_with_cart_additions",
+    "sessions_that_reached_checkout",
+    "sessions_that_completed_checkout",
+    "average_session_duration",
+  ];
+
+  return `FROM sessions\nSHOW ${metrics.join(", ")}\n${HUMAN_FILTER}\nGROUP BY ${dimensions.join(", ")}\nSINCE -29d UNTIL now\nORDER BY sessions DESC\nLIMIT ${DETAIL_ROW_LIMIT}`;
 }
 
 function parseMetrics(result: ShopifyqlResult, label: string): DashboardTrafficMetrics {
@@ -312,6 +361,67 @@ function parseOptionalBreakdown(
   });
 }
 
+function parseTrafficDetails(
+  result: ShopifyqlResult | undefined,
+): DashboardTrafficDetailRow[] {
+  if (
+    !result?.tableData ||
+    !Array.isArray(result.tableData.rows) ||
+    (result.parseErrors?.length || 0) > 0
+  ) {
+    return [];
+  }
+
+  return result.tableData.rows.map((row) => {
+    const metrics = createTrafficMetrics({
+      sessions: numberValue(row.sessions),
+      visitors: numberValue(row.online_store_visitors),
+      pageviews: numberValue(row.pageviews),
+      bounces: numberValue(row.bounces),
+      cartAdditions: numberValue(row.sessions_with_cart_additions),
+      reachedCheckouts: numberValue(row.sessions_that_reached_checkout),
+      completedCheckouts: numberValue(row.sessions_that_completed_checkout),
+      averageSessionDuration: numberValue(row.average_session_duration),
+    });
+
+    return {
+      source: detailValue(row.referrer_source),
+      referrerDomain: detailValue(row.referrer_domain),
+      referrerTerms: detailValue(row.referrer_terms),
+      country: detailValue(row.session_country),
+      countryCode: detailValue(row.session_country_code),
+      region: detailValue(row.session_region),
+      city: detailValue(row.session_city),
+      browser: detailValue(row.session_device_browser),
+      browserVersion: detailValue(row.session_device_browser_version),
+      operatingSystem: detailValue(row.session_device_os),
+      operatingSystemVersion: detailValue(row.session_device_os_version),
+      deviceType: detailValue(row.session_device_type),
+      apiClient: detailValue(row.session_api_client),
+      trafficType: detailValue(row.traffic_type),
+      platform: detailValue(row.referring_platform),
+      channel: detailValue(row.referring_channel),
+      medium: detailValue(row.referring_medium),
+      landingPageType: detailValue(row.landing_page_type),
+      landingPagePath: detailValue(row.landing_page_path),
+      campaign: detailValue(row.utm_campaign),
+      campaignContent: detailValue(row.utm_content),
+      aiReferral: detailValue(row.agentic_referring_channel),
+      sessions: metrics.sessions,
+      visitors: metrics.visitors,
+      pageviews: metrics.pageviews,
+      pageviewsPerSession: metrics.pageviewsPerSession,
+      bounces: metrics.bounces,
+      cartAdditions: metrics.cartAdditions,
+      reachedCheckouts: metrics.reachedCheckouts,
+      completedCheckouts: metrics.completedCheckouts,
+      averageSessionDuration: metrics.averageSessionDuration,
+      bounceRate: metrics.bounceRate,
+      conversionRate: metrics.conversionRate,
+    };
+  });
+}
+
 function readRows(result: ShopifyqlResult | undefined, label: string) {
   const parseErrors = Array.isArray(result?.parseErrors) ? result.parseErrors : [];
   if (parseErrors.length) {
@@ -337,4 +447,8 @@ function numberValue(value: unknown) {
 
 function stringValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function detailValue(value: unknown) {
+  return stringValue(value) || "—";
 }
