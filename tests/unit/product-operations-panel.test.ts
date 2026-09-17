@@ -95,6 +95,8 @@ function mountPanel(section?: "variants" | "metafields" | "inventory") {
     props: { product, ...(section ? { section } : {}) },
     global: {
       stubs: {
+        BaseCheckbox: true,
+        BaseFileInput: true,
         BaseButton: {
           props: ["disabled", "loading"],
           template:

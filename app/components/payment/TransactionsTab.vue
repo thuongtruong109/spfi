@@ -9,6 +9,7 @@ import { usePaymentStore } from "~/stores/payment";
 import type { Transaction } from "~/stores/payment";
 import type { ShopifyPaymentsBalanceTransactionSearchFilters } from "~~/types/shopify-payments-graphql";
 import { capitalize, fmtDate } from "~~/helpers";
+import { getAdjustmentOrderTransactions } from "~~/utils/payment-transactions";
 
 const paymentStore = usePaymentStore();
 const orderStore = useOrderStore();
@@ -411,22 +412,22 @@ function updatePageSize(size: number) {
               }}
             </small>
             <details
-              v-if="transaction.adjustment_order_transactions.length"
+              v-if="getAdjustmentOrderTransactions(transaction).length"
               class="adjustment-orders"
             >
               <summary>
                 {{
                   t("payment.adjustedOrders", {
-                    count: transaction.adjustment_order_transactions.length,
+                    count: getAdjustmentOrderTransactions(transaction).length,
                     label:
-                      transaction.adjustment_order_transactions.length === 1
+                      getAdjustmentOrderTransactions(transaction).length === 1
                         ? t("payment.orderSingular")
                         : t("payment.orderPlural"),
                   })
                 }}
               </summary>
               <div
-                v-for="adjustment in transaction.adjustment_order_transactions"
+                v-for="adjustment in getAdjustmentOrderTransactions(transaction)"
                 :key="adjustment.id"
               >
                 <NuxtLink

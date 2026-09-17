@@ -174,22 +174,22 @@
                     }}
                   </small>
                   <details
-                    v-if="tx.adjustment_order_transactions.length"
+                    v-if="getAdjustmentOrderTransactions(tx).length"
                     class="adjustment-orders"
                   >
                     <summary>
                       {{
                         t("payment.adjustedOrders", {
-                          count: tx.adjustment_order_transactions.length,
+                          count: getAdjustmentOrderTransactions(tx).length,
                           label:
-                            tx.adjustment_order_transactions.length === 1
+                            getAdjustmentOrderTransactions(tx).length === 1
                               ? t("payment.orderSingular")
                               : t("payment.orderPlural"),
                         })
                       }}
                     </summary>
                     <div
-                      v-for="adjustment in tx.adjustment_order_transactions"
+                      v-for="adjustment in getAdjustmentOrderTransactions(tx)"
                       :key="adjustment.id"
                     >
                       <NuxtLink
@@ -249,6 +249,7 @@ import { useCredentialVaultStore } from "~/stores/credentialVault";
 import { useFormStore } from "../../../stores/form";
 import type { Transaction } from "../../../stores/payment";
 import { usePaymentStore } from "../../../stores/payment";
+import { getAdjustmentOrderTransactions } from "~~/utils/payment-transactions";
 import { resolveStoreAccessToken } from "~~/utils/shop-auth";
 
 definePageMeta({ layout: false });

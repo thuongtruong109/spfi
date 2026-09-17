@@ -5,6 +5,7 @@ import {
   getShopifyQueryCredentials,
   requireShopifyResourceId,
 } from "~~/server/utils/shopify-admin-request";
+import { normalizeShopifyBalanceTransaction } from "~~/server/utils/shopify-payment-normalization";
 import type {
   PayoutDetailResponse,
   ShopifyPayout,
@@ -34,6 +35,7 @@ export default defineEventHandler(async (event) => {
       path: "/shopify_payments/balance/transactions.json",
       resourceKey: "transactions",
       params: { payout_id: payoutId },
+      mapItem: normalizeShopifyBalanceTransaction,
       preserveUnsafeIntegers: true,
     }),
   ]);
