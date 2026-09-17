@@ -106,6 +106,8 @@ describe("Shopify Payments GraphQL mapping", () => {
       summary: {
         adjustmentsFee: { amount: "0" },
         adjustmentsGross: { amount: "0" },
+        advanceFees: { amount: "0.25" },
+        advanceGross: { amount: "4" },
         chargesFee: { amount: "1" },
         chargesGross: { amount: "43" },
         refundsFee: { amount: "0" },
@@ -114,6 +116,7 @@ describe("Shopify Payments GraphQL mapping", () => {
         reservedFundsGross: { amount: "0" },
         retriedPayoutsFee: { amount: "0" },
         retriedPayoutsGross: { amount: "0" },
+        usdcRebateCreditAmount: { amount: "0.10" },
       },
     });
 
@@ -125,6 +128,11 @@ describe("Shopify Payments GraphQL mapping", () => {
       status: "paid",
     });
     expect(mapped.metadata.externalTraceId).toBe("trace-1");
+    expect(mapped.payout.summary).toMatchObject({
+      advance_fees_amount: "0.25",
+      advance_gross_amount: "4",
+      usdc_rebate_credit_amount: "0.10",
+    });
   });
 });
 

@@ -59,6 +59,8 @@ interface GraphqlPayout extends ShopifyPaymentsPayoutMetadata {
   summary: {
     adjustmentsFee: { amount: string };
     adjustmentsGross: { amount: string };
+    advanceFees: { amount: string };
+    advanceGross: { amount: string };
     chargesFee: { amount: string };
     chargesGross: { amount: string };
     refundsFee: { amount: string };
@@ -67,6 +69,7 @@ interface GraphqlPayout extends ShopifyPaymentsPayoutMetadata {
     reservedFundsGross: { amount: string };
     retriedPayoutsFee: { amount: string };
     retriedPayoutsGross: { amount: string };
+    usdcRebateCreditAmount: { amount: string };
   };
 }
 
@@ -216,6 +219,8 @@ const PAYOUTS_QUERY = `#graphql
           summary {
             adjustmentsFee { amount }
             adjustmentsGross { amount }
+            advanceFees { amount }
+            advanceGross { amount }
             chargesFee { amount }
             chargesGross { amount }
             refundsFee { amount }
@@ -224,6 +229,7 @@ const PAYOUTS_QUERY = `#graphql
             reservedFundsGross { amount }
             retriedPayoutsFee { amount }
             retriedPayoutsGross { amount }
+            usdcRebateCreditAmount { amount }
           }
         }
         pageInfo {
@@ -609,6 +615,8 @@ export function mapPayout(node: GraphqlPayout): {
       summary: {
         adjustments_fee_amount: node.summary.adjustmentsFee.amount,
         adjustments_gross_amount: node.summary.adjustmentsGross.amount,
+        advance_fees_amount: node.summary.advanceFees.amount,
+        advance_gross_amount: node.summary.advanceGross.amount,
         charges_fee_amount: node.summary.chargesFee.amount,
         charges_gross_amount: node.summary.chargesGross.amount,
         refunds_fee_amount: node.summary.refundsFee.amount,
@@ -617,6 +625,7 @@ export function mapPayout(node: GraphqlPayout): {
         reserved_funds_gross_amount: node.summary.reservedFundsGross.amount,
         retried_payouts_fee_amount: node.summary.retriedPayoutsFee.amount,
         retried_payouts_gross_amount: node.summary.retriedPayoutsGross.amount,
+        usdc_rebate_credit_amount: node.summary.usdcRebateCreditAmount.amount,
       },
     },
   };

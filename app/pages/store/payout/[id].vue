@@ -63,8 +63,7 @@
         v-else-if="payoutDetailState.status === 'unauthorized'"
         :title="t('payment.payoutUnauthorizedTitle')"
         :message="
-          payoutDetailState.detailError ||
-          t('payment.payoutUnauthorizedDescription')
+          payoutDetailState.detailError || t('payment.payoutUnauthorizedDescription')
         "
         :loading="paymentStore.isLoadingPayoutDetail"
         @retry="retryPayoutDetail"
@@ -73,8 +72,7 @@
         v-else-if="payoutDetailState.status === 'error' || !currentPayout"
         :title="t('payment.payoutLoadFailedTitle')"
         :message="
-          payoutDetailState.detailError ||
-          t('payment.payoutLoadFailedDescription')
+          payoutDetailState.detailError || t('payment.payoutLoadFailedDescription')
         "
         :loading="paymentStore.isLoadingPayoutDetail"
         @retry="retryPayoutDetail"
@@ -255,18 +253,14 @@
                   </details>
                 </td>
                 <td>
-                  <span class="payment-method">
-                    <span class="card-brand">{{
-                      tx.type === "charge" ? t("payment.card") : "—"
-                    }}</span>
-                  </span>
+                  <span>—</span>
                 </td>
                 <td class="right td-amount">
                   {{ formatMoney(tx.amount, tx.currency) }}
                   <span class="chevron-sm">▾</span>
                 </td>
                 <td class="right td-fee">
-                  <template v-if="parseFloat(tx.fee)">
+                  <template v-if="hasNonZeroAmount(tx.fee)">
                     {{ formatMoney(tx.fee, tx.currency) }}
                     <span class="chevron-sm">▾</span>
                   </template>
@@ -319,11 +313,17 @@ import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useActiveShopAuth } from "~/composables/useActiveShopAuth";
 import { useLocalization } from "~/composables/useLocalization";
+import type { MessageKey } from "~/locales/messages";
 import { buildPayoutsRoute } from "~/utils/payment-routes";
 import type { Transaction } from "../../../stores/payment";
 import { usePaymentStore } from "../../../stores/payment";
 import type { PayoutDetailLoadState } from "~~/types/shopify-payment";
+import { compareDecimalStrings } from "~~/utils/decimal-string";
 import { getAdjustmentOrderTransactions } from "~~/utils/payment-transactions";
+import {
+  buildPayoutSummaryContributions,
+  type PayoutSummaryCategory,
+} from "~~/utils/payout-summary";
 
 definePageMeta({ layout: false });
 
@@ -413,53 +413,30 @@ const transactionFilterOptions = computed<
   { label: t("payment.charge"), value: "charge" },
 ]);
 
+const payoutSummaryLabels = {
+  charges: "payment.charges",
+  refunds: "payment.refunds",
+  adjustments: "payment.adjustments",
+  advances: "payment.advances",
+  reservedFunds: "payment.reservedFunds",
+  retriedPayouts: "payment.retriedPayouts",
+  usdcRebateCredit: "payment.usdcRebateCredit",
+  fees: "payment.fee",
+} as const satisfies Record<PayoutSummaryCategory, MessageKey>;
+
 const currentPayoutSummaryRows = computed<
   Array<{ label: string; value: string; neg: boolean; chevron?: boolean }>
 >(() => {
   if (!currentPayout.value || !currentPayout.value.summary) return [];
-  const s = currentPayout.value.summary;
   const currency = currentPayout.value.currency;
-
-  const charges = parseFloat(s.charges_gross_amount || "0");
-  const refunds = parseFloat(s.refunds_gross_amount || "0");
-  const adjustments = parseFloat(s.adjustments_gross_amount || "0");
-
-  const fees =
-    parseFloat(s.charges_fee_amount || "0") +
-    parseFloat(s.refunds_fee_amount || "0") +
-    parseFloat(s.adjustments_fee_amount || "0");
-
-  const rows = [];
-  if (charges) {
-    rows.push({
-      label: t("payment.charges"),
-      value: formatMoney(String(charges), currency),
-      neg: false,
-    });
-  }
-  if (refunds) {
-    rows.push({
-      label: t("payment.refunds"),
-      value: formatMoney(String(-Math.abs(refunds)), currency),
-      neg: true,
-    });
-  }
-  if (adjustments) {
-    rows.push({
-      label: t("payment.adjustments"),
-      value: formatMoney(String(adjustments), currency),
-      neg: adjustments < 0,
-    });
-  }
-  if (fees) {
-    rows.push({
-      label: t("payment.fee"),
-      value: formatMoney(String(-Math.abs(fees)), currency),
-      neg: true,
-      chevron: true,
-    });
-  }
-  return rows;
+  return buildPayoutSummaryContributions(currentPayout.value.summary).map(
+    (contribution) => ({
+      label: t(payoutSummaryLabels[contribution.category]),
+      value: formatMoney(contribution.amount, currency),
+      neg: contribution.negative,
+      chevron: contribution.category === "fees",
+    }),
+  );
 });
 
 // ── Helpers ──────────────────────────────────────────────
@@ -477,6 +454,10 @@ function getOrderName(tx: Transaction) {
   if (tx.source_order_name) return tx.source_order_name;
   if (!tx.source_order_id) return null;
   return `#${tx.source_order_id}`;
+}
+
+function hasNonZeroAmount(amount: string) {
+  return compareDecimalStrings(amount || "0", "0") !== 0;
 }
 
 function updatePageSize(size: number) {
@@ -520,14 +501,14 @@ function retryPayoutTransactions() {
 }
 
 function formatMoney(amount: string, currency: string) {
-  const numericAmount = Number(amount || 0);
+  const numericAmount = (amount || "0") as `${number}`;
   try {
     return new Intl.NumberFormat(locale.value, {
       style: "currency",
       currency,
     }).format(numericAmount);
   } catch {
-    return `${numericAmount.toFixed(2)} ${currency}`;
+    return `${numericAmount} ${currency}`;
   }
 }
 </script>
@@ -772,17 +753,6 @@ td.right {
 .td-order a {
   color: var(--text-link);
   font-weight: 500;
-}
-.card-brand {
-  display: inline-flex;
-  align-items: center;
-  background: var(--blue);
-  color: var(--on-accent) !important;
-  font-size: 9px;
-  font-weight: 600;
-  padding: 2px 5px;
-  border-radius: 3px;
-  text-transform: uppercase;
 }
 .td-fee {
   color: var(--red);
