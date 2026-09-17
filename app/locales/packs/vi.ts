@@ -689,6 +689,9 @@ const messages: Record<MessageKey, string> = {
   "dashboard.trafficPageviews": "Lượt xem",
   "dashboard.trafficNoData": "Không có traffic được ghi nhận trong khoảng này.",
   "dashboard.trafficNoBreakdown": "Chưa có dữ liệu phân nhóm.",
+  "dashboard.trafficOther": "Khác",
+  "dashboard.trafficBreakdownChartLabel":
+    "Phân bổ session theo chiều traffic đang chọn",
   "dashboard.trafficThirtyDays": "30 ngày gần nhất",
   "dashboard.trafficFunnelTitle": "Phễu chuyển đổi",
   "dashboard.trafficFunnelSubtitle":
@@ -712,6 +715,25 @@ const messages: Record<MessageKey, string> = {
   "dashboard.trafficBrowsers": "Trình duyệt",
   "dashboard.trafficNoInsightData":
     "Shopify chưa ghi nhận dữ liệu cho chiều phân tích này.",
+  "dashboard.trafficAnalysisTitle": "Phân tích traffic chi tiết",
+  "dashboard.trafficAnalysisSubtitle":
+    "Dữ liệu session chi tiết được gom vào từng khu vực dashboard thay cho một bảng ngang quá lớn.",
+  "dashboard.trafficAcquisitionIntegratedSubtitle":
+    "So sánh nguồn, referrer, kênh, medium, nền tảng, loại traffic và nguồn AI.",
+  "dashboard.trafficAudienceTitle": "Vị trí khách truy cập",
+  "dashboard.trafficAudienceSubtitle":
+    "So sánh chất lượng traffic theo quốc gia, tỉnh/vùng hoặc thành phố.",
+  "dashboard.trafficTechnologyTitle": "Thiết bị và công nghệ",
+  "dashboard.trafficTechnologySubtitle":
+    "Xem thiết bị, trình duyệt, hệ điều hành, phiên bản và API client.",
+  "dashboard.trafficContentTitle": "Nội dung và chiến dịch",
+  "dashboard.trafficContentSubtitle":
+    "Đo lường landing path, loại trang, chiến dịch UTM và nội dung chiến dịch.",
+  "dashboard.trafficDimension": "Chiều phân tích",
+  "dashboard.trafficDimensionValues": "{count} giá trị",
+  "dashboard.trafficDimensionChartLabel": "Phân bổ session hàng đầu của {title}",
+  "dashboard.trafficDimensionShowAll": "Hiện tất cả {count} giá trị",
+  "dashboard.trafficDimensionShowLess": "Thu gọn danh sách",
   "dashboard.trafficDetailTitle": "Bảng chi tiết session",
   "dashboard.trafficDetailSubtitle":
     "Các tổ hợp dữ liệu trong 30 ngày, xếp theo session. Cuộn ngang để xem toàn bộ dimension và metric.",

@@ -471,6 +471,9 @@ const messages = {
   "dashboard.trafficPageviews": "Pageviews",
   "dashboard.trafficNoData": "No traffic was reported for this period.",
   "dashboard.trafficNoBreakdown": "No breakdown data is available.",
+  "dashboard.trafficOther": "Other",
+  "dashboard.trafficBreakdownChartLabel":
+    "Session distribution for the selected traffic dimension",
   "dashboard.trafficThirtyDays": "Last 30 days",
   "dashboard.trafficFunnelTitle": "Conversion funnel",
   "dashboard.trafficFunnelSubtitle":
@@ -493,6 +496,25 @@ const messages = {
   "dashboard.trafficCampaigns": "Campaigns",
   "dashboard.trafficBrowsers": "Browsers",
   "dashboard.trafficNoInsightData": "Shopify did not report data for this dimension.",
+  "dashboard.trafficAnalysisTitle": "Detailed traffic analysis",
+  "dashboard.trafficAnalysisSubtitle":
+    "Detailed session data is grouped into focused dashboard sections instead of one wide table.",
+  "dashboard.trafficAcquisitionIntegratedSubtitle":
+    "Compare source, referrer, channel, medium, platform, traffic type, and AI referrals.",
+  "dashboard.trafficAudienceTitle": "Audience geography",
+  "dashboard.trafficAudienceSubtitle":
+    "Compare traffic quality by country, region, or city.",
+  "dashboard.trafficTechnologyTitle": "Devices and technology",
+  "dashboard.trafficTechnologySubtitle":
+    "Inspect device, browser, operating system, versions, and API client.",
+  "dashboard.trafficContentTitle": "Content and campaigns",
+  "dashboard.trafficContentSubtitle":
+    "Measure landing paths, page types, UTM campaigns, and campaign content.",
+  "dashboard.trafficDimension": "Dimension",
+  "dashboard.trafficDimensionValues": "{count} values",
+  "dashboard.trafficDimensionChartLabel": "Top session distribution for {title}",
+  "dashboard.trafficDimensionShowAll": "Show all {count} values",
+  "dashboard.trafficDimensionShowLess": "Show fewer values",
   "dashboard.trafficDetailTitle": "Detailed session breakdown",
   "dashboard.trafficDetailSubtitle":
     "Aggregated 30-day combinations ranked by sessions. Scroll horizontally to inspect every dimension and metric.",

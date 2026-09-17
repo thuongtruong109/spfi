@@ -30,10 +30,11 @@ One GraphQL request executes bounded ShopifyQL queries for:
   completed checkouts.
 - Per-store acquisition details by traffic type, referring platform, browser,
   landing page, UTM campaign, and AI referring channel.
-- A detailed per-store table of up to 250 aggregated combinations across
-  referrer, geography, browser and OS versions, device, API client, traffic
-  classification, landing page, UTM fields, and funnel metrics. Rows are ranked
-  deterministically by sessions and can be searched, sorted, and paged locally.
+- Up to 250 aggregated combinations across referrer, geography, browser and OS
+  versions, device, API client, traffic classification, landing page, UTM
+  fields, and funnel metrics. The per-store dashboard regroups those rows into
+  acquisition, audience, technology, and content/campaign cards, each with a
+  distribution chart and expandable metric table.
 
 The 7-day and 30-day unique visitor totals are queried directly for their full
 period. They are never calculated by adding daily unique visitor rows.
@@ -52,5 +53,6 @@ period. They are never calculated by adding daily unique visitor rows.
 - Extended acquisition dimensions are queried only for the per-store Traffic
   tab. If a newer dimension such as AI referrals is unavailable for the selected
   API version, that section stays empty without hiding the core traffic report.
-- The detail table is aggregated; it deliberately excludes session identifiers
-  and full referrer URLs. A 250-row cap keeps the report bounded and responsive.
+- The detailed dimensions are aggregated; they deliberately exclude session
+  identifiers and full referrer URLs. A 250-row source cap keeps the report
+  bounded and responsive.

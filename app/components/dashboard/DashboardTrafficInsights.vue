@@ -1,30 +1,58 @@
 <script setup lang="ts">
-import type {
-  DashboardTrafficBreakdown,
-  DashboardTrafficSummary,
-} from "~~/types/dashboard";
+import {
+  BarChart3,
+  FileText,
+  Funnel,
+  MapPin,
+  Megaphone,
+  MonitorSmartphone,
+} from "@lucide/vue";
+import type { DashboardTrafficSummary } from "~~/types/dashboard";
+import type { DashboardTrafficDimensionOption } from "~~/utils/dashboard-traffic-dimensions";
 
 const props = defineProps<{
   traffic: DashboardTrafficSummary;
 }>();
 
-type AcquisitionView = "trafficTypes" | "platforms" | "aiReferrals";
-type DiscoveryView = "landingPages" | "campaigns" | "browsers";
-
 const { locale, t } = useLocalization();
-const acquisitionView = ref<AcquisitionView>("trafficTypes");
-const discoveryView = ref<DiscoveryView>("landingPages");
 
-const acquisitionOptions = computed(() => [
-  { value: "trafficTypes" as const, label: t("dashboard.trafficTypes") },
-  { value: "platforms" as const, label: t("dashboard.trafficPlatforms") },
-  { value: "aiReferrals" as const, label: t("dashboard.trafficAiReferrals") },
+const acquisitionOptions = computed<DashboardTrafficDimensionOption[]>(() => [
+  { key: "source", label: t("dashboard.trafficDetailSource") },
+  { key: "referrerDomain", label: t("dashboard.trafficDetailReferrerDomain") },
+  { key: "referrerTerms", label: t("dashboard.trafficDetailReferrerTerms") },
+  { key: "trafficType", label: t("dashboard.trafficDetailTrafficType") },
+  { key: "platform", label: t("dashboard.trafficDetailPlatform") },
+  { key: "channel", label: t("dashboard.trafficDetailChannel") },
+  { key: "medium", label: t("dashboard.trafficDetailMedium") },
+  { key: "aiReferral", label: t("dashboard.trafficDetailAiReferral") },
 ]);
 
-const discoveryOptions = computed(() => [
-  { value: "landingPages" as const, label: t("dashboard.trafficLandingPages") },
-  { value: "campaigns" as const, label: t("dashboard.trafficCampaigns") },
-  { value: "browsers" as const, label: t("dashboard.trafficBrowsers") },
+const audienceOptions = computed<DashboardTrafficDimensionOption[]>(() => [
+  { key: "country", label: t("dashboard.trafficDetailCountry") },
+  { key: "region", label: t("dashboard.trafficDetailRegion") },
+  { key: "city", label: t("dashboard.trafficDetailCity") },
+]);
+
+const technologyOptions = computed<DashboardTrafficDimensionOption[]>(() => [
+  { key: "deviceType", label: t("dashboard.trafficDetailDevice") },
+  { key: "browser", label: t("dashboard.trafficDetailBrowser") },
+  { key: "browserVersion", label: t("dashboard.trafficDetailBrowserVersion") },
+  { key: "operatingSystem", label: t("dashboard.trafficDetailOs") },
+  {
+    key: "operatingSystemVersion",
+    label: t("dashboard.trafficDetailOsVersion"),
+  },
+  { key: "apiClient", label: t("dashboard.trafficDetailApiClient") },
+]);
+
+const contentOptions = computed<DashboardTrafficDimensionOption[]>(() => [
+  { key: "landingPagePath", label: t("dashboard.trafficDetailLandingPath") },
+  { key: "landingPageType", label: t("dashboard.trafficDetailLandingType") },
+  { key: "campaign", label: t("dashboard.trafficDetailCampaign") },
+  {
+    key: "campaignContent",
+    label: t("dashboard.trafficDetailCampaignContent"),
+  },
 ]);
 
 const funnelStages = computed(() => [
@@ -49,13 +77,6 @@ const funnelStages = computed(() => [
     value: props.traffic.last30Days.completedCheckouts,
   },
 ]);
-
-const acquisitionRows = computed<DashboardTrafficBreakdown[]>(
-  () => props.traffic[acquisitionView.value],
-);
-const discoveryRows = computed<DashboardTrafficBreakdown[]>(
-  () => props.traffic[discoveryView.value],
-);
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat(locale.value, {
@@ -84,10 +105,24 @@ function width(value: number) {
 
 <template>
   <section class="traffic-insights">
-    <article class="traffic-insight-card traffic-funnel-card">
+    <header class="traffic-analysis-header">
+      <div>
+        <h3><BarChart3 />{{ t("dashboard.trafficAnalysisTitle") }}</h3>
+        <p>{{ t("dashboard.trafficAnalysisSubtitle") }}</p>
+      </div>
+      <span v-if="traffic.detailLimitReached">
+        {{
+          t("dashboard.trafficDetailLimited", {
+            count: traffic.details.length,
+          })
+        }}
+      </span>
+    </header>
+
+    <article class="traffic-funnel-card">
       <header>
         <div>
-          <h3>{{ t("dashboard.trafficFunnelTitle") }}</h3>
+          <h3><Funnel />{{ t("dashboard.trafficFunnelTitle") }}</h3>
           <p>{{ t("dashboard.trafficFunnelSubtitle") }}</p>
         </div>
         <span>{{ t("dashboard.trafficThirtyDays") }}</span>
@@ -97,7 +132,7 @@ function width(value: number) {
         <div v-for="stage in funnelStages" :key="stage.key">
           <span>{{ stage.label }}</span>
           <strong>{{ formatNumber(stage.value) }}</strong>
-          <div class="traffic-insight-bar">
+          <div class="traffic-funnel-bar">
             <i :style="{ width: width(stage.value) }" />
           </div>
           <small>
@@ -111,84 +146,35 @@ function width(value: number) {
       </div>
     </article>
 
-    <div class="traffic-insight-grid">
-      <article class="traffic-insight-card">
-        <header>
-          <div>
-            <h3>{{ t("dashboard.trafficAcquisitionTitle") }}</h3>
-            <p>{{ t("dashboard.trafficAcquisitionSubtitle") }}</p>
-          </div>
-        </header>
-        <div
-          class="traffic-insight-switch"
-          :aria-label="t('dashboard.trafficAcquisitionTitle')"
-        >
-          <button
-            v-for="option in acquisitionOptions"
-            :key="option.value"
-            type="button"
-            :class="{ active: acquisitionView === option.value }"
-            :aria-pressed="acquisitionView === option.value"
-            @click="acquisitionView = option.value"
-          >
-            {{ option.label }}
-          </button>
-        </div>
-        <div v-if="acquisitionRows.length" class="traffic-insight-list">
-          <div v-for="row in acquisitionRows" :key="row.label">
-            <span>
-              <strong :title="row.label">{{ row.label }}</strong>
-              <small>{{ formatPercent(sessionShare(row.sessions)) }}</small>
-            </span>
-            <div class="traffic-insight-bar">
-              <i :style="{ width: width(row.sessions) }" />
-            </div>
-            <b>{{ formatNumber(row.sessions) }}</b>
-          </div>
-        </div>
-        <div v-else class="traffic-insight-empty">
-          {{ t("dashboard.trafficNoInsightData") }}
-        </div>
-      </article>
-
-      <article class="traffic-insight-card">
-        <header>
-          <div>
-            <h3>{{ t("dashboard.trafficDiscoveryTitle") }}</h3>
-            <p>{{ t("dashboard.trafficDiscoverySubtitle") }}</p>
-          </div>
-        </header>
-        <div
-          class="traffic-insight-switch"
-          :aria-label="t('dashboard.trafficDiscoveryTitle')"
-        >
-          <button
-            v-for="option in discoveryOptions"
-            :key="option.value"
-            type="button"
-            :class="{ active: discoveryView === option.value }"
-            :aria-pressed="discoveryView === option.value"
-            @click="discoveryView = option.value"
-          >
-            {{ option.label }}
-          </button>
-        </div>
-        <div v-if="discoveryRows.length" class="traffic-insight-list">
-          <div v-for="row in discoveryRows" :key="row.label">
-            <span>
-              <strong :title="row.label">{{ row.label }}</strong>
-              <small>{{ formatPercent(sessionShare(row.sessions)) }}</small>
-            </span>
-            <div class="traffic-insight-bar">
-              <i :style="{ width: width(row.sessions) }" />
-            </div>
-            <b>{{ formatNumber(row.sessions) }}</b>
-          </div>
-        </div>
-        <div v-else class="traffic-insight-empty">
-          {{ t("dashboard.trafficNoInsightData") }}
-        </div>
-      </article>
+    <div class="traffic-analysis-grid">
+      <DashboardTrafficDimensionCard
+        :icon="Megaphone"
+        :title="t('dashboard.trafficAcquisitionTitle')"
+        :subtitle="t('dashboard.trafficAcquisitionIntegratedSubtitle')"
+        :rows="traffic.details"
+        :options="acquisitionOptions"
+      />
+      <DashboardTrafficDimensionCard
+        :icon="MapPin"
+        :title="t('dashboard.trafficAudienceTitle')"
+        :subtitle="t('dashboard.trafficAudienceSubtitle')"
+        :rows="traffic.details"
+        :options="audienceOptions"
+      />
+      <DashboardTrafficDimensionCard
+        :icon="MonitorSmartphone"
+        :title="t('dashboard.trafficTechnologyTitle')"
+        :subtitle="t('dashboard.trafficTechnologySubtitle')"
+        :rows="traffic.details"
+        :options="technologyOptions"
+      />
+      <DashboardTrafficDimensionCard
+        :icon="FileText"
+        :title="t('dashboard.trafficContentTitle')"
+        :subtitle="t('dashboard.trafficContentSubtitle')"
+        :rows="traffic.details"
+        :options="contentOptions"
+      />
     </div>
   </section>
 </template>
@@ -200,13 +186,59 @@ function width(value: number) {
   margin-top: 12px;
 }
 
-.traffic-insight-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.traffic-analysis-header,
+.traffic-funnel-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 12px;
 }
 
-.traffic-insight-card {
+.traffic-analysis-header {
+  padding: 2px 2px 0;
+}
+
+.traffic-analysis-header h3,
+.traffic-funnel-card h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.traffic-analysis-header h3 svg,
+.traffic-funnel-card h3 svg {
+  width: 14px;
+  height: 14px;
+  color: var(--green);
+}
+
+.traffic-analysis-header p,
+.traffic-funnel-card header p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.traffic-analysis-header > span {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.traffic-analysis-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.traffic-funnel-card {
   min-width: 0;
   padding: 14px;
   border: 1px solid var(--border);
@@ -214,27 +246,11 @@ function width(value: number) {
   background: var(--surface);
 }
 
-.traffic-insight-card > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+.traffic-funnel-card > header {
   margin-bottom: 12px;
 }
 
-.traffic-insight-card h3 {
-  color: var(--text);
-  font-size: 12px;
-}
-
-.traffic-insight-card header p {
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 9px;
-  line-height: 1.4;
-}
-
-.traffic-insight-card header > span {
+.traffic-funnel-card header > span {
   flex: 0 0 auto;
   color: var(--muted);
   font-size: 9px;
@@ -278,90 +294,14 @@ function width(value: number) {
   font-size: 8px;
 }
 
-.traffic-insight-switch {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 10px;
-  overflow-x: auto;
-}
-
-.traffic-insight-switch button {
-  flex: 0 0 auto;
-  min-height: 27px;
-  padding: 0 9px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-low);
-  color: var(--muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 9px;
-  font-weight: 650;
-}
-
-.traffic-insight-switch button:hover,
-.traffic-insight-switch button.active {
-  border-color: color-mix(in srgb, var(--green) 30%, var(--border));
-  background: var(--green-soft);
-  color: var(--green);
-}
-
-.traffic-insight-switch button:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-
-.traffic-insight-list {
-  display: grid;
-  gap: 9px;
-}
-
-.traffic-insight-list > div {
-  display: grid;
-  grid-template-columns: minmax(100px, 1fr) minmax(70px, 0.8fr) 42px;
-  align-items: center;
-  gap: 8px;
-}
-
-.traffic-insight-list span {
-  display: flex;
-  min-width: 0;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.traffic-insight-list strong,
-.traffic-insight-list small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.traffic-insight-list strong {
-  color: var(--text);
-  font-size: 9px;
-}
-
-.traffic-insight-list small {
-  flex: 0 0 auto;
-  color: var(--muted);
-  font-size: 8px;
-}
-
-.traffic-insight-list b {
-  color: var(--text);
-  font-size: 9px;
-  text-align: right;
-}
-
-.traffic-insight-bar {
+.traffic-funnel-bar {
   height: 6px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--surface-low);
 }
 
-.traffic-insight-bar i {
+.traffic-funnel-bar i {
   display: block;
   height: 100%;
   min-width: 2px;
@@ -369,22 +309,12 @@ function width(value: number) {
   background: linear-gradient(90deg, var(--green), var(--blue));
 }
 
-.traffic-insight-empty {
-  display: grid;
-  min-height: 150px;
-  place-items: center;
-  color: var(--muted);
-  font-size: 10px;
-  text-align: center;
-}
-
-@media (max-width: 850px) {
-  .traffic-insight-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 620px) {
+  .traffic-analysis-header,
+  .traffic-funnel-card > header {
+    flex-direction: column;
+  }
+
   .traffic-funnel-steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

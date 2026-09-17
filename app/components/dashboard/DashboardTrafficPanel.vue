@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { ChartLine, Eye, MousePointerClick, UsersRound } from "@lucide/vue";
+import {
+  CalendarDays,
+  CalendarRange,
+  ChartLine,
+  ChartNoAxesCombined,
+  ChartPie,
+  Eye,
+  MousePointerClick,
+  ShoppingCart,
+  UsersRound,
+} from "@lucide/vue";
 import type {
   DashboardTrafficBreakdown,
   DashboardTrafficSummary,
@@ -36,6 +46,24 @@ const granularity = computed(() => (range.value === "24h" ? "hour" : "day"));
 const breakdownRows = computed<DashboardTrafficBreakdown[]>(
   () => props.traffic[breakdown.value],
 );
+const breakdownSegments = computed(() => {
+  const leadingRows = breakdownRows.value
+    .filter((row) => row.sessions > 0)
+    .slice(0, 3)
+    .map((row) => ({ label: row.label, value: row.sessions }));
+  const leadingTotal = leadingRows.reduce((total, row) => total + row.value, 0);
+  const knownTotal = props.traffic.last30Days.sessions || leadingTotal;
+  const remainder = Math.max(0, knownTotal - leadingTotal);
+
+  if (remainder > 0) {
+    leadingRows.push({
+      label: t("dashboard.trafficOther"),
+      value: remainder,
+    });
+  }
+
+  return leadingRows;
+});
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat(locale.value, {
@@ -57,16 +85,6 @@ function formatDuration(value: number) {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
-}
-
-function share(row: DashboardTrafficBreakdown) {
-  return props.traffic.last30Days.sessions
-    ? row.sessions / props.traffic.last30Days.sessions
-    : 0;
-}
-
-function barWidth(row: DashboardTrafficBreakdown) {
-  return `${Math.max(0, Math.min(100, share(row) * 100))}%`;
 }
 </script>
 
@@ -126,7 +144,7 @@ function barWidth(row: DashboardTrafficBreakdown) {
           </small>
         </div>
         <div>
-          <span>{{ t("dashboard.trafficSevenDaySessions") }}</span>
+          <span><CalendarDays />{{ t("dashboard.trafficSevenDaySessions") }}</span>
           <strong>{{ formatNumber(traffic.last7Days.sessions) }}</strong>
           <small>
             {{
@@ -137,7 +155,7 @@ function barWidth(row: DashboardTrafficBreakdown) {
           </small>
         </div>
         <div>
-          <span>{{ t("dashboard.trafficThirtyDaySessions") }}</span>
+          <span><CalendarRange />{{ t("dashboard.trafficThirtyDaySessions") }}</span>
           <strong>{{ formatNumber(traffic.last30Days.sessions) }}</strong>
           <small>
             {{
@@ -148,7 +166,7 @@ function barWidth(row: DashboardTrafficBreakdown) {
           </small>
         </div>
         <div>
-          <span>{{ t("dashboard.trafficConversion") }}</span>
+          <span><ShoppingCart />{{ t("dashboard.trafficConversion") }}</span>
           <strong>{{ formatPercent(traffic.last30Days.conversionRate) }}</strong>
           <small>
             {{
@@ -163,7 +181,7 @@ function barWidth(row: DashboardTrafficBreakdown) {
       <section class="traffic-content-grid">
         <div class="traffic-chart-card">
           <div class="traffic-section-heading">
-            <strong>{{ t("dashboard.trafficTrend") }}</strong>
+            <strong><ChartNoAxesCombined />{{ t("dashboard.trafficTrend") }}</strong>
             <div
               class="dashboard-segmented-control"
               :aria-label="t('dashboard.trafficRange')"
@@ -184,7 +202,7 @@ function barWidth(row: DashboardTrafficBreakdown) {
 
         <div class="traffic-breakdown-card">
           <div class="traffic-section-heading traffic-breakdown-heading">
-            <strong>{{ t("dashboard.trafficBreakdown") }}</strong>
+            <strong><ChartPie />{{ t("dashboard.trafficBreakdown") }}</strong>
             <div
               class="dashboard-segmented-control"
               :aria-label="t('dashboard.trafficBreakdown')"
@@ -200,15 +218,14 @@ function barWidth(row: DashboardTrafficBreakdown) {
               </button>
             </div>
           </div>
-          <div v-if="breakdownRows.length" class="traffic-breakdown-list">
-            <div v-for="row in breakdownRows" :key="row.label">
-              <span
-                ><strong>{{ row.label }}</strong
-                ><small>{{ formatPercent(share(row)) }}</small></span
-              >
-              <span class="traffic-bar"><i :style="{ width: barWidth(row) }" /></span>
-              <b>{{ formatNumber(row.sessions) }}</b>
-            </div>
+          <div v-if="breakdownSegments.length" class="traffic-breakdown-chart">
+            <DashboardDonutChart
+              :segments="breakdownSegments"
+              :center-label="t('dashboard.trafficSessions')"
+              :center-value="formatNumber(traffic.last30Days.sessions)"
+              :ariaLabel="t('dashboard.trafficBreakdownChartLabel')"
+              :size="154"
+            />
           </div>
           <div v-else class="traffic-breakdown-empty">
             {{ t("dashboard.trafficNoBreakdown") }}
@@ -217,12 +234,6 @@ function barWidth(row: DashboardTrafficBreakdown) {
       </section>
 
       <DashboardTrafficInsights v-if="showInsights" :traffic="traffic" />
-
-      <DashboardTrafficDetailTable
-        v-if="showInsights"
-        :rows="traffic.details"
-        :limit-reached="traffic.detailLimitReached"
-      />
 
       <footer class="traffic-note">
         {{ t("dashboard.trafficDataNote") }}
@@ -386,8 +397,17 @@ function barWidth(row: DashboardTrafficBreakdown) {
 }
 
 .traffic-section-heading > strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--text);
   font-size: 11px;
+}
+
+.traffic-section-heading > strong svg {
+  width: 14px;
+  height: 14px;
+  color: var(--green);
 }
 
 .dashboard-segmented-control {
@@ -428,62 +448,32 @@ function barWidth(row: DashboardTrafficBreakdown) {
   box-shadow: var(--focus-ring);
 }
 
-.traffic-breakdown-list {
-  display: grid;
+.traffic-breakdown-chart {
+  padding: 5px 0 1px;
+}
+
+.traffic-breakdown-chart :deep(.donut-layout) {
+  grid-template-columns: 154px minmax(100px, 1fr);
+  justify-items: stretch;
   gap: 10px;
-  padding-top: 8px;
 }
 
-.traffic-breakdown-list > div {
-  display: grid;
-  grid-template-columns: minmax(80px, 0.9fr) minmax(70px, 1fr) 42px;
-  align-items: center;
-  gap: 8px;
+.traffic-breakdown-chart :deep(.donut-layout canvas) {
+  justify-self: center;
 }
 
-.traffic-breakdown-list > div > span:first-child {
-  display: flex;
-  min-width: 0;
-  justify-content: space-between;
-  gap: 5px;
+.traffic-breakdown-chart :deep(.donut-legend) {
+  gap: 7px;
 }
 
-.traffic-breakdown-list strong,
-.traffic-breakdown-list small {
+.traffic-breakdown-chart :deep(.donut-legend div) {
+  font-size: 9px;
+}
+
+.traffic-breakdown-chart :deep(.donut-legend span) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.traffic-breakdown-list strong {
-  color: var(--text);
-  font-size: 9px;
-}
-
-.traffic-breakdown-list small {
-  color: var(--muted);
-  font-size: 8px;
-}
-
-.traffic-breakdown-list b {
-  color: var(--text);
-  font-size: 9px;
-  text-align: right;
-}
-
-.traffic-bar {
-  height: 6px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--surface-low);
-}
-
-.traffic-bar i {
-  display: block;
-  height: 100%;
-  min-width: 2px;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--green), var(--blue));
 }
 
 .traffic-breakdown-empty {
@@ -526,6 +516,10 @@ function barWidth(row: DashboardTrafficBreakdown) {
 
   .traffic-availability {
     align-self: flex-start;
+  }
+
+  .traffic-breakdown-chart :deep(.donut-layout) {
+    grid-template-columns: 1fr;
   }
 }
 

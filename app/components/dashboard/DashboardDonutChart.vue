@@ -3,6 +3,8 @@ const props = defineProps<{
   segments: Array<{ label: string; value: number }>;
   centerLabel: string;
   ariaLabel: string;
+  centerValue?: string;
+  size?: number;
 }>();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
@@ -15,7 +17,7 @@ const total = computed(() =>
 function draw(progress: number) {
   const element = canvas.value;
   if (!element) return;
-  const size = 196;
+  const size = props.size || 196;
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
   element.width = size * ratio;
   element.height = size * ratio;
@@ -26,8 +28,8 @@ function draw(progress: number) {
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.clearRect(0, 0, size, size);
   const center = size / 2;
-  const radius = 72;
-  const lineWidth = 20;
+  const radius = size * 0.367;
+  const lineWidth = Math.max(14, size * 0.102);
   const styles = getComputedStyle(document.documentElement);
   const track = styles.getPropertyValue("--surface-soft").trim() || "#eef4f0";
   const text = styles.getPropertyValue("--text").trim() || "#14221b";
@@ -54,10 +56,10 @@ function draw(progress: number) {
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillStyle = text;
-  context.font = "700 27px Inter, system-ui, sans-serif";
-  context.fillText(String(total.value), center, center - 7);
+  context.font = `700 ${Math.max(20, size * 0.138)}px Inter, system-ui, sans-serif`;
+  context.fillText(props.centerValue || String(total.value), center, center - 7);
   context.fillStyle = muted;
-  context.font = "600 10px Inter, system-ui, sans-serif";
+  context.font = `600 ${Math.max(9, size * 0.051)}px Inter, system-ui, sans-serif`;
   context.fillText(props.centerLabel, center, center + 17);
 }
 
@@ -77,7 +79,7 @@ function animate() {
 }
 
 watch(
-  () => props.segments,
+  () => [props.segments, props.centerLabel, props.centerValue, props.size],
   () => nextTick(animate),
   { deep: true },
 );

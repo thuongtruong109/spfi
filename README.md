@@ -230,9 +230,11 @@ The per-shop tab also includes a 30-day conversion funnel plus traffic type,
 referring platform, AI referral, landing page, UTM campaign, and browser
 breakdowns. These extended queries are not run for every shop on the aggregate
 dashboard.
-An additional searchable, sortable detail table returns the top 250 aggregated
-30-day session combinations, including geography, browser and OS versions,
-device, channel, landing page, UTM fields, and conversion metrics.
+The top 250 aggregated 30-day session combinations are folded into focused
+acquisition, audience, technology, and content/campaign dashboard cards. Each
+card combines a distribution chart with a compact expandable metric table for
+geography, browser and OS versions, device, channel, landing page, UTM fields,
+and conversion performance.
 
 Financial totals remain separated by currency, date boundaries follow
 the viewer's timezone, and restricted resources degrade independently instead
