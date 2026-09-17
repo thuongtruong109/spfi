@@ -90,22 +90,6 @@ function formatDuration(value: number) {
 
 <template>
   <article class="dashboard-panel traffic-panel">
-    <header class="traffic-header">
-      <div>
-        <span class="panel-kicker">Shopify Analytics</span>
-        <h2><ChartLine /> {{ t("dashboard.trafficTitle") }}</h2>
-        <p>{{ t("dashboard.trafficSubtitle") }}</p>
-      </div>
-      <span v-if="traffic.available" class="traffic-availability">
-        {{
-          t("dashboard.trafficStoresReporting", {
-            available: traffic.availableStores,
-            total: storeCount,
-          })
-        }}
-      </span>
-    </header>
-
     <div v-if="loading && !traffic.available" class="traffic-state">
       {{ t("dashboard.trafficLoading") }}
     </div>
@@ -234,10 +218,6 @@ function formatDuration(value: number) {
       </section>
 
       <DashboardTrafficInsights v-if="showInsights" :traffic="traffic" />
-
-      <footer class="traffic-note">
-        {{ t("dashboard.trafficDataNote") }}
-      </footer>
     </template>
   </article>
 </template>
@@ -247,39 +227,9 @@ function formatDuration(value: number) {
   min-width: 0;
   padding: 20px;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 10px;
   margin-top: 14px;
   background: var(--surface);
-  box-shadow: var(--shadow-soft);
-}
-
-.traffic-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 16px;
-}
-
-.traffic-header h2 {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--text);
-  font-size: 20px;
-  font-weight: 650;
-  letter-spacing: -0.025em;
-}
-
-.traffic-header h2 svg {
-  width: 19px;
-  color: var(--green);
-}
-
-.traffic-header p {
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 11px;
 }
 
 .traffic-availability {
@@ -504,7 +454,6 @@ function formatDuration(value: number) {
 }
 
 @media (max-width: 620px) {
-  .traffic-header,
   .traffic-section-heading.traffic-breakdown-heading {
     flex-direction: column;
     align-items: flex-start;

@@ -774,8 +774,6 @@ const messages: Record<MessageKey, string> = {
   "dashboard.trafficDetailPrevious": "Trước",
   "dashboard.trafficDetailNext": "Sau",
   "dashboard.trafficChartLabel": "Biểu đồ traffic gồm {count} mốc thời gian",
-  "dashboard.trafficDataNote":
-    "Shopify Analytics có thể cập nhật trễ và chỉ đếm session theo quy tắc quyền riêng tư/cookie consent của Shopify. Số khách 30 ngày được query trực tiếp, không cộng từ khách duy nhất từng ngày.",
   "dashboard.storeIssues": "{count} store gặp vấn đề",
   "dashboard.partialAccess": "Quyền truy cập một phần",
   "dashboard.restrictedResources":

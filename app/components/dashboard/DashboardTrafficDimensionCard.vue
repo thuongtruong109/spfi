@@ -90,35 +90,35 @@ function formatDuration(value: number) {
 
 <template>
   <article class="traffic-dimension-card">
-    <header>
-      <div>
-        <h3><component :is="icon" aria-hidden="true" />{{ title }}</h3>
-        <p>{{ subtitle }}</p>
+    <div class="traffic-dimension-main">
+      <header>
+        <div>
+          <h3><component :is="icon" aria-hidden="true" />{{ title }}</h3>
+          <p>{{ subtitle }}</p>
+        </div>
+        <span v-if="dimensionRows.length" class="traffic-dimension-count">
+          {{
+            t("dashboard.trafficDimensionValues", {
+              count: dimensionRows.length,
+            })
+          }}
+        </span>
+      </header>
+
+      <div class="traffic-dimension-switch" :aria-label="title">
+        <button
+          v-for="option in options"
+          :key="option.key"
+          type="button"
+          :class="{ active: activeDimension === option.key }"
+          :aria-pressed="activeDimension === option.key"
+          @click="activeDimension = option.key"
+        >
+          {{ option.label }}
+        </button>
       </div>
-      <span v-if="dimensionRows.length" class="traffic-dimension-count">
-        {{
-          t("dashboard.trafficDimensionValues", {
-            count: dimensionRows.length,
-          })
-        }}
-      </span>
-    </header>
 
-    <div class="traffic-dimension-switch" :aria-label="title">
-      <button
-        v-for="option in options"
-        :key="option.key"
-        type="button"
-        :class="{ active: activeDimension === option.key }"
-        :aria-pressed="activeDimension === option.key"
-        @click="activeDimension = option.key"
-      >
-        {{ option.label }}
-      </button>
-    </div>
-
-    <template v-if="dimensionRows.length">
-      <div class="traffic-dimension-content">
+      <template v-if="dimensionRows.length">
         <div class="traffic-dimension-table-area">
           <div class="traffic-dimension-table-scroll">
             <table>
@@ -166,35 +166,39 @@ function formatDuration(value: number) {
             }}
           </button>
         </div>
+      </template>
 
-        <aside class="traffic-dimension-donut">
-          <header>
-            <strong>{{ activeDimensionLabel }}</strong>
-            <span>{{ t("dashboard.trafficThirtyDays") }}</span>
-          </header>
-          <DashboardDonutChart
-            :segments="donutSegments"
-            :center-label="t('dashboard.trafficSessions')"
-            :center-value="formatNumber(totalSessions, true)"
-            :ariaLabel="
-              t('dashboard.trafficDimensionChartLabel', {
-                title: activeDimensionLabel,
-              })
-            "
-            :size="174"
-          />
-        </aside>
+      <div v-else class="traffic-dimension-empty">
+        {{ t("dashboard.trafficNoInsightData") }}
       </div>
-    </template>
-
-    <div v-else class="traffic-dimension-empty">
-      {{ t("dashboard.trafficNoInsightData") }}
     </div>
+
+    <aside v-if="dimensionRows.length" class="traffic-dimension-donut">
+      <header>
+        <strong>{{ activeDimensionLabel }}</strong>
+        <span>{{ t("dashboard.trafficThirtyDays") }}</span>
+      </header>
+      <DashboardDonutChart
+        :segments="donutSegments"
+        :center-value="formatNumber(totalSessions, true)"
+        :ariaLabel="
+          t('dashboard.trafficDimensionChartLabel', {
+            title: activeDimensionLabel,
+          })
+        "
+        :size="150"
+        :strokeWidth="12"
+      />
+    </aside>
   </article>
 </template>
 
 <style scoped>
 .traffic-dimension-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  align-items: start;
+  gap: 14px;
   min-width: 0;
   padding: 16px;
   border: 1px solid var(--border);
@@ -202,7 +206,11 @@ function formatDuration(value: number) {
   background: var(--surface);
 }
 
-.traffic-dimension-card > header {
+.traffic-dimension-main {
+  min-width: 0;
+}
+
+.traffic-dimension-main > header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -274,13 +282,6 @@ function formatDuration(value: number) {
 .traffic-dimension-expand:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
-}
-
-.traffic-dimension-content {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  align-items: start;
-  gap: 14px;
 }
 
 .traffic-dimension-table-area {
@@ -380,8 +381,9 @@ function formatDuration(value: number) {
   position: sticky;
   z-index: 1;
   left: 0;
-  min-width: 190px;
-  max-width: 320px;
+  width: 150px;
+  min-width: 130px;
+  max-width: 190px;
   overflow: hidden;
   background: var(--surface);
   text-align: left;
@@ -437,7 +439,7 @@ function formatDuration(value: number) {
 }
 
 @media (max-width: 900px) {
-  .traffic-dimension-content {
+  .traffic-dimension-card {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -447,7 +449,7 @@ function formatDuration(value: number) {
 }
 
 @media (max-width: 620px) {
-  .traffic-dimension-card > header {
+  .traffic-dimension-main > header {
     flex-direction: column;
   }
 }

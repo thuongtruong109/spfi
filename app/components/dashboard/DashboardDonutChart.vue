@@ -1,10 +1,11 @@
 <script setup lang="ts">
 const props = defineProps<{
   segments: Array<{ label: string; value: number }>;
-  centerLabel: string;
+  centerLabel?: string;
   ariaLabel: string;
   centerValue?: string;
   size?: number;
+  strokeWidth?: number;
 }>();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
@@ -29,7 +30,7 @@ function draw(progress: number) {
   context.clearRect(0, 0, size, size);
   const center = size / 2;
   const radius = size * 0.367;
-  const lineWidth = Math.max(14, size * 0.102);
+  const lineWidth = props.strokeWidth || Math.max(14, size * 0.102);
   const styles = getComputedStyle(document.documentElement);
   const track = styles.getPropertyValue("--surface-soft").trim() || "#eef4f0";
   const text = styles.getPropertyValue("--text").trim() || "#14221b";
@@ -57,10 +58,17 @@ function draw(progress: number) {
   context.textBaseline = "middle";
   context.fillStyle = text;
   context.font = `700 ${Math.max(20, size * 0.138)}px Inter, system-ui, sans-serif`;
-  context.fillText(props.centerValue || String(total.value), center, center - 7);
-  context.fillStyle = muted;
-  context.font = `600 ${Math.max(9, size * 0.051)}px Inter, system-ui, sans-serif`;
-  context.fillText(props.centerLabel, center, center + 17);
+  const hasCenterLabel = Boolean(props.centerLabel?.trim());
+  context.fillText(
+    props.centerValue || String(total.value),
+    center,
+    hasCenterLabel ? center - 7 : center,
+  );
+  if (hasCenterLabel) {
+    context.fillStyle = muted;
+    context.font = `600 ${Math.max(9, size * 0.051)}px Inter, system-ui, sans-serif`;
+    context.fillText(props.centerLabel || "", center, center + 17);
+  }
 }
 
 function animate() {
@@ -79,7 +87,13 @@ function animate() {
 }
 
 watch(
-  () => [props.segments, props.centerLabel, props.centerValue, props.size],
+  () => [
+    props.segments,
+    props.centerLabel,
+    props.centerValue,
+    props.size,
+    props.strokeWidth,
+  ],
   () => nextTick(animate),
   { deep: true },
 );

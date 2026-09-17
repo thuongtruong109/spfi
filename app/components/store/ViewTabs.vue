@@ -143,9 +143,9 @@ function selectTab(tab: StoreTab) {
 .table-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
-  padding: 12px 16px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border);
   background: linear-gradient(180deg, var(--surface), var(--surface-low));
 }

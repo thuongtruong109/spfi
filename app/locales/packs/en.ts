@@ -555,8 +555,6 @@ const messages = {
   "dashboard.trafficDetailPrevious": "Previous",
   "dashboard.trafficDetailNext": "Next",
   "dashboard.trafficChartLabel": "Traffic chart with {count} reporting periods",
-  "dashboard.trafficDataNote":
-    "Shopify Analytics can be delayed and counts only sessions captured under Shopify's privacy and cookie-consent rules. Thirty-day visitors are queried directly and are not a sum of daily unique visitors.",
   "dashboard.storeIssues": "{count} store issues",
   "dashboard.partialAccess": "Partial access",
   "dashboard.restrictedResources":

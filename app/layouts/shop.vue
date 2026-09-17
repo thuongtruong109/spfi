@@ -6,8 +6,8 @@ import { useMarketStore } from "~/stores/market";
 import { resolveStoreTab } from "~~/types/store";
 import { resolveStoreAccessToken } from "~~/utils/shop-auth";
 import { useLoading } from "../composables/useLoading";
-import { useCustomerStore } from "../stores/customers";
 import { useCommerceOpsStore } from "../stores/commerceOps";
+import { useCustomerStore } from "../stores/customers";
 import { useFormStore } from "../stores/form";
 import { useOrderStore } from "../stores/order";
 import { usePaymentStore } from "../stores/payment";
@@ -314,6 +314,16 @@ async function deleteStoreOption(id: string) {
         </div>
         <div class="sidebar-overview-actions">
           <BaseButton
+            class="sidebar-add-store"
+            variant="secondary"
+            icon-only
+            aria-label="Add new store"
+            title="Add new store"
+            @click="isAddModalOpen = true"
+          >
+            <template #icon><IconsAdd /></template>
+          </BaseButton>
+          <BaseButton
             class="sidebar-toggle"
             variant="ghost"
             icon-only
@@ -428,6 +438,7 @@ async function deleteStoreOption(id: string) {
             {{ isFetching ? t("common.loading") : t("common.refresh") }}
           </BaseButton>
           <BaseButton
+            v-if="noStores"
             variant="primary"
             title="Add new store"
             @click="isAddModalOpen = true"
