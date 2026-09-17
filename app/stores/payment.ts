@@ -11,6 +11,7 @@ import type {
   ShopifyRestPageInfo,
 } from "~~/types/shopify";
 import type {
+  PayoutDetailLoadState,
   ShopifyBalanceTransactionFilters,
   ShopifyPayoutFilters,
 } from "~~/types/shopify-payment";
@@ -25,7 +26,7 @@ import type {
   ShopifyPaymentsGraphqlTransactionsResponse,
   ShopifyPaymentsPayoutMetadata,
 } from "~~/types/shopify-payments-graphql";
-import { getAppErrorMessage } from "~~/utils/error";
+import { getAppErrorMessage, getAppErrorStatusCode } from "~~/utils/error";
 
 export type Payout = ShopifyPayout;
 export type Transaction = ShopifyBalanceTransaction;
@@ -47,6 +48,7 @@ interface PaymentStoreCache {
   transactionsByPayout: Record<string, Transaction[]>;
   loadedPayoutDetails: Record<string, boolean>;
   payoutDetailPageInfo: Record<string, ShopifyRestPageInfo>;
+  payoutDetailStates: Record<string, PayoutDetailLoadState>;
   balanceTransactions: Transaction[];
   visibleBalanceTransactions: Transaction[];
   disputes: ShopifyPaymentsDispute[];
@@ -72,6 +74,13 @@ const emptyConnectionPage = (): ShopifyConnectionPageInfo => ({
   endCursor: null,
 });
 
+const createPayoutDetailState = (): PayoutDetailLoadState => ({
+  status: "idle",
+  detailError: null,
+  metadataError: null,
+  transactionsError: null,
+});
+
 export const usePaymentStore = defineStore("payment", () => {
   const balance = ref<Balance | Balance[] | null>(null);
   const payouts = ref<Payout[]>([]);
@@ -82,6 +91,7 @@ export const usePaymentStore = defineStore("payment", () => {
   const transactionsByPayout = ref<Record<string, Transaction[]>>({});
   const loadedPayoutDetails = ref<Record<string, boolean>>({});
   const payoutDetailPageInfo = ref<Record<string, ShopifyRestPageInfo>>({});
+  const payoutDetailStates = ref<Record<string, PayoutDetailLoadState>>({});
   const balanceTransactions = ref<Transaction[]>([]);
   const visibleBalanceTransactions = ref<Transaction[]>([]);
   const disputes = ref<ShopifyPaymentsDispute[]>([]);
@@ -128,6 +138,7 @@ export const usePaymentStore = defineStore("payment", () => {
       transactionsByPayout: { ...transactionsByPayout.value },
       loadedPayoutDetails: { ...loadedPayoutDetails.value },
       payoutDetailPageInfo: { ...payoutDetailPageInfo.value },
+      payoutDetailStates: { ...payoutDetailStates.value },
       balanceTransactions: [...balanceTransactions.value],
       visibleBalanceTransactions: [...visibleBalanceTransactions.value],
       disputes: [...disputes.value],
@@ -463,17 +474,29 @@ export const usePaymentStore = defineStore("payment", () => {
     payoutId: string | number,
     force = false,
   ) {
-    if (!requireCredentials(storeId, token)) return;
+    const normalizedPayoutId = String(payoutId);
+    if (!requireCredentials(storeId, token)) {
+      setPayoutDetailState(normalizedPayoutId, {
+        status: "unauthorized",
+        detailError: null,
+        metadataError: null,
+        transactionsError: null,
+      });
+      return;
+    }
     activateStore(storeId);
     const requestScope = storeScopeVersion;
-    const normalizedPayoutId = String(payoutId);
     const requestKey = `${storeId}:${normalizedPayoutId}:initial`;
     const pendingRequest = payoutDetailRequests.get(requestKey);
     if (pendingRequest) return pendingRequest;
     if (!force && loadedPayoutDetails.value[normalizedPayoutId]) return;
 
     isLoadingPayoutDetail.value = true;
-    error.value = null;
+    setPayoutDetailState(normalizedPayoutId, {
+      ...getPayoutDetailState(normalizedPayoutId),
+      status: "loading",
+      detailError: null,
+    });
     const request = (async () => {
       try {
         const response = await $fetch<PayoutDetailResponse>(
@@ -484,12 +507,47 @@ export const usePaymentStore = defineStore("payment", () => {
           },
         );
         if (!isActiveRequest(storeId, requestScope)) return;
+        if (!response.payout) {
+          delete loadedPayoutDetails.value[normalizedPayoutId];
+          setPayoutDetailState(normalizedPayoutId, {
+            status: "not-found",
+            detailError: null,
+            metadataError: null,
+            transactionsError: null,
+          });
+          rememberStore(storeId);
+          return;
+        }
         applyPayoutDetail(normalizedPayoutId, response);
         loadedPayoutDetails.value[normalizedPayoutId] = true;
+        const metadataError = response.issues?.metadata?.message || null;
+        const transactionsError = response.issues?.transactions?.message || null;
+        setPayoutDetailState(normalizedPayoutId, {
+          status: metadataError || transactionsError ? "partial" : "success",
+          detailError: null,
+          metadataError,
+          transactionsError,
+        });
         rememberStore(storeId);
       } catch (cause) {
         if (isActiveRequest(storeId, requestScope)) {
-          error.value = getAppErrorMessage(cause, "Failed to fetch payout detail.");
+          delete loadedPayoutDetails.value[normalizedPayoutId];
+          const statusCode = getAppErrorStatusCode(cause);
+          setPayoutDetailState(normalizedPayoutId, {
+            status:
+              statusCode === 404
+                ? "not-found"
+                : statusCode === 401 || statusCode === 403
+                  ? "unauthorized"
+                  : "error",
+            detailError:
+              statusCode === 404
+                ? null
+                : getAppErrorMessage(cause, "Failed to fetch payout detail."),
+            metadataError: null,
+            transactionsError: null,
+          });
+          rememberStore(storeId);
         }
       }
     })();
@@ -502,40 +560,85 @@ export const usePaymentStore = defineStore("payment", () => {
     token: string,
     payoutId: string | number,
   ) {
-    if (!requireCredentials(storeId, token)) return;
-    activateStore(storeId);
-    const requestScope = storeScopeVersion;
     const normalizedPayoutId = String(payoutId);
     const cursor = payoutDetailPageInfo.value[normalizedPayoutId]?.nextCursor;
     if (!cursor) return;
-    const requestKey = `${storeId}:${normalizedPayoutId}:${cursor}`;
+    return fetchPayoutTransactionPage(storeId, token, normalizedPayoutId, {
+      append: true,
+      cursor,
+    });
+  }
+
+  function retryPayoutTransactions(
+    storeId: string,
+    token: string,
+    payoutId: string | number,
+  ) {
+    return fetchPayoutTransactionPage(storeId, token, String(payoutId), {
+      append: false,
+      cursor: null,
+    });
+  }
+
+  async function fetchPayoutTransactionPage(
+    storeId: string,
+    token: string,
+    normalizedPayoutId: string,
+    options: { append: boolean; cursor: string | null },
+  ) {
+    if (!requireCredentials(storeId, token)) return;
+    activateStore(storeId);
+    const requestScope = storeScopeVersion;
+    const requestKey = `${storeId}:${normalizedPayoutId}:transactions:${options.cursor || "first"}`;
     const pendingRequest = payoutDetailRequests.get(requestKey);
     if (pendingRequest) return pendingRequest;
 
     isLoadingPayoutDetail.value = true;
-    error.value = null;
+    setPayoutDetailState(normalizedPayoutId, {
+      ...getPayoutDetailState(normalizedPayoutId),
+      status: "loading",
+      transactionsError: null,
+    });
     const request = (async () => {
       try {
         const response = await $fetch<PayoutTransactionsPageResponse>(
           `/api/payment/payout/${normalizedPayoutId}/transactions`,
           {
-            params: { storeId, cursor },
+            params: {
+              storeId,
+              ...(options.cursor ? { cursor: options.cursor } : {}),
+            },
             headers: { "x-shopify-access-token": token },
           },
         );
         if (!isActiveRequest(storeId, requestScope)) return;
-        transactionsByPayout.value[normalizedPayoutId] = mergeById(
-          transactionsByPayout.value[normalizedPayoutId] || [],
-          enrichTransactions(response.transactions),
-        );
+        const transactions = enrichTransactions(response.transactions);
+        transactionsByPayout.value[normalizedPayoutId] = options.append
+          ? mergeById(
+              transactionsByPayout.value[normalizedPayoutId] || [],
+              transactions,
+            )
+          : transactions;
         payoutDetailPageInfo.value[normalizedPayoutId] = { ...response.pageInfo };
+        const currentState = getPayoutDetailState(normalizedPayoutId);
+        setPayoutDetailState(normalizedPayoutId, {
+          ...currentState,
+          status: currentState.metadataError ? "partial" : "success",
+          detailError: null,
+          transactionsError: null,
+        });
         rememberStore(storeId);
       } catch (cause) {
         if (isActiveRequest(storeId, requestScope)) {
-          error.value = getAppErrorMessage(
-            cause,
-            "Failed to load more payout transactions.",
-          );
+          setPayoutDetailState(normalizedPayoutId, {
+            ...getPayoutDetailState(normalizedPayoutId),
+            status: "partial",
+            transactionsError: getAppErrorMessage(
+              cause,
+              "Failed to load payout transactions.",
+            ),
+          });
+          rememberStore(storeId);
         }
       }
     })();
@@ -562,16 +665,32 @@ export const usePaymentStore = defineStore("payment", () => {
   }
 
   function applyPayoutDetail(payoutId: string, response: PayoutDetailResponse) {
-    if (response.payout) {
-      payoutDetails.value[payoutId] = response.payout;
-      payouts.value = upsertById(payouts.value, response.payout);
-      visiblePayouts.value = upsertById(visiblePayouts.value, response.payout);
-    }
+    if (!response.payout) return;
+    payoutDetails.value[payoutId] = response.payout;
+    payouts.value = upsertById(payouts.value, response.payout);
+    visiblePayouts.value = upsertById(visiblePayouts.value, response.payout);
     if (response.metadata) {
       payoutMetadata.value[payoutId] = response.metadata;
+    } else if (response.issues?.metadata) {
+      delete payoutMetadata.value[payoutId];
     }
-    transactionsByPayout.value[payoutId] = enrichTransactions(response.transactions);
-    payoutDetailPageInfo.value[payoutId] = { ...response.pageInfo };
+    if (!response.issues?.transactions) {
+      transactionsByPayout.value[payoutId] = enrichTransactions(
+        response.transactions,
+      );
+      payoutDetailPageInfo.value[payoutId] = { ...response.pageInfo };
+    }
+  }
+
+  function getPayoutDetailState(payoutId: string): PayoutDetailLoadState {
+    return payoutDetailStates.value[payoutId] || createPayoutDetailState();
+  }
+
+  function setPayoutDetailState(
+    payoutId: string,
+    state: PayoutDetailLoadState,
+  ) {
+    payoutDetailStates.value[payoutId] = state;
   }
 
   function enrichTransactions(items: Transaction[]) {
@@ -603,6 +722,7 @@ export const usePaymentStore = defineStore("payment", () => {
     transactionsByPayout.value = { ...cached.transactionsByPayout };
     loadedPayoutDetails.value = { ...(cached.loadedPayoutDetails || {}) };
     payoutDetailPageInfo.value = { ...(cached.payoutDetailPageInfo || {}) };
+    payoutDetailStates.value = { ...(cached.payoutDetailStates || {}) };
     balanceTransactions.value = [...cached.balanceTransactions];
     visibleBalanceTransactions.value = [
       ...(cached.visibleBalanceTransactions || cached.balanceTransactions),
@@ -656,6 +776,7 @@ export const usePaymentStore = defineStore("payment", () => {
     transactionsByPayout.value = {};
     loadedPayoutDetails.value = {};
     payoutDetailPageInfo.value = {};
+    payoutDetailStates.value = {};
     balanceTransactions.value = [];
     visibleBalanceTransactions.value = [];
     disputes.value = [];
@@ -734,6 +855,7 @@ export const usePaymentStore = defineStore("payment", () => {
     payoutMetadata,
     transactionsByPayout,
     payoutDetailPageInfo,
+    payoutDetailStates,
     balanceTransactions,
     visibleBalanceTransactions,
     disputes,
@@ -767,6 +889,7 @@ export const usePaymentStore = defineStore("payment", () => {
     fetchMoreDisputes,
     fetchPayoutDetail,
     fetchMorePayoutTransactions,
+    retryPayoutTransactions,
     getTransactionsForPayout,
     showDefaultBalanceTransactions,
     showDefaultPayouts,

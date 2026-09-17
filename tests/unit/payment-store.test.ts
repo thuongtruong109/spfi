@@ -66,6 +66,7 @@ describe("payment store payout details", () => {
     expect(store.isLoading).toBe(false);
     expect(store.payoutDetails["123"]).toEqual(payout);
     expect(store.transactionsByPayout["123"]).toEqual([]);
+    expect(store.payoutDetailStates["123"]?.status).toBe("success");
 
     await store.fetchPayoutDetail("shop-a", "token", "123");
     expect(request).toHaveBeenCalledTimes(1);
@@ -206,6 +207,75 @@ describe("payment store payout details", () => {
     expect(request).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    [401, "unauthorized"],
+    [403, "unauthorized"],
+    [404, "not-found"],
+    [500, "error"],
+  ] as const)(
+    "maps a %s detail response to the %s state",
+    async (statusCode, expectedStatus) => {
+      vi.stubGlobal(
+        "$fetch",
+        vi.fn().mockRejectedValue({
+          data: {
+            statusCode,
+            statusMessage: `Request failed (${statusCode})`,
+          },
+        }),
+      );
+      const store = usePaymentStore();
+
+      await store.fetchPayoutDetail("shop-a", "token", "123");
+
+      expect(store.payoutDetailStates["123"]?.status).toBe(expectedStatus);
+      expect(store.payoutDetails["123"]).toBeUndefined();
+      expect(store.error).toBeNull();
+    },
+  );
+
+  it("reports missing credentials as unauthorized without making a request", async () => {
+    const request = vi.fn();
+    vi.stubGlobal("$fetch", request);
+    const store = usePaymentStore();
+
+    await store.fetchPayoutDetail("shop-a", "", "123");
+
+    expect(request).not.toHaveBeenCalled();
+    expect(store.payoutDetailStates["123"]).toMatchObject({
+      status: "unauthorized",
+      detailError: null,
+    });
+  });
+
+  it("keeps a partial payout visible and records section-specific failures", async () => {
+    vi.stubGlobal(
+      "$fetch",
+      vi.fn().mockResolvedValue({
+        ...payoutDetailResponse(),
+        issues: {
+          metadata: { message: "Metadata request failed.", statusCode: 403 },
+          transactions: {
+            message: "Transaction request timed out.",
+            statusCode: 504,
+          },
+        },
+      }),
+    );
+    const store = usePaymentStore();
+
+    await store.fetchPayoutDetail("shop-a", "token", "123");
+
+    expect(store.payoutDetails["123"]).toEqual(payout);
+    expect(store.payoutDetailStates["123"]).toEqual({
+      status: "partial",
+      detailError: null,
+      metadataError: "Metadata request failed.",
+      transactionsError: "Transaction request timed out.",
+    });
+    expect(store.transactionsByPayout["123"]).toBeUndefined();
+  });
+
   it("does not reuse or apply an in-flight request after the store is reset", async () => {
     let resolveStaleRequest!: (response: PayoutDetailResponse) => void;
     const staleResponse = new Promise<PayoutDetailResponse>((resolve) => {
@@ -281,5 +351,78 @@ describe("payment store payout details", () => {
       "2",
     ]);
     expect(store.payoutDetailPageInfo["123"]?.hasNextPage).toBe(false);
+  });
+
+  it("preserves loaded transactions when a later page fails", async () => {
+    const firstTransaction = {
+      id: "1",
+      type: "charge",
+      test: false,
+      payout_id: "123",
+      payout_status: "paid",
+      currency: "USD",
+      amount: "10.00",
+      fee: "1.00",
+      net: "9.00",
+      source_id: null,
+      source_type: null,
+      source_order_id: null,
+      source_order_transaction_id: null,
+      processed_at: "2026-09-17T00:00:00Z",
+      adjustment_order_transactions: [],
+      adjustment_reason: null,
+    } as const;
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ...payoutDetailResponse(),
+        transactions: [firstTransaction],
+        pageInfo: {
+          ...noMorePages,
+          nextCursor: "next-page",
+          hasNextPage: true,
+        },
+      })
+      .mockRejectedValueOnce(new Error("Shopify timed out."));
+    vi.stubGlobal("$fetch", request);
+    const store = usePaymentStore();
+
+    await store.fetchPayoutDetail("shop-a", "token", "123");
+    await store.fetchMorePayoutTransactions("shop-a", "token", "123");
+
+    expect(store.transactionsByPayout["123"]?.map((item) => item.id)).toEqual([
+      "1",
+    ]);
+    expect(store.payoutDetailPageInfo["123"]?.nextCursor).toBe("next-page");
+    expect(store.payoutDetailStates["123"]?.status).toBe("partial");
+    expect(store.payoutDetailStates["123"]?.transactionsError).toBe(
+      "Shopify timed out.",
+    );
+  });
+
+  it("retries only the first transaction page after a partial response", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ...payoutDetailResponse(),
+        issues: {
+          transactions: { message: "Transactions failed.", statusCode: 502 },
+        },
+      })
+      .mockResolvedValueOnce({ transactions: [], pageInfo: noMorePages });
+    vi.stubGlobal("$fetch", request);
+    const store = usePaymentStore();
+
+    await store.fetchPayoutDetail("shop-a", "token", "123");
+    await store.retryPayoutTransactions("shop-a", "token", "123");
+
+    expect(request.mock.calls[1]?.[0]).toBe(
+      "/api/payment/payout/123/transactions",
+    );
+    expect(request.mock.calls[1]?.[1]).toMatchObject({
+      params: { storeId: "shop-a" },
+    });
+    expect(store.payoutDetailStates["123"]?.status).toBe("success");
+    expect(store.payoutDetailStates["123"]?.transactionsError).toBeNull();
   });
 });

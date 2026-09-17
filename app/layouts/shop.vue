@@ -191,7 +191,13 @@ function fetchCurrent(force = false) {
   if (!token) {
     const msg = "Token expired or missing. Please go to Token page.";
     if (route.path === "/order") orderStore.error = msg;
-    if (route.path.startsWith("/store")) paymentStore.error = msg;
+    if (route.path.startsWith("/store")) {
+      paymentStore.error = msg;
+      const payoutMatch = route.path.match(/\/store\/payout\/(\d+)/);
+      if (payoutMatch?.[1]) {
+        void paymentStore.fetchPayoutDetail(sid, "", payoutMatch[1]);
+      }
+    }
     if (route.path === "/customer") customerStore.error = msg;
     if (route.path === "/profile") shopProfileStore.error = msg;
     return;

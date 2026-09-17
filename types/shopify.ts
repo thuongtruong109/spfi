@@ -663,11 +663,20 @@ export interface ShopifyRestPageInfo {
   hasPreviousPage: boolean;
 }
 
+export interface PayoutDetailIssue {
+  message: string;
+  statusCode: number;
+}
+
 export interface PayoutDetailResponse {
   payout: ShopifyPayout | null;
   metadata: import("./shopify-payments-graphql").ShopifyPaymentsPayoutMetadata | null;
   transactions: ShopifyBalanceTransaction[];
   pageInfo: ShopifyRestPageInfo;
+  issues?: {
+    metadata?: PayoutDetailIssue;
+    transactions?: PayoutDetailIssue;
+  };
 }
 
 export interface PayoutTransactionsPageResponse {

@@ -1,7 +1,7 @@
 <template>
   <NuxtLayout name="shop">
     <template #title>
-      <div v-if="currentPayout" class="breadcrumb">
+      <div v-if="currentPayout && canDisplayPayout" class="breadcrumb">
         <NuxtLink :to="payoutsRoute" class="breadcrumb-back">
           <svg
             width="16"
@@ -44,12 +44,41 @@
     </template>
 
     <section class="page">
-      <div v-if="paymentStore.isLoadingPayoutDetail && !currentPayout" class="empty">
+      <div
+        v-if="
+          payoutDetailState.status === 'idle' ||
+          (payoutDetailState.status === 'loading' && !currentPayout)
+        "
+        class="empty"
+        role="status"
+      >
         {{ t("payment.loadingPayoutDetails") }}
       </div>
-      <div v-else-if="!currentPayout" class="empty">
-        {{ t("payment.payoutNotFound") }}
-      </div>
+      <PayoutDataIssue
+        v-else-if="payoutDetailState.status === 'not-found'"
+        :title="t('payment.payoutNotFound')"
+        :retryable="false"
+      />
+      <PayoutDataIssue
+        v-else-if="payoutDetailState.status === 'unauthorized'"
+        :title="t('payment.payoutUnauthorizedTitle')"
+        :message="
+          payoutDetailState.detailError ||
+          t('payment.payoutUnauthorizedDescription')
+        "
+        :loading="paymentStore.isLoadingPayoutDetail"
+        @retry="retryPayoutDetail"
+      />
+      <PayoutDataIssue
+        v-else-if="payoutDetailState.status === 'error' || !currentPayout"
+        :title="t('payment.payoutLoadFailedTitle')"
+        :message="
+          payoutDetailState.detailError ||
+          t('payment.payoutLoadFailedDescription')
+        "
+        :loading="paymentStore.isLoadingPayoutDetail"
+        @retry="retryPayoutDetail"
+      />
       <div v-else class="screen">
         <div class="page-header" style="justify-content: flex-end">
           <CsvExportButton
@@ -61,6 +90,17 @@
 
         <!-- Overview Card -->
         <div class="card">
+          <PayoutDataIssue
+            v-if="payoutDetailState.metadataError"
+            compact
+            :title="t('payment.payoutMetadataFailedTitle')"
+            :message="
+              payoutDetailState.metadataError ||
+              t('payment.payoutMetadataFailedDescription')
+            "
+            :loading="paymentStore.isLoadingPayoutDetail"
+            @retry="retryPayoutDetail"
+          />
           <div class="overview-card">
             <div class="overview-left">
               <div class="overview-label">{{ t("payment.total") }}</div>
@@ -140,6 +180,17 @@
               {{ option.label }}
             </button>
           </div>
+          <PayoutDataIssue
+            v-if="payoutDetailState.transactionsError"
+            compact
+            :title="t('payment.payoutTransactionsFailedTitle')"
+            :message="
+              payoutDetailState.transactionsError ||
+              t('payment.payoutTransactionsFailedDescription')
+            "
+            :loading="paymentStore.isLoadingPayoutDetail"
+            @retry="retryPayoutTransactions"
+          />
           <table>
             <thead>
               <tr>
@@ -227,7 +278,23 @@
               </tr>
             </tbody>
           </table>
-          <div v-if="displayedPayoutTransactions.length === 0" class="empty">
+          <div
+            v-if="
+              displayedPayoutTransactions.length === 0 &&
+              paymentStore.isLoadingPayoutDetail
+            "
+            class="empty"
+            role="status"
+          >
+            {{ t("payment.loadingPayoutTransactions") }}
+          </div>
+          <div
+            v-else-if="
+              displayedPayoutTransactions.length === 0 &&
+              !payoutDetailState.transactionsError
+            "
+            class="empty"
+          >
             {{ t("payment.noTransactionsForPayout") }}
           </div>
           <PaginationControls
@@ -255,6 +322,7 @@ import { useLocalization } from "~/composables/useLocalization";
 import { buildPayoutsRoute } from "~/utils/payment-routes";
 import type { Transaction } from "../../../stores/payment";
 import { usePaymentStore } from "../../../stores/payment";
+import type { PayoutDetailLoadState } from "~~/types/shopify-payment";
 import { getAdjustmentOrderTransactions } from "~~/utils/payment-transactions";
 
 definePageMeta({ layout: false });
@@ -275,11 +343,27 @@ const payoutId = computed(() =>
 );
 const payoutsRoute = computed(() => buildPayoutsRoute(route.query));
 
+const payoutDetailState = computed<PayoutDetailLoadState>(
+  () =>
+    paymentStore.payoutDetailStates[payoutId.value] || {
+      status: "idle",
+      detailError: null,
+      metadataError: null,
+      transactionsError: null,
+    },
+);
+
 const currentPayout = computed(
   () =>
     paymentStore.payoutDetails[payoutId.value] ||
     paymentStore.payouts.find((p) => String(p.id) === payoutId.value) ||
     null,
+);
+
+const canDisplayPayout = computed(
+  () =>
+    Boolean(currentPayout.value) &&
+    ["loading", "success", "partial"].includes(payoutDetailState.value.status),
 );
 
 const currentPayoutMetadata = computed(
@@ -411,7 +495,28 @@ async function changePage(page: number) {
     token.value,
     payoutId.value,
   );
-  if (!paymentStore.error) currentPage.value = Math.min(page, totalPages.value);
+  if (!payoutDetailState.value.transactionsError) {
+    currentPage.value = Math.min(page, totalPages.value);
+  }
+}
+
+function retryPayoutDetail() {
+  if (!payoutId.value) return;
+  return paymentStore.fetchPayoutDetail(
+    storeId.value,
+    token.value,
+    payoutId.value,
+    true,
+  );
+}
+
+function retryPayoutTransactions() {
+  if (!payoutId.value) return;
+  return paymentStore.retryPayoutTransactions(
+    storeId.value,
+    token.value,
+    payoutId.value,
+  );
 }
 
 function formatMoney(amount: string, currency: string) {

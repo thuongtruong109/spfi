@@ -938,7 +938,20 @@ const messages: Record<MessageKey, string> = {
   "payment.noPayouts": "Không tìm thấy payout.",
   "payment.payoutDetails": "Chi tiết payout",
   "payment.loadingPayoutDetails": "Đang tải chi tiết payout...",
-  "payment.payoutNotFound": "Không tìm thấy payout hoặc tải thất bại.",
+  "payment.payoutNotFound": "Không tìm thấy payout.",
+  "payment.payoutUnauthorizedTitle": "Không thể truy cập payout",
+  "payment.payoutUnauthorizedDescription":
+    "Hãy kiểm tra token của cửa hàng và quyền Shopify Payments, rồi thử lại.",
+  "payment.payoutLoadFailedTitle": "Không thể tải chi tiết payout",
+  "payment.payoutLoadFailedDescription":
+    "Shopify không trả về chi tiết payout. Hãy thử tải lại.",
+  "payment.payoutMetadataFailedTitle": "Không thể tải dữ liệu bổ sung của payout",
+  "payment.payoutMetadataFailedDescription":
+    "Payout đã được tải nhưng metadata Shopify Payments chưa thể làm mới.",
+  "payment.payoutTransactionsFailedTitle": "Không thể tải giao dịch",
+  "payment.payoutTransactionsFailedDescription":
+    "Payout đã được tải nhưng danh sách giao dịch chưa thể làm mới.",
+  "payment.loadingPayoutTransactions": "Đang tải giao dịch của payout...",
   "payment.export": "Xuất",
   "payment.total": "Tổng",
   "payment.providerShopifyPayments": "Shopify Payments",

@@ -719,7 +719,20 @@ const messages = {
   "payment.noPayouts": "No payouts found.",
   "payment.payoutDetails": "Payout details",
   "payment.loadingPayoutDetails": "Loading payout details...",
-  "payment.payoutNotFound": "Payout not found or failed to load.",
+  "payment.payoutNotFound": "Payout not found.",
+  "payment.payoutUnauthorizedTitle": "Payout access is unavailable",
+  "payment.payoutUnauthorizedDescription":
+    "Check the store token and Shopify Payments permissions, then retry.",
+  "payment.payoutLoadFailedTitle": "Payout details could not be loaded",
+  "payment.payoutLoadFailedDescription":
+    "Shopify did not return the payout details. Retry the request.",
+  "payment.payoutMetadataFailedTitle": "Additional payout details are unavailable",
+  "payment.payoutMetadataFailedDescription":
+    "The payout loaded, but its Shopify Payments metadata could not be refreshed.",
+  "payment.payoutTransactionsFailedTitle": "Transactions could not be loaded",
+  "payment.payoutTransactionsFailedDescription":
+    "The payout loaded, but its transaction list could not be refreshed.",
+  "payment.loadingPayoutTransactions": "Loading payout transactions...",
   "payment.export": "Export",
   "payment.total": "Total",
   "payment.providerShopifyPayments": "Shopify Payments",
