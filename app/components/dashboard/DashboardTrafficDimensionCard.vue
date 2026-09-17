@@ -25,14 +25,36 @@ const expanded = ref(false);
 const dimensionRows = computed(() =>
   aggregateTrafficDimension(props.rows, activeDimension.value),
 );
-const chartRows = computed(() => dimensionRows.value.slice(0, 5));
 const visibleRows = computed(() =>
   expanded.value ? dimensionRows.value : dimensionRows.value.slice(0, 6),
 );
 const totalSessions = computed(() =>
   dimensionRows.value.reduce((total, row) => total + row.sessions, 0),
 );
-const maximumSessions = computed(() => chartRows.value[0]?.sessions || 0);
+const activeDimensionLabel = computed(
+  () =>
+    props.options.find((option) => option.key === activeDimension.value)?.label ||
+    props.title,
+);
+const donutSegments = computed(() => {
+  const populatedRows = dimensionRows.value.filter((row) => row.sessions > 0);
+  if (populatedRows.length <= 4) {
+    return populatedRows.map((row) => ({
+      label: row.label,
+      value: row.sessions,
+    }));
+  }
+
+  const leadingRows = populatedRows.slice(0, 3).map((row) => ({
+    label: row.label,
+    value: row.sessions,
+  }));
+  leadingRows.push({
+    label: t("dashboard.trafficOther"),
+    value: populatedRows.slice(3).reduce((total, row) => total + row.sessions, 0),
+  });
+  return leadingRows;
+});
 
 watch(activeDimension, () => {
   expanded.value = false;
@@ -63,14 +85,6 @@ function formatDuration(value: number) {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return minutes ? `${minutes}m ${remainder}s` : `${remainder}s`;
-}
-
-function sessionShare(value: number) {
-  return totalSessions.value ? value / totalSessions.value : 0;
-}
-
-function chartWidth(value: number) {
-  return `${maximumSessions.value ? Math.max(3, (value / maximumSessions.value) * 100) : 0}%`;
 }
 </script>
 
@@ -104,66 +118,73 @@ function chartWidth(value: number) {
     </div>
 
     <template v-if="dimensionRows.length">
-      <div
-        class="traffic-dimension-chart"
-        role="img"
-        :aria-label="t('dashboard.trafficDimensionChartLabel', { title })"
-      >
-        <div v-for="row in chartRows" :key="row.label">
-          <span>
-            <strong :title="row.label">{{ row.label }}</strong>
-            <small>{{ formatPercent(sessionShare(row.sessions)) }}</small>
-          </span>
-          <div><i :style="{ width: chartWidth(row.sessions) }" /></div>
-          <b>{{ formatNumber(row.sessions, true) }}</b>
+      <div class="traffic-dimension-content">
+        <div class="traffic-dimension-table-area">
+          <div class="traffic-dimension-table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>{{ t("dashboard.trafficDimension") }}</th>
+                  <th>{{ t("dashboard.trafficSessions") }}</th>
+                  <th>{{ t("dashboard.trafficPageviews") }}</th>
+                  <th>{{ t("dashboard.trafficDetailViewsPerSession") }}</th>
+                  <th>{{ t("dashboard.trafficDetailBounceRate") }}</th>
+                  <th>{{ t("dashboard.trafficDetailDuration") }}</th>
+                  <th>{{ t("dashboard.trafficFunnelPurchase") }}</th>
+                  <th>{{ t("dashboard.trafficDetailConversionRate") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in visibleRows" :key="row.label">
+                  <td :title="row.label">{{ row.label }}</td>
+                  <td>{{ formatNumber(row.sessions) }}</td>
+                  <td>{{ formatNumber(row.pageviews) }}</td>
+                  <td>{{ formatDecimal(row.pageviewsPerSession) }}</td>
+                  <td>{{ formatPercent(row.bounceRate) }}</td>
+                  <td>{{ formatDuration(row.averageSessionDuration) }}</td>
+                  <td>{{ formatNumber(row.completedCheckouts) }}</td>
+                  <td>{{ formatPercent(row.conversionRate) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <button
+            v-if="dimensionRows.length > 6"
+            type="button"
+            class="traffic-dimension-expand"
+            @click="expanded = !expanded"
+          >
+            <ChevronUp v-if="expanded" aria-hidden="true" />
+            <ChevronDown v-else aria-hidden="true" />
+            {{
+              expanded
+                ? t("dashboard.trafficDimensionShowLess")
+                : t("dashboard.trafficDimensionShowAll", {
+                    count: dimensionRows.length,
+                  })
+            }}
+          </button>
         </div>
-      </div>
 
-      <div class="traffic-dimension-table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>{{ t("dashboard.trafficDimension") }}</th>
-              <th>{{ t("dashboard.trafficSessions") }}</th>
-              <th>{{ t("dashboard.trafficPageviews") }}</th>
-              <th>{{ t("dashboard.trafficDetailViewsPerSession") }}</th>
-              <th>{{ t("dashboard.trafficDetailBounceRate") }}</th>
-              <th>{{ t("dashboard.trafficDetailDuration") }}</th>
-              <th>{{ t("dashboard.trafficFunnelPurchase") }}</th>
-              <th>{{ t("dashboard.trafficDetailConversionRate") }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in visibleRows" :key="row.label">
-              <td :title="row.label">{{ row.label }}</td>
-              <td>{{ formatNumber(row.sessions) }}</td>
-              <td>{{ formatNumber(row.pageviews) }}</td>
-              <td>{{ formatDecimal(row.pageviewsPerSession) }}</td>
-              <td>{{ formatPercent(row.bounceRate) }}</td>
-              <td>{{ formatDuration(row.averageSessionDuration) }}</td>
-              <td>{{ formatNumber(row.completedCheckouts) }}</td>
-              <td>{{ formatPercent(row.conversionRate) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <button
-        v-if="dimensionRows.length > 6"
-        type="button"
-        class="traffic-dimension-expand"
-        @click="expanded = !expanded"
-      >
-        <ChevronUp v-if="expanded" aria-hidden="true" />
-        <ChevronDown v-else aria-hidden="true" />
-        {{
-          expanded
-            ? t("dashboard.trafficDimensionShowLess")
-            : t("dashboard.trafficDimensionShowAll", {
-                count: dimensionRows.length,
+        <aside class="traffic-dimension-donut">
+          <header>
+            <strong>{{ activeDimensionLabel }}</strong>
+            <span>{{ t("dashboard.trafficThirtyDays") }}</span>
+          </header>
+          <DashboardDonutChart
+            :segments="donutSegments"
+            :center-label="t('dashboard.trafficSessions')"
+            :center-value="formatNumber(totalSessions, true)"
+            :ariaLabel="
+              t('dashboard.trafficDimensionChartLabel', {
+                title: activeDimensionLabel,
               })
-        }}
-      </button>
+            "
+            :size="174"
+          />
+        </aside>
+      </div>
     </template>
 
     <div v-else class="traffic-dimension-empty">
@@ -255,66 +276,65 @@ function chartWidth(value: number) {
   box-shadow: var(--focus-ring);
 }
 
-.traffic-dimension-chart {
+.traffic-dimension-content {
   display: grid;
-  gap: 8px;
-  margin-bottom: 13px;
-  padding: 11px;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  align-items: start;
+  gap: 14px;
+}
+
+.traffic-dimension-table-area {
+  min-width: 0;
+}
+
+.traffic-dimension-donut {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
   border-radius: 11px;
   background: var(--surface-soft);
 }
 
-.traffic-dimension-chart > div {
-  display: grid;
-  grid-template-columns: minmax(160px, 0.8fr) minmax(160px, 1.8fr) 54px;
-  align-items: center;
-  gap: 8px;
-}
-
-.traffic-dimension-chart span {
+.traffic-dimension-donut > header {
   display: flex;
-  min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 5px;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
-.traffic-dimension-chart strong,
-.traffic-dimension-chart small {
+.traffic-dimension-donut > header strong {
   overflow: hidden;
+  color: var(--text);
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.traffic-dimension-chart strong {
-  color: var(--text);
-  font-size: 10px;
-}
-
-.traffic-dimension-chart small {
+.traffic-dimension-donut > header span {
   flex: 0 0 auto;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
-.traffic-dimension-chart > div > div {
-  height: 7px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--surface-low);
+.traffic-dimension-donut :deep(.donut-layout) {
+  gap: 8px;
 }
 
-.traffic-dimension-chart i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--green), var(--blue));
+.traffic-dimension-donut :deep(.donut-legend) {
+  gap: 7px;
 }
 
-.traffic-dimension-chart b {
-  color: var(--text);
+.traffic-dimension-donut :deep(.donut-legend div) {
   font-size: 10px;
-  text-align: right;
+}
+
+.traffic-dimension-donut :deep(.donut-legend span) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .traffic-dimension-table-scroll {
@@ -416,13 +436,19 @@ function chartWidth(value: number) {
   text-align: center;
 }
 
+@media (max-width: 900px) {
+  .traffic-dimension-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .traffic-dimension-donut {
+    width: min(100%, 420px);
+  }
+}
+
 @media (max-width: 620px) {
   .traffic-dimension-card > header {
     flex-direction: column;
-  }
-
-  .traffic-dimension-chart > div {
-    grid-template-columns: minmax(90px, 1fr) minmax(70px, 0.9fr) 38px;
   }
 }
 </style>
