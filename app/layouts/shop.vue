@@ -95,23 +95,6 @@ const isFetching = computed(() => {
 
 const noStores = computed(() => formStore.knownStores.length === 0);
 
-// Auto-fetch when switching between Order/Payment tabs
-watch(
-  () => route.path,
-  (newPath) => {
-    if (!isLayoutActive.value) return;
-
-    if (
-      newPath.startsWith("/order") ||
-      newPath.startsWith("/store") ||
-      newPath === "/customer" ||
-      newPath === "/profile"
-    ) {
-      fetchCurrent();
-    }
-  },
-);
-
 watch(
   isFetching,
   (val) => {
@@ -125,15 +108,12 @@ watch(
   { immediate: false },
 );
 
-// Sync shop from URL query changes (e.g. forward/backward or manual entry)
-watch(
-  () => route.query.shop,
-  () => {
-    if (!isLayoutActive.value) return;
+// Own route-scoped fetching so shop selection is synchronized before a request starts.
+watch([() => route.path, () => getRouteShop()], () => {
+  if (!isLayoutActive.value) return;
 
-    syncShopFromRoute(true);
-  },
-);
+  syncShopFromRoute(true);
+});
 
 // ── Shop selector ────────────────────────────────────────────────────────────
 function getRouteShop() {
@@ -152,7 +132,6 @@ function syncShopFromRoute(shouldFetch = false) {
   if (!queryShop) {
     queryShop = formStore.storeId || "";
     if (!queryShop) return;
-    router.replace({ query: { ...route.query, shop: queryShop } });
   }
 
   const didChangeShop = formStore.storeId !== queryShop;
@@ -160,6 +139,11 @@ function syncShopFromRoute(shouldFetch = false) {
 
   if (didChangeShop) {
     hydrateStoreData(queryShop);
+  }
+
+  if (!getRouteShop()) {
+    void router.replace({ query: { ...route.query, shop: queryShop } });
+    return;
   }
 
   if (shouldFetch) {
@@ -230,7 +214,10 @@ function fetchCurrent(force = false) {
   } else if (route.path.startsWith("/store/payout/")) {
     const idMatch = route.path.match(/\/store\/payout\/(\d+)/);
     if (idMatch && idMatch[1]) {
-      paymentStore.fetchPayoutDetail(sid, token, idMatch[1], force);
+      void Promise.all([
+        paymentStore.fetchPayoutDetail(sid, token, idMatch[1], force),
+        paymentStore.fetchPaymentsAccount(sid, token, force),
+      ]);
     }
   } else if (route.path === "/customer") {
     if (force || !customerStore.hasFetchedAll) {

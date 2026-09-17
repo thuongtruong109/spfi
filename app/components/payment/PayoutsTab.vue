@@ -5,6 +5,7 @@ import { useActiveShopAuth } from "~/composables/useActiveShopAuth";
 import { useLocalization } from "~/composables/useLocalization";
 import { useStoreFeedback } from "~/composables/useStoreFeedback";
 import { usePaymentStore } from "~/stores/payment";
+import { buildPayoutDetailRoute } from "~/utils/payment-routes";
 import type {
   ShopifyPayoutFilters,
   ShopifyPayoutStatus,
@@ -13,6 +14,7 @@ import { capitalize, fmtDate } from "~~/helpers";
 
 const paymentStore = usePaymentStore();
 const router = useRouter();
+const route = useRoute();
 const { storeId, token, isReady } = useActiveShopAuth();
 const feedback = useStoreFeedback();
 const { locale, t } = useLocalization();
@@ -144,7 +146,7 @@ function formatMoney(amount: string, currency: string) {
 }
 
 function openPayoutDetail(payoutId: string | number) {
-  router.push(`/store/payout/${payoutId}`);
+  void router.push(buildPayoutDetailRoute(payoutId, route.query, storeId.value));
 }
 
 function updatePageSize(size: number) {

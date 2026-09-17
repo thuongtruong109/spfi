@@ -2,7 +2,7 @@
   <NuxtLayout name="shop">
     <template #title>
       <div v-if="currentPayout" class="breadcrumb">
-        <NuxtLink to="/store" class="breadcrumb-back">
+        <NuxtLink :to="payoutsRoute" class="breadcrumb-back">
           <svg
             width="16"
             height="16"
@@ -27,7 +27,7 @@
         </span>
       </div>
       <div v-else class="breadcrumb">
-        <NuxtLink to="/store" class="breadcrumb-back">
+        <NuxtLink :to="payoutsRoute" class="breadcrumb-back">
           <svg
             width="16"
             height="16"
@@ -241,61 +241,46 @@
 
 <script setup lang="ts">
 import { Download } from "@lucide/vue";
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useLocalization } from "~/composables/useLocalization";
 import { useStoreFeedback } from "~/composables/useStoreFeedback";
-import { useCredentialVaultStore } from "~/stores/credentialVault";
-import { useFormStore } from "../../../stores/form";
+import { buildPayoutsRoute } from "~/utils/payment-routes";
 import type { Transaction } from "../../../stores/payment";
 import { usePaymentStore } from "../../../stores/payment";
 import { getAdjustmentOrderTransactions } from "~~/utils/payment-transactions";
-import { resolveStoreAccessToken } from "~~/utils/shop-auth";
 
 definePageMeta({ layout: false });
 
 const route = useRoute();
-const formStore = useFormStore();
 const paymentStore = usePaymentStore();
-const credentialVault = useCredentialVaultStore();
 const feedback = useStoreFeedback();
 const { locale, t } = useLocalization();
 const { formatPaymentLabel } = useShopifyPaymentLabel();
 const transactionTypeFilter = ref<"all" | "charge">("all");
 
-const payoutId = String(
-  Array.isArray(route.params.id) ? route.params.id[0] : route.params.id || "",
-).trim();
-
-onMounted(() => {
-  if (formStore.storeId && payoutId) {
-    const token = resolveToken(formStore.storeId);
-    if (token) {
-      paymentStore.fetchPayoutDetail(formStore.storeId, token, payoutId, false);
-      paymentStore.fetchPaymentsAccount(formStore.storeId, token);
-    }
-  }
-});
-
-function resolveToken(sid: string): string | null {
-  return resolveStoreAccessToken(credentialVault.getStoreData(sid)) || null;
-}
+const payoutId = computed(() =>
+  String(
+    Array.isArray(route.params.id) ? route.params.id[0] : route.params.id || "",
+  ).trim(),
+);
+const payoutsRoute = computed(() => buildPayoutsRoute(route.query));
 
 const currentPayout = computed(
   () =>
-    paymentStore.payoutDetails[String(payoutId)] ||
-    paymentStore.payouts.find((p) => String(p.id) === payoutId) ||
+    paymentStore.payoutDetails[payoutId.value] ||
+    paymentStore.payouts.find((p) => String(p.id) === payoutId.value) ||
     null,
 );
 
 const currentPayoutMetadata = computed(
-  () => paymentStore.payoutMetadata[String(payoutId)] || null,
+  () => paymentStore.payoutMetadata[payoutId.value] || null,
 );
 
 const currentPayoutTransactions = computed(() => {
-  if (!payoutId) return [];
+  if (!payoutId.value) return [];
   return paymentStore
-    .getTransactionsForPayout(payoutId)
+    .getTransactionsForPayout(payoutId.value)
     .filter((t) => t.type !== "payout");
 });
 

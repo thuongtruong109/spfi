@@ -36,6 +36,7 @@ interface PaymentStoreCache {
   paymentsAccount: ShopifyPaymentsAccount | null;
   payoutMetadata: Record<string, ShopifyPaymentsPayoutMetadata>;
   transactionsByPayout: Record<string, Transaction[]>;
+  loadedPayoutDetails: Record<string, boolean>;
   balanceTransactions: Transaction[];
   visibleBalanceTransactions: Transaction[];
   disputes: ShopifyPaymentsDispute[];
@@ -54,6 +55,7 @@ export const usePaymentStore = defineStore("payment", () => {
   const paymentsAccount = ref<ShopifyPaymentsAccount | null>(null);
   const payoutMetadata = ref<Record<string, ShopifyPaymentsPayoutMetadata>>({});
   const transactionsByPayout = ref<Record<string, Transaction[]>>({});
+  const loadedPayoutDetails = ref<Record<string, boolean>>({});
 
   const balanceTransactions = ref<Transaction[]>([]);
   const visibleBalanceTransactions = ref<Transaction[]>([]);
@@ -67,6 +69,7 @@ export const usePaymentStore = defineStore("payment", () => {
   const error = ref<string | null>(null);
   const graphqlWarning = ref<string | null>(null);
   let storeScopeVersion = 0;
+  const payoutDetailRequests = new Map<string, Promise<void>>();
 
   const storeCache = usePerStoreCache<PaymentStoreCache>({
     capture: () => ({
@@ -77,6 +80,7 @@ export const usePaymentStore = defineStore("payment", () => {
       paymentsAccount: paymentsAccount.value,
       payoutMetadata: { ...payoutMetadata.value },
       transactionsByPayout: { ...transactionsByPayout.value },
+      loadedPayoutDetails: { ...loadedPayoutDetails.value },
       balanceTransactions: [...balanceTransactions.value],
       visibleBalanceTransactions: [...visibleBalanceTransactions.value],
       disputes: [...disputes.value],
@@ -90,6 +94,7 @@ export const usePaymentStore = defineStore("payment", () => {
     reset: resetState,
     onStoreChange: () => {
       storeScopeVersion += 1;
+      payoutDetailRequests.clear();
     },
   });
   const activateStore = storeCache.activate;
@@ -162,6 +167,7 @@ export const usePaymentStore = defineStore("payment", () => {
           ? graphqlTransactionsResult.value.transactions
           : overview.balanceTransactions,
       );
+      loadedPayoutDetails.value = {};
 
       const warnings: string[] = [];
       if (accountResult.status === "rejected") {
@@ -257,6 +263,7 @@ export const usePaymentStore = defineStore("payment", () => {
       if (!hasActiveFilters(filters)) {
         balanceTransactions.value = [...visibleBalanceTransactions.value];
         transactionsByPayout.value = groupByPayout(visibleBalanceTransactions.value);
+        loadedPayoutDetails.value = {};
       }
       hasFetchedBalanceTransactions.value = true;
       graphqlWarning.value = null;
@@ -349,6 +356,7 @@ export const usePaymentStore = defineStore("payment", () => {
       if (!hasActiveFilters(filters)) {
         balanceTransactions.value = transactions;
         transactionsByPayout.value = groupByPayout(res.transactions || []);
+        loadedPayoutDetails.value = {};
       }
       hasFetchedBalanceTransactions.value = true;
       rememberStore(storeId);
@@ -413,49 +421,49 @@ export const usePaymentStore = defineStore("payment", () => {
 
     activateStore(storeId);
     const requestScope = storeScopeVersion;
-    if (
-      !force &&
-      payoutDetails.value[String(payoutId)] &&
-      transactionsByPayout.value[String(payoutId)]?.length
-    ) {
-      return;
-    }
+    const normalizedPayoutId = String(payoutId);
+    const requestKey = `${storeId}:${normalizedPayoutId}`;
+    const pendingRequest = payoutDetailRequests.get(requestKey);
+    if (pendingRequest) return pendingRequest;
+    if (!force && loadedPayoutDetails.value[normalizedPayoutId]) return;
 
     isLoading.value = true;
     error.value = null;
 
-    try {
-      const response = await $fetch<PayoutDetailResponse>(
-        `/api/payment/payout/${payoutId}`,
-        {
-          params: { storeId },
-          headers: { "x-shopify-access-token": token },
-        },
-      );
-
-      if (!isActiveRequest(storeId, requestScope)) return;
-
-      if (response.payout) {
-        payoutDetails.value[String(payoutId)] = response.payout;
-
-        const listIndex = payouts.value.findIndex(
-          (payout) => String(payout.id) === String(payoutId),
+    const request = (async () => {
+      try {
+        const response = await $fetch<PayoutDetailResponse>(
+          `/api/payment/payout/${normalizedPayoutId}`,
+          {
+            params: { storeId },
+            headers: { "x-shopify-access-token": token },
+          },
         );
-        if (listIndex > -1) {
-          payouts.value[listIndex] = response.payout;
-        } else {
-          payouts.value = [response.payout, ...payouts.value];
-        }
-      }
 
-      const enrichedById = new Map(
-        balanceTransactions.value.map((transaction) => [
-          String(transaction.id),
-          transaction,
-        ]),
-      );
-      transactionsByPayout.value[String(payoutId)] = (response.transactions ?? []).map(
-        (transaction) => {
+        if (!isActiveRequest(storeId, requestScope)) return;
+
+        if (response.payout) {
+          payoutDetails.value[normalizedPayoutId] = response.payout;
+
+          const listIndex = payouts.value.findIndex(
+            (payout) => String(payout.id) === normalizedPayoutId,
+          );
+          if (listIndex > -1) {
+            payouts.value[listIndex] = response.payout;
+          } else {
+            payouts.value = [response.payout, ...payouts.value];
+          }
+        }
+
+        const enrichedById = new Map(
+          balanceTransactions.value.map((transaction) => [
+            String(transaction.id),
+            transaction,
+          ]),
+        );
+        transactionsByPayout.value[normalizedPayoutId] = (
+          response.transactions ?? []
+        ).map((transaction) => {
           const enriched = enrichedById.get(String(transaction.id));
           return enriched
             ? {
@@ -464,16 +472,26 @@ export const usePaymentStore = defineStore("payment", () => {
                   enriched.source_order_name || transaction.source_order_name,
               }
             : transaction;
-        },
-      );
+        });
+        loadedPayoutDetails.value[normalizedPayoutId] = true;
 
-      rememberStore(storeId);
-    } catch (err) {
-      if (isActiveRequest(storeId, requestScope)) {
-        error.value = getAppErrorMessage(err, "Failed to fetch payout detail.");
+        rememberStore(storeId);
+      } catch (err) {
+        if (isActiveRequest(storeId, requestScope)) {
+          error.value = getAppErrorMessage(err, "Failed to fetch payout detail.");
+        }
+      } finally {
+        if (isActiveRequest(storeId, requestScope)) isLoading.value = false;
       }
+    })();
+
+    payoutDetailRequests.set(requestKey, request);
+    try {
+      await request;
     } finally {
-      if (isActiveRequest(storeId, requestScope)) isLoading.value = false;
+      if (payoutDetailRequests.get(requestKey) === request) {
+        payoutDetailRequests.delete(requestKey);
+      }
     }
   }
 
@@ -485,6 +503,7 @@ export const usePaymentStore = defineStore("payment", () => {
     paymentsAccount.value = cached.paymentsAccount || null;
     payoutMetadata.value = { ...(cached.payoutMetadata || {}) };
     transactionsByPayout.value = { ...cached.transactionsByPayout };
+    loadedPayoutDetails.value = { ...(cached.loadedPayoutDetails || {}) };
     balanceTransactions.value = [...cached.balanceTransactions];
     visibleBalanceTransactions.value = [
       ...(cached.visibleBalanceTransactions || cached.balanceTransactions),
@@ -501,6 +520,7 @@ export const usePaymentStore = defineStore("payment", () => {
 
   function $reset() {
     storeScopeVersion += 1;
+    payoutDetailRequests.clear();
     resetState();
   }
 
@@ -512,6 +532,7 @@ export const usePaymentStore = defineStore("payment", () => {
     paymentsAccount.value = null;
     payoutMetadata.value = {};
     transactionsByPayout.value = {};
+    loadedPayoutDetails.value = {};
     balanceTransactions.value = [];
     visibleBalanceTransactions.value = [];
     disputes.value = [];
