@@ -25,16 +25,22 @@ const EXPIRED_TOKEN_MESSAGE =
   "Access token has expired. Update this store's credentials and try again.";
 
 const TAB_RESOURCES: Record<StoreTab, StoreDataResource[]> = {
-  transactions: ["payment"],
-  payouts: ["payment"],
-  disputes: ["payment", "disputes"],
-  orders: ["orders", "payment"],
+  transactions: ["paymentTransactions"],
+  payouts: ["paymentAccount", "paymentPayouts"],
+  disputes: ["disputes"],
+  orders: ["orders", "paymentTransactions"],
   products: ["products", "locations"],
   customers: ["customers"],
   markets: ["markets"],
   traffic: ["traffic"],
   operations: ["commerceOps"],
-  profile: ["profile", "payment", "orders"],
+  profile: [
+    "profile",
+    "paymentAccount",
+    "paymentPayouts",
+    "paymentTransactions",
+    "orders",
+  ],
 };
 
 export function useStoreTabData() {
@@ -67,9 +73,6 @@ export function useStoreTabData() {
 
     const expiredSet = new Set(expired);
     if (expiredSet.has("orders")) orderStore.evictStore(storeId);
-    if (expiredSet.has("payment") || expiredSet.has("disputes")) {
-      paymentStore.evictStore(storeId);
-    }
     if (expiredSet.has("products")) productStore.evictStore(storeId);
     if (expiredSet.has("locations")) locationStore.evictStore(storeId);
     if (expiredSet.has("markets")) marketStore.evictStore(storeId);
@@ -139,17 +142,6 @@ export function useStoreTabData() {
     }
   }
 
-  async function loadPaymentData(storeId: string, token: string, force: boolean) {
-    if (force || !paymentStore.hasFetchedAll || paymentStore.error) {
-      await paymentStore.fetchAll(storeId, token, force);
-      return;
-    }
-
-    if (!paymentStore.hasFetchedBalanceTransactions) {
-      await paymentStore.fetchBalanceTransactions(storeId, token, force);
-    }
-  }
-
   async function loadStoreTabData(
     tab: StoreTab,
     storeId = formStore.storeId,
@@ -176,23 +168,63 @@ export function useStoreTabData() {
 
     setTabError(tab, null);
 
-    if (["transactions", "payouts", "disputes"].includes(tab)) {
+    if (tab === "transactions") {
       const paymentForce =
-        force || hadPaymentError || isResourceExpired(storeId, "payment");
-      await loadPaymentData(storeId, token, paymentForce);
-      if (!paymentStore.error) markResourceLoaded(storeId, "payment");
-
-      const disputeForce = force || isResourceExpired(storeId, "disputes");
+        force || hadPaymentError || isResourceExpired(storeId, "paymentTransactions");
       if (
-        tab === "disputes" &&
-        !paymentStore.error &&
-        (disputeForce || !paymentStore.hasFetchedDisputes)
+        paymentForce ||
+        !paymentStore.hasFetchedBalanceTransactions ||
+        !paymentStore.isShowingDefaultTransactions
       ) {
-        await paymentStore.fetchDisputes(storeId, token);
+        await paymentStore.fetchGraphqlBalanceTransactions(
+          storeId,
+          token,
+          {},
+          { force: paymentForce },
+        );
       }
-      if (tab === "disputes" && !paymentStore.error) {
-        markResourceLoaded(storeId, "disputes");
+      if (!paymentStore.error) markResourceLoaded(storeId, "paymentTransactions");
+      return !paymentStore.error;
+    }
+
+    if (tab === "payouts") {
+      const accountForce = force || isResourceExpired(storeId, "paymentAccount");
+      const payoutForce =
+        force || hadPaymentError || isResourceExpired(storeId, "paymentPayouts");
+      const requests: Promise<unknown>[] = [];
+      if (accountForce || !paymentStore.hasFetchedAccount) {
+        requests.push(paymentStore.fetchPaymentsAccount(storeId, token, accountForce));
       }
+      if (
+        payoutForce ||
+        !paymentStore.hasFetchedPayouts ||
+        !paymentStore.isShowingDefaultPayouts
+      ) {
+        requests.push(
+          paymentStore.fetchPayouts(storeId, token, {}, { force: payoutForce }),
+        );
+      }
+      await Promise.all(requests);
+      if (paymentStore.hasFetchedAccount) {
+        markResourceLoaded(storeId, "paymentAccount");
+      }
+      if (!paymentStore.error && paymentStore.hasFetchedPayouts) {
+        markResourceLoaded(storeId, "paymentPayouts");
+      }
+      return !paymentStore.error;
+    }
+
+    if (tab === "disputes") {
+      const disputeForce =
+        force || hadPaymentError || isResourceExpired(storeId, "disputes");
+      if (
+        disputeForce ||
+        !paymentStore.hasFetchedDisputes ||
+        !paymentStore.isShowingDefaultDisputes
+      ) {
+        await paymentStore.fetchDisputes(storeId, token, {}, { force: disputeForce });
+      }
+      if (!paymentStore.error) markResourceLoaded(storeId, "disputes");
       return !paymentStore.error;
     }
 
@@ -200,18 +232,22 @@ export function useStoreTabData() {
       const requests: Promise<unknown>[] = [];
       const orderForce = force || hadOrderError || isResourceExpired(storeId, "orders");
       const paymentForce =
-        force || hadPaymentError || isResourceExpired(storeId, "payment");
+        force || hadPaymentError || isResourceExpired(storeId, "paymentTransactions");
       if (orderForce || !orderStore.hasFetchedAll) {
         requests.push(orderStore.fetchAll(storeId, token, orderForce));
       }
-      if (paymentForce || !paymentStore.hasFetchedBalanceTransactions) {
+      if (
+        paymentForce ||
+        !paymentStore.hasFetchedBalanceTransactions ||
+        !paymentStore.isShowingDefaultTransactions
+      ) {
         requests.push(
           paymentStore.fetchBalanceTransactions(storeId, token, paymentForce),
         );
       }
       await Promise.all(requests);
       if (!orderStore.error) markResourceLoaded(storeId, "orders");
-      if (!paymentStore.error) markResourceLoaded(storeId, "payment");
+      if (!paymentStore.error) markResourceLoaded(storeId, "paymentTransactions");
       return !orderStore.error;
     }
 
@@ -272,26 +308,53 @@ export function useStoreTabData() {
     const requests: Promise<unknown>[] = [];
     const profileForce =
       force || hadProfileError || isResourceExpired(storeId, "profile");
-    const paymentForce =
-      force || hadPaymentError || isResourceExpired(storeId, "payment");
+    const accountForce = force || isResourceExpired(storeId, "paymentAccount");
+    const payoutForce =
+      force || hadPaymentError || isResourceExpired(storeId, "paymentPayouts");
+    const transactionForce =
+      force || hadPaymentError || isResourceExpired(storeId, "paymentTransactions");
     const orderForce = force || hadOrderError || isResourceExpired(storeId, "orders");
     if (profileForce || !profileStore.hasFetchedProfile) {
       requests.push(profileStore.fetchProfile(storeId, token));
     }
+    if (accountForce || !paymentStore.hasFetchedAccount) {
+      requests.push(paymentStore.fetchPaymentsAccount(storeId, token, accountForce));
+    }
     if (
-      paymentForce ||
-      !paymentStore.hasFetchedAll ||
-      !paymentStore.hasFetchedBalanceTransactions ||
-      paymentStore.error
+      payoutForce ||
+      !paymentStore.hasFetchedPayouts ||
+      !paymentStore.isShowingDefaultPayouts
     ) {
-      requests.push(loadPaymentData(storeId, token, paymentForce));
+      requests.push(
+        paymentStore.fetchPayouts(storeId, token, {}, { force: payoutForce }),
+      );
+    }
+    if (
+      transactionForce ||
+      !paymentStore.hasFetchedBalanceTransactions ||
+      !paymentStore.isShowingDefaultTransactions
+    ) {
+      requests.push(
+        paymentStore.fetchGraphqlBalanceTransactions(
+          storeId,
+          token,
+          {},
+          { force: transactionForce },
+        ),
+      );
     }
     if (orderForce || !orderStore.hasFetchedAll || orderStore.error) {
       requests.push(orderStore.fetchAll(storeId, token, orderForce));
     }
     await Promise.all(requests);
     if (!profileStore.error) markResourceLoaded(storeId, "profile");
-    if (!paymentStore.error) markResourceLoaded(storeId, "payment");
+    if (paymentStore.hasFetchedAccount) markResourceLoaded(storeId, "paymentAccount");
+    if (!paymentStore.error && paymentStore.hasFetchedPayouts) {
+      markResourceLoaded(storeId, "paymentPayouts");
+    }
+    if (!paymentStore.error && paymentStore.hasFetchedBalanceTransactions) {
+      markResourceLoaded(storeId, "paymentTransactions");
+    }
     if (!orderStore.error) markResourceLoaded(storeId, "orders");
     return !profileStore.error;
   }

@@ -44,7 +44,7 @@
     </template>
 
     <section class="page">
-      <div v-if="paymentStore.isLoading" class="empty">
+      <div v-if="paymentStore.isLoadingPayoutDetail && !currentPayout" class="empty">
         {{ t("payment.loadingPayoutDetails") }}
       </div>
       <div v-else-if="!currentPayout" class="empty">
@@ -52,10 +52,11 @@
       </div>
       <div v-else class="screen">
         <div class="page-header" style="justify-content: flex-end">
-          <button class="btn btn-secondary" type="button" @click="exportTransactions">
-            <Download />
-            {{ t("payment.export") }}
-          </button>
+          <CsvExportButton
+            resource="payments"
+            :filters="{ payout_id: payoutId }"
+            :label="t('payment.export')"
+          />
         </div>
 
         <!-- Overview Card -->
@@ -229,10 +230,17 @@
           <div v-if="displayedPayoutTransactions.length === 0" class="empty">
             {{ t("payment.noTransactionsForPayout") }}
           </div>
-          <div class="pagination">
-            <button class="pag-btn" disabled>&#8592;</button>
-            <button class="pag-btn" disabled>&#8594;</button>
-          </div>
+          <PaginationControls
+            v-if="currentPayoutTransactions.length || payoutPageInfo.hasNextPage"
+            :page="currentPage"
+            :page-size="pageSize"
+            :total-items="filteredPayoutTransactions.length"
+            :has-next-page="currentPage < totalPages || payoutPageInfo.hasNextPage"
+            :loading="paymentStore.isLoadingPayoutDetail"
+            :item-label="t('payment.transactions')"
+            @update:page="changePage"
+            @update:page-size="updatePageSize"
+          />
         </div>
       </div>
     </section>
@@ -240,11 +248,10 @@
 </template>
 
 <script setup lang="ts">
-import { Download } from "@lucide/vue";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import { useActiveShopAuth } from "~/composables/useActiveShopAuth";
 import { useLocalization } from "~/composables/useLocalization";
-import { useStoreFeedback } from "~/composables/useStoreFeedback";
 import { buildPayoutsRoute } from "~/utils/payment-routes";
 import type { Transaction } from "../../../stores/payment";
 import { usePaymentStore } from "../../../stores/payment";
@@ -254,10 +261,12 @@ definePageMeta({ layout: false });
 
 const route = useRoute();
 const paymentStore = usePaymentStore();
-const feedback = useStoreFeedback();
+const { storeId, token } = useActiveShopAuth();
 const { locale, t } = useLocalization();
 const { formatPaymentLabel } = useShopifyPaymentLabel();
 const transactionTypeFilter = ref<"all" | "charge">("all");
+const currentPage = ref(1);
+const pageSize = ref(50);
 
 const payoutId = computed(() =>
   String(
@@ -284,13 +293,34 @@ const currentPayoutTransactions = computed(() => {
     .filter((t) => t.type !== "payout");
 });
 
-const displayedPayoutTransactions = computed(() =>
+const filteredPayoutTransactions = computed(() =>
   transactionTypeFilter.value === "charge"
     ? currentPayoutTransactions.value.filter(
         (transaction) => transaction.type === "charge",
       )
     : currentPayoutTransactions.value,
 );
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(filteredPayoutTransactions.value.length / pageSize.value)),
+);
+const displayedPayoutTransactions = computed(() => {
+  const safePage = Math.min(currentPage.value, totalPages.value);
+  const start = (safePage - 1) * pageSize.value;
+  return filteredPayoutTransactions.value.slice(start, start + pageSize.value);
+});
+const payoutPageInfo = computed(
+  () =>
+    paymentStore.payoutDetailPageInfo[payoutId.value] || {
+      hasNextPage: false,
+      hasPreviousPage: false,
+      nextCursor: null,
+      previousCursor: null,
+    },
+);
+
+watch([payoutId, transactionTypeFilter], () => {
+  currentPage.value = 1;
+});
 
 const transactionFilterOptions = computed<
   Array<{ label: string; value: "all" | "charge" }>
@@ -365,42 +395,23 @@ function getOrderName(tx: Transaction) {
   return `#${tx.source_order_id}`;
 }
 
-function exportTransactions() {
-  if (!currentPayout.value) {
-    feedback.warning(t("payment.payoutExportNotReady"));
-    return;
-  }
-
-  const rows = displayedPayoutTransactions.value.map((transaction) => [
-    transaction.id,
-    transaction.processed_at,
-    getOrderName(transaction) || "",
-    transaction.type,
-    transaction.currency,
-    transaction.amount,
-    transaction.fee,
-    transaction.net,
-  ]);
-  const csv = [
-    ["id", "processed_at", "order", "type", "currency", "amount", "fee", "net"],
-    ...rows,
-  ]
-    .map((row) => row.map(formatCsvCell).join(","))
-    .join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `payout-${currentPayout.value.id}-transactions.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-  feedback.success(t("payment.payoutTransactionsExported"));
+function updatePageSize(size: number) {
+  pageSize.value = size;
+  currentPage.value = 1;
 }
 
-function formatCsvCell(value: unknown) {
-  const text = String(value ?? "");
-  const safeText = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
-  return `"${safeText.replace(/"/g, '""')}"`;
+async function changePage(page: number) {
+  if (page <= totalPages.value) {
+    currentPage.value = Math.max(1, page);
+    return;
+  }
+  if (!payoutPageInfo.value.hasNextPage || !payoutId.value) return;
+  await paymentStore.fetchMorePayoutTransactions(
+    storeId.value,
+    token.value,
+    payoutId.value,
+  );
+  if (!paymentStore.error) currentPage.value = Math.min(page, totalPages.value);
 }
 
 function formatMoney(amount: string, currency: string) {
@@ -478,33 +489,6 @@ function formatMoney(amount: string, currency: string) {
 .badge-paid {
   background: var(--green-soft);
   color: var(--green);
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  transition: all 0.15s;
-}
-.btn svg {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 15px;
-}
-.btn-secondary {
-  background: var(--surface, #fff);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-}
-.btn-secondary:hover {
-  background: var(--surface-soft);
 }
 
 .card {
@@ -703,23 +687,5 @@ td.right {
   padding: 32px;
   color: var(--text-muted);
   font-size: 13px;
-}
-.pagination {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--border, #e5e5e5);
-}
-.pag-btn {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  border: 1px solid var(--border, #e5e5e5);
-  background: transparent;
-  color: var(--text-sub);
 }
 </style>

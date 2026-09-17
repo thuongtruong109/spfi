@@ -84,16 +84,11 @@ async function applyFilters(
     feedback.warning(t("payment.credentialsRequired"));
     return;
   }
-  const filters: ShopifyPayoutFilters = {
-    ...(status.value ? { status: status.value } : {}),
-    ...(date.value ? { date: date.value } : {}),
-    ...(dateMin.value ? { date_min: dateMin.value } : {}),
-    ...(dateMax.value ? { date_max: dateMax.value } : {}),
-    ...(sinceId.value ? { since_id: sinceId.value } : {}),
-    ...(lastId.value ? { last_id: lastId.value } : {}),
-  };
+  const filters = buildFilters();
   currentPage.value = 1;
-  await paymentStore.fetchPayouts(storeId.value, token.value, filters);
+  await paymentStore.fetchPayouts(storeId.value, token.value, filters, {
+    force: true,
+  });
   feedback.requestResult({
     errorMessage: paymentStore.error,
     successMessage,
@@ -101,6 +96,17 @@ async function applyFilters(
       resource: t("payment.payouts"),
     }),
   });
+}
+
+function buildFilters(): ShopifyPayoutFilters {
+  return {
+    ...(status.value ? { status: status.value } : {}),
+    ...(date.value ? { date: date.value } : {}),
+    ...(dateMin.value ? { date_min: dateMin.value } : {}),
+    ...(dateMax.value ? { date_max: dateMax.value } : {}),
+    ...(sinceId.value ? { since_id: sinceId.value } : {}),
+    ...(lastId.value ? { last_id: lastId.value } : {}),
+  };
 }
 
 async function resetFilters() {
@@ -115,12 +121,6 @@ async function resetFilters() {
       resource: t("payment.payouts"),
     }),
   );
-}
-
-function getPayoutProcessedDate(payoutId: string | number) {
-  const transactions = paymentStore.transactionsByPayout[String(payoutId)] || [];
-  const charge = transactions.find((transaction) => transaction.type === "charge");
-  return charge ? fmtDate(charge.processed_at) : "—";
 }
 
 function getPayoutMetadata(payoutId: string | number) {
@@ -152,6 +152,16 @@ function openPayoutDetail(payoutId: string | number) {
 function updatePageSize(size: number) {
   pageSize.value = size;
   currentPage.value = 1;
+}
+
+async function changePage(page: number) {
+  if (page <= totalPages.value) {
+    currentPage.value = Math.max(1, page);
+    return;
+  }
+  if (!paymentStore.payoutPageInfo.hasNextPage) return;
+  await paymentStore.fetchMorePayouts(storeId.value, token.value, buildFilters());
+  if (!paymentStore.error) currentPage.value = Math.min(page, totalPages.value);
 }
 </script>
 
@@ -229,7 +239,6 @@ function updatePageSize(size: number) {
           <th>{{ t("payment.direction") }}</th>
           <th>{{ t("payment.businessEntity") }}</th>
           <th>{{ t("payment.bankTrace") }}</th>
-          <th>{{ t("payment.transactionDate") }}</th>
           <th class="right">{{ t("payment.amount") }}</th>
         </tr>
       </thead>
@@ -260,7 +269,6 @@ function updatePageSize(size: number) {
           <td class="trace-id">
             {{ getPayoutMetadata(payout.id)?.externalTraceId || "—" }}
           </td>
-          <td class="td-date">{{ getPayoutProcessedDate(payout.id) }}</td>
           <td class="right td-net">
             {{ formatMoney(payout.amount, payout.currency) }}
           </td>
@@ -269,12 +277,16 @@ function updatePageSize(size: number) {
     </table>
 
     <PaginationControls
-      v-if="sortedPayouts.length"
+      v-if="sortedPayouts.length || paymentStore.payoutPageInfo.hasNextPage"
       :page="currentPage"
       :page-size="pageSize"
       :total-items="sortedPayouts.length"
+      :has-next-page="
+        currentPage < totalPages || paymentStore.payoutPageInfo.hasNextPage
+      "
+      :loading="paymentStore.isLoadingPayouts"
       :item-label="t('payment.payouts')"
-      @update:page="currentPage = $event"
+      @update:page="changePage"
       @update:page-size="updatePageSize"
     />
     <div v-else class="empty">{{ t("payment.noPayouts") }}</div>

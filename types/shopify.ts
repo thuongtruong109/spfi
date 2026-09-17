@@ -652,9 +652,25 @@ export type PaymentsOverviewResponse = import("./api-contract").ApiSuccessRespon
 
 export interface PayoutsResponse {
   payouts: ShopifyPayout[];
+  metadata: import("./shopify-payments-graphql").ShopifyPaymentsPayoutMetadata[];
+  pageInfo: import("./shopify-payments-graphql").ShopifyConnectionPageInfo;
+}
+
+export interface ShopifyRestPageInfo {
+  nextCursor: string | null;
+  previousCursor: string | null;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
 }
 
 export interface PayoutDetailResponse {
   payout: ShopifyPayout | null;
+  metadata: import("./shopify-payments-graphql").ShopifyPaymentsPayoutMetadata | null;
   transactions: ShopifyBalanceTransaction[];
+  pageInfo: ShopifyRestPageInfo;
+}
+
+export interface PayoutTransactionsPageResponse {
+  transactions: ShopifyBalanceTransaction[];
+  pageInfo: ShopifyRestPageInfo;
 }

@@ -16,7 +16,7 @@ import {
   resolveStoreCookieData,
 } from "./callShopifyApi";
 import { callShopifyPaginatedApi } from "./callShopifyPaginatedApi";
-import { fetchShopifyPaymentsBalanceTransactions } from "./shopify-payments-graphql";
+import { fetchAllShopifyPaymentsBalanceTransactions } from "./shopify-payments-graphql";
 import { fetchShopifyTraffic } from "./shopify-traffic";
 import { emptyDashboardTraffic } from "~~/utils/dashboard-traffic";
 import {
@@ -129,7 +129,7 @@ export async function fetchStoreDashboard({
       preserveUnsafeIntegers: true,
       forwardResponseHeaders: false,
     }),
-    fetchShopifyPaymentsBalanceTransactions(common, {
+    fetchAllShopifyPaymentsBalanceTransactions(common, {
       processed_at_min: period.monthStartKey,
       processed_at_max: period.todayKey,
       test: false,

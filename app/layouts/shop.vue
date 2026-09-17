@@ -214,10 +214,7 @@ function fetchCurrent(force = false) {
   } else if (route.path.startsWith("/store/payout/")) {
     const idMatch = route.path.match(/\/store\/payout\/(\d+)/);
     if (idMatch && idMatch[1]) {
-      void Promise.all([
-        paymentStore.fetchPayoutDetail(sid, token, idMatch[1], force),
-        paymentStore.fetchPaymentsAccount(sid, token, force),
-      ]);
+      void paymentStore.fetchPayoutDetail(sid, token, idMatch[1], force);
     }
   } else if (route.path === "/customer") {
     if (force || !customerStore.hasFetchedAll) {

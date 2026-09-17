@@ -200,11 +200,20 @@ const showsStoreSummary = computed(() =>
   ["transactions", "payouts", "disputes", "orders"].includes(activeTab.value),
 );
 const hasPaymentData = computed(
-  () =>
-    balances.value.length > 0 ||
-    transactionsCount.value > 0 ||
-    payoutsCount.value > 0 ||
-    (activeTab.value === "disputes" && paymentStore.hasFetchedDisputes),
+  () => {
+    if (activeTab.value === "transactions") {
+      return paymentStore.hasFetchedBalanceTransactions || transactionsCount.value > 0;
+    }
+    if (activeTab.value === "payouts") {
+      return (
+        paymentStore.hasFetchedPayouts ||
+        payoutsCount.value > 0 ||
+        balances.value.length > 0
+      );
+    }
+    if (activeTab.value === "disputes") return paymentStore.hasFetchedDisputes;
+    return true;
+  },
 );
 const activeTabError = computed(() => {
   if (["transactions", "payouts", "disputes"].includes(activeTab.value)) {

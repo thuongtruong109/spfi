@@ -81,13 +81,11 @@ async function applyFilters(
     feedback.warning(t("payment.credentialsRequired"));
     return;
   }
-  const filters: ShopifyPaymentsDisputeFilters = {
-    ...(status.value ? { status: status.value } : {}),
-    ...(initiatedFrom.value ? { initiated_at_min: initiatedFrom.value } : {}),
-    ...(initiatedThrough.value ? { initiated_at_max: initiatedThrough.value } : {}),
-  };
+  const filters = buildFilters();
   currentPage.value = 1;
-  await paymentStore.fetchDisputes(storeId.value, token.value, filters);
+  await paymentStore.fetchDisputes(storeId.value, token.value, filters, {
+    force: true,
+  });
   feedback.requestResult({
     errorMessage: paymentStore.error,
     successMessage,
@@ -95,6 +93,14 @@ async function applyFilters(
       resource: t("payment.disputes"),
     }),
   });
+}
+
+function buildFilters(): ShopifyPaymentsDisputeFilters {
+  return {
+    ...(status.value ? { status: status.value } : {}),
+    ...(initiatedFrom.value ? { initiated_at_min: initiatedFrom.value } : {}),
+    ...(initiatedThrough.value ? { initiated_at_max: initiatedThrough.value } : {}),
+  };
 }
 
 async function resetFilters() {
@@ -131,6 +137,16 @@ function deadlineClass(deadline: string | null, statusValue: string) {
 function updatePageSize(size: number) {
   pageSize.value = size;
   currentPage.value = 1;
+}
+
+async function changePage(page: number) {
+  if (page <= totalPages.value) {
+    currentPage.value = Math.max(1, page);
+    return;
+  }
+  if (!paymentStore.disputePageInfo.hasNextPage) return;
+  await paymentStore.fetchMoreDisputes(storeId.value, token.value, buildFilters());
+  if (!paymentStore.error) currentPage.value = Math.min(page, totalPages.value);
 }
 </script>
 
@@ -223,12 +239,16 @@ function updatePageSize(size: number) {
     </table>
 
     <PaginationControls
-      v-if="sortedDisputes.length"
+      v-if="sortedDisputes.length || paymentStore.disputePageInfo.hasNextPage"
       :page="currentPage"
       :page-size="pageSize"
       :total-items="sortedDisputes.length"
+      :has-next-page="
+        currentPage < totalPages || paymentStore.disputePageInfo.hasNextPage
+      "
+      :loading="paymentStore.isLoadingDisputes"
       :item-label="t('payment.disputes')"
-      @update:page="currentPage = $event"
+      @update:page="changePage"
       @update:page-size="updatePageSize"
     />
     <div v-else class="empty">{{ t("payment.noDisputes") }}</div>
