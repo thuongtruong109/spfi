@@ -211,8 +211,9 @@ non-200 response; the completed file is then streamed and removed. CSV values
 are protected against spreadsheet formula injection. The store UI exposes the
 same exports through reusable buttons.
 
-`/dashboard` is an all-store operational view. The browser loads saved stores
-with a concurrency limit and calls `POST /api/dashboard` once per store. Each
+`/dashboard` is an all-store operational view. The browser waits for the user to
+confirm loading, then loads saved stores with a concurrency limit and calls
+`POST /api/dashboard` once per store. Each
 response aggregates the current calendar month's orders, daily revenue, top
 products, pending fulfillments, customer and product totals, Shopify Payments,
 staff access, and ShopifyQL traffic analytics. Traffic includes human sessions,

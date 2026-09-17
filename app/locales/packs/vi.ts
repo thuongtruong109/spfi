@@ -641,6 +641,13 @@ const messages: Record<MessageKey, string> = {
   "dashboard.openManager": "Mở quản lý store",
   "dashboard.cachedAt": "Đã lưu lúc {time}",
   "dashboard.refreshAll": "Làm mới tất cả store",
+  "dashboard.loadGateEyebrow": "Dashboard theo yêu cầu",
+  "dashboard.loadGateTitle": "Tải dữ liệu Dashboard?",
+  "dashboard.loadGateDescription":
+    "Thao tác này sẽ lấy số liệu mới nhất từ toàn bộ {count} store đã lưu và có thể mất một lúc.",
+  "dashboard.loadGateAction": "Tải Dashboard",
+  "dashboard.loadGateLoading": "Đang tải Dashboard…",
+  "dashboard.loadGateProgress": "Đã xong {completed}/{total} store",
   "dashboard.businessOverview": "Tổng quan kinh doanh",
   "dashboard.totalStores": "Tổng số store",
   "dashboard.reportingDetail": "{reporting} đang báo cáo · {attention} cần chú ý",

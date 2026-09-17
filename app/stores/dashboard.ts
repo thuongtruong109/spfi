@@ -31,10 +31,18 @@ export const useDashboardStore = defineStore("dashboard", () => {
       : 0,
   );
 
-  async function load(force = false) {
+  const isPrepared = ref(false);
+
+  function prepare() {
     formStore.loadKnownStores();
     credentialVault.initialize();
     dataRetention.initialize();
+    totalStores.value = formStore.knownStores.length;
+    isPrepared.value = true;
+  }
+
+  async function load(force = false) {
+    prepare();
 
     const fingerprint = buildStoreFingerprint();
     const cacheIsAlive =
@@ -150,6 +158,7 @@ export const useDashboardStore = defineStore("dashboard", () => {
     lastUpdated.value = null;
     loadedFingerprint.value = "";
     hasLoaded.value = false;
+    isPrepared.value = false;
     activeRequest = null;
     if (webhookRefreshTimer) clearTimeout(webhookRefreshTimer);
     webhookRefreshTimer = null;
@@ -178,7 +187,9 @@ export const useDashboardStore = defineStore("dashboard", () => {
     totalStores,
     lastUpdated,
     hasLoaded,
+    isPrepared,
     progress,
+    prepare,
     load,
     invalidate,
     refreshFromWebhook,

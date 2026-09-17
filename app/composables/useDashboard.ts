@@ -13,6 +13,7 @@ export function useDashboard() {
     totalStores,
     lastUpdated,
     hasLoaded,
+    isPrepared,
     progress,
   } = storeToRefs(dashboardStore);
 
@@ -30,6 +31,8 @@ export function useDashboard() {
     progress,
     lastUpdated,
     hasLoaded,
+    isPrepared,
+    prepare: dashboardStore.prepare,
     ensureLoaded: () => dashboardStore.load(false),
     refresh: () => dashboardStore.load(true),
     invalidate: dashboardStore.invalidate,

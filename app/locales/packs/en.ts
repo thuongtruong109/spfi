@@ -423,6 +423,13 @@ const messages = {
   "dashboard.openManager": "Open Store Manager",
   "dashboard.cachedAt": "Cached at {time}",
   "dashboard.refreshAll": "Refresh all stores",
+  "dashboard.loadGateEyebrow": "On-demand dashboard",
+  "dashboard.loadGateTitle": "Load dashboard data?",
+  "dashboard.loadGateDescription":
+    "This will request the latest analytics from all {count} saved stores and may take a while.",
+  "dashboard.loadGateAction": "Load dashboard",
+  "dashboard.loadGateLoading": "Loading dashboard…",
+  "dashboard.loadGateProgress": "{completed} of {total} stores completed",
   "dashboard.businessOverview": "Business overview",
   "dashboard.totalStores": "Total stores",
   "dashboard.reportingDetail": "{reporting} reporting · {attention} need attention",

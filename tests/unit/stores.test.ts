@@ -282,6 +282,23 @@ describe("dashboard store", () => {
     setActivePinia(createPinia());
   });
 
+  it("prepares saved stores without requesting dashboard data", async () => {
+    localStorage.setItem(
+      KNOWN_STORES_STORAGE_KEY,
+      JSON.stringify(["shop-a", "shop-b"]),
+    );
+    const request = vi.fn();
+    vi.stubGlobal("$fetch", request);
+
+    const dashboard = useDashboardStore();
+    dashboard.prepare();
+
+    expect(dashboard.isPrepared).toBe(true);
+    expect(dashboard.totalStores).toBe(2);
+    expect(dashboard.hasLoaded).toBe(false);
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it("reuses a live all-store snapshot until an explicit refresh", async () => {
     localStorage.setItem(KNOWN_STORES_STORAGE_KEY, JSON.stringify(["shop-a"]));
     const form = useFormStore();
