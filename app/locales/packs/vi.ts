@@ -612,6 +612,8 @@ const messages: Record<MessageKey, string> = {
   "nav.status": "Trạng thái",
   "nav.settings": "Cài đặt",
   "nav.language": "Ngôn ngữ",
+  "desktop.webviewUnavailable":
+    "Không thể kết nối tới {url}. Trang hiện tại vẫn được giữ nguyên.",
   "notification.title": "Thông báo",
   "notification.unread": "{count} chưa đọc",
   "notification.markAllRead": "Đánh dấu đã đọc",

@@ -1,0 +1,14 @@
+[
+  {
+    "label": "Local dev",
+    "url": "http://localhost:3000"
+  },
+  {
+    "label": "Local Docker",
+    "url": "http://localhost"
+  },
+  {
+    "label": "Production",
+    "url": "https://spfi.thuongtruong.me"
+  }
+]

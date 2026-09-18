@@ -9,6 +9,7 @@ const credentialVault = useCredentialVaultStore();
 const notificationStore = useNotificationStore();
 const { t } = useLocalization();
 const confirmDialog = useConfirmDialog();
+const { isDesktopApp } = useDesktopWindow();
 
 function clearPageError(clearError: () => void) {
   loading.value = false;
@@ -28,7 +29,8 @@ useTokenRotation();
 </script>
 
 <template>
-  <div class="app-root">
+  <div class="app-root" :class="{ 'has-desktop-titlebar': isDesktopApp }">
+    <DesktopTitleBar />
     <a class="skip-link" href="#main-content">
       {{ t("a11y.skipToContent") }}
     </a>
@@ -47,7 +49,7 @@ useTokenRotation();
       @confirm="confirmDialog.resolveConfirmation(true)"
       @cancel="confirmDialog.resolveConfirmation(false)"
     />
-    <Nav />
+    <Nav v-if="!isDesktopApp" />
     <div id="main-content" tabindex="-1">
       <NuxtLayout>
         <NuxtErrorBoundary>
@@ -76,6 +78,7 @@ useTokenRotation();
 
 :root {
   color-scheme: light;
+  --desktop-titlebar-height: 38px;
   --footer-height: 36px;
   --app-content-max-width: 1520px;
   --app-shell-max-width: 1560px;
@@ -139,6 +142,10 @@ useTokenRotation();
   --text-primary: var(--text);
   --text-secondary: var(--muted);
   --text-muted: #8b9991;
+}
+
+.app-root.has-desktop-titlebar {
+  padding-top: var(--desktop-titlebar-height);
 }
 
 html[data-theme="dark"] {

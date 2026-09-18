@@ -394,6 +394,8 @@ const messages = {
   "nav.status": "Status",
   "nav.settings": "Settings",
   "nav.language": "Language",
+  "desktop.webviewUnavailable":
+    "Cannot connect to {url}. The current page remains open.",
   "notification.title": "Notifications",
   "notification.unread": "{count} unread",
   "notification.markAllRead": "Mark all read",

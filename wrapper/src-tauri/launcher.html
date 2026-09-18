@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spfi launcher</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        --bg: #f5f7f4;
+        --surface: #fff;
+        --surface-soft: #eef4f0;
+        --text: #14221b;
+        --muted: #65756c;
+        --line: #d9e4dd;
+        --green: #1f7a4d;
+        --red: #b4312b;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f1512;
+          --surface: #151c18;
+          --surface-soft: #213228;
+          --text: #edf4ef;
+          --muted: #a7b8ad;
+          --line: #2b3a32;
+          --green: #7ed6a3;
+          --red: #ff8b82;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(
+            circle at top,
+            color-mix(in srgb, var(--green) 10%, transparent),
+            transparent 42%
+          ),
+          var(--bg);
+        color: var(--text);
+      }
+
+      .titlebar {
+        position: fixed;
+        inset: 0 0 auto;
+        height: 38px;
+        display: flex;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        background: color-mix(in srgb, var(--surface) 94%, transparent);
+        user-select: none;
+      }
+
+      .brand {
+        padding: 0 13px;
+        background: linear-gradient(90deg, #16a085, #20c997, #0ea5a8);
+        background-clip: text;
+        color: transparent;
+        font-size: 16px;
+        font-weight: 700;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .drag-region {
+        height: 100%;
+        flex: 1;
+      }
+
+      .window-controls {
+        height: 100%;
+        display: flex;
+      }
+
+      .window-controls button {
+        width: 46px;
+        height: 100%;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+      }
+
+      .window-controls button:hover {
+        background: var(--surface-soft);
+        color: var(--text);
+      }
+
+      .window-controls button[data-window-action="close"]:hover {
+        background: #c42b1c;
+        color: #fff;
+      }
+
+      main {
+        width: min(460px, calc(100vw - 40px));
+        padding: 30px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--surface);
+        box-shadow: 0 24px 70px color-mix(in srgb, #000 14%, transparent);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 22px;
+      }
+
+      p {
+        margin: 0 0 22px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      label {
+        display: grid;
+        gap: 7px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      select,
+      .open-button {
+        width: 100%;
+        min-height: 40px;
+        border-radius: 8px;
+        font: inherit;
+      }
+
+      select {
+        padding: 0 11px;
+        border: 1px solid var(--line);
+        background: var(--surface-soft);
+        color: var(--text);
+      }
+
+      .open-button {
+        margin-top: 12px;
+        border: 0;
+        background: var(--green);
+        color: var(--bg);
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      .open-button:disabled {
+        cursor: wait;
+        opacity: 0.65;
+      }
+
+      .status {
+        min-height: 20px;
+        margin: 12px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .status.error {
+        color: var(--red);
+      }
+    </style>
+  </head>
+  <body>
+    <header class="titlebar">
+      <span class="brand" data-tauri-drag-region>Spfi</span>
+      <div class="drag-region" data-tauri-drag-region></div>
+      <div class="window-controls" aria-label="Window controls">
+        <button type="button" data-window-action="minimize" aria-label="Minimize">
+          −
+        </button>
+        <button type="button" data-window-action="maximize" aria-label="Maximize">
+          □
+        </button>
+        <button type="button" data-window-action="close" aria-label="Close">×</button>
+      </div>
+    </header>
+
+    <main>
+      <h1>Choose a WebView</h1>
+      <p>
+        Select the Spfi endpoint to open. Unreachable targets stay on this launcher so
+        the window never becomes stuck.
+      </p>
+      <label>
+        WebView URL
+        <select id="target"></select>
+      </label>
+      <button id="open" class="open-button" type="button">Open WebView</button>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <script>
+      const targets = __SPFI_WEBVIEW_TARGETS__;
+      const select = document.querySelector("#target");
+      const openButton = document.querySelector("#open");
+      const status = document.querySelector("#status");
+      const invoke = window.__TAURI__.core.invoke;
+
+      for (const target of targets) {
+        const option = document.createElement("option");
+        option.value = target.url;
+        option.textContent = `${target.label} — ${target.url}`;
+        select.append(option);
+      }
+
+      async function openTarget() {
+        const url = select.value;
+        if (!url) return;
+
+        openButton.disabled = true;
+        select.disabled = true;
+        status.classList.remove("error");
+        status.textContent = `Checking ${url}…`;
+
+        try {
+          await invoke("open_webview_url", { url });
+        } catch (error) {
+          status.classList.add("error");
+          status.textContent = String(error);
+          openButton.disabled = false;
+          select.disabled = false;
+        }
+      }
+
+      openButton.addEventListener("click", openTarget);
+      select.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") openTarget();
+      });
+
+      for (const button of document.querySelectorAll("[data-window-action]")) {
+        button.addEventListener("click", () => {
+          invoke("control_window", { action: button.dataset.windowAction });
+        });
+      }
+    </script>
+  </body>
+</html>
