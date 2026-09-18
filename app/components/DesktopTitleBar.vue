@@ -174,8 +174,8 @@ onBeforeUnmount(() => stopResizeListener?.());
 }
 
 .desktop-titlebar :deep(.desktop-titlebar-select) {
-  width: 190px;
-  flex: 0 0 190px;
+  width: 120px;
+  flex: 0 0 120px;
 }
 
 .desktop-titlebar :deep(.desktop-titlebar-select .select-trigger) {

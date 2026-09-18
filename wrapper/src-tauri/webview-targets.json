@@ -4,11 +4,7 @@
     "url": "http://localhost:3000"
   },
   {
-    "label": "Local Docker",
-    "url": "http://localhost"
-  },
-  {
     "label": "Production",
-    "url": "https://spfi.thuongtruong.me"
+    "url": "https://spfi.netlify.app"
   }
 ]

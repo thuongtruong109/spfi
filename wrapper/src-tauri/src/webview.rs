@@ -1,23 +1,29 @@
 use std::{
+  error::Error,
   net::{TcpStream, ToSocketAddrs},
   time::{Duration, Instant},
 };
-use tauri::WebviewWindow;
+use tauri::{AppHandle, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+
+use crate::webview_preferences;
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 const CONNECTION_ATTEMPT_TIMEOUT: Duration = Duration::from_millis(1200);
 const TARGETS_JSON: &str = include_str!("../webview-targets.json");
-const LAUNCHER_HTML: &str = include_str!("../launcher.html");
 
 #[derive(serde::Deserialize)]
 struct WebviewTarget {
   url: String,
 }
 
+fn configured_targets() -> Result<Vec<WebviewTarget>, String> {
+  serde_json::from_str(TARGETS_JSON)
+    .map_err(|error| format!("The WebView target configuration is invalid: {error}"))
+}
+
 fn configured_target_url(url: &str) -> Result<tauri::Url, String> {
   let requested = tauri::Url::parse(url).map_err(|_| "The WebView URL is invalid.".to_string())?;
-  let targets: Vec<WebviewTarget> = serde_json::from_str(TARGETS_JSON)
-    .map_err(|error| format!("The WebView target configuration is invalid: {error}"))?;
+  let targets = configured_targets()?;
   let is_configured = targets.iter().any(|target| {
     tauri::Url::parse(&target.url)
       .map(|configured| configured == requested)
@@ -27,6 +33,37 @@ fn configured_target_url(url: &str) -> Result<tauri::Url, String> {
   is_configured
     .then_some(requested)
     .ok_or_else(|| "The selected URL is not in the configured WebView target list.".to_string())
+}
+
+fn startup_target_url(saved_url: Option<&str>) -> Result<tauri::Url, String> {
+  let targets = configured_targets()?;
+  let selected = saved_url
+    .and_then(|saved| targets.iter().find(|target| target.url == saved))
+    .or_else(|| targets.first())
+    .ok_or_else(|| "No WebView targets are configured.".to_string())?;
+
+  tauri::Url::parse(&selected.url)
+    .map_err(|_| "The configured startup WebView URL is invalid.".to_string())
+}
+
+pub fn create_main_window(app: &AppHandle) -> Result<(), Box<dyn Error>> {
+  let saved_url = webview_preferences::load(app).unwrap_or_else(|error| {
+    log::warn!("Could not load the saved WebView target: {error}");
+    None
+  });
+  let target = startup_target_url(saved_url.as_deref()).map_err(std::io::Error::other)?;
+
+  WebviewWindowBuilder::new(app, "main", WebviewUrl::External(target))
+    .title("Spfi - Telescope the Shopify storefront in pipeline from one desk")
+    .inner_size(1280.0, 800.0)
+    .min_inner_size(900.0, 600.0)
+    .resizable(true)
+    .decorations(false)
+    .fullscreen(false)
+    .center()
+    .build()?;
+
+  Ok(())
 }
 
 fn probe_webview_url(url: &str) -> Result<(), String> {
@@ -71,49 +108,26 @@ fn probe_webview_url(url: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn open_webview_url(webview: WebviewWindow, url: String) -> Result<(), String> {
+pub async fn open_webview_url(
+  app: AppHandle,
+  webview: WebviewWindow,
+  url: String,
+) -> Result<(), String> {
   let target = configured_target_url(&url)?;
-  tauri::async_runtime::spawn_blocking(move || probe_webview_url(&url))
+  let probe_url = url.clone();
+  tauri::async_runtime::spawn_blocking(move || probe_webview_url(&probe_url))
     .await
     .map_err(|error| format!("WebView connectivity check failed: {error}"))??;
 
+  webview_preferences::save(&app, &url)?;
   webview
     .navigate(target)
     .map_err(|error| format!("Could not open the WebView: {error}"))
 }
 
-#[tauri::command]
-pub fn control_window(webview: WebviewWindow, action: String) -> Result<(), String> {
-  let result = match action.as_str() {
-    "minimize" => webview.minimize(),
-    "maximize" => match webview.is_maximized() {
-      Ok(true) => webview.unmaximize(),
-      Ok(false) => webview.maximize(),
-      Err(error) => Err(error),
-    },
-    "close" => webview.close(),
-    _ => return Err("Unknown window action.".to_string()),
-  };
-
-  result.map_err(|error| error.to_string())
-}
-
-pub fn launcher_response() -> tauri::http::Response<Vec<u8>> {
-  let safe_targets = TARGETS_JSON.replace('<', "\\u003c");
-  let html = LAUNCHER_HTML.replace("__SPFI_WEBVIEW_TARGETS__", &safe_targets);
-
-  tauri::http::Response::builder()
-    .header(
-      tauri::http::header::CONTENT_TYPE,
-      "text/html; charset=utf-8",
-    )
-    .body(html.into_bytes())
-    .expect("build launcher response")
-}
-
 #[cfg(test)]
 mod tests {
-  use super::{configured_target_url, launcher_response, probe_webview_url};
+  use super::{configured_target_url, probe_webview_url, startup_target_url};
   use std::net::TcpListener;
 
   #[test]
@@ -136,11 +150,51 @@ mod tests {
   }
 
   #[test]
-  fn launcher_contains_the_configured_targets() {
-    let body = launcher_response().into_body();
-    let html = String::from_utf8(body).expect("launcher is UTF-8");
+  fn defaults_to_the_first_configured_target() {
+    assert_eq!(
+      startup_target_url(None).expect("default target").as_str(),
+      "http://localhost:3000/"
+    );
+  }
 
-    assert!(html.contains("http://localhost:3000"));
-    assert!(!html.contains("__SPFI_WEBVIEW_TARGETS__"));
+  #[test]
+  fn restores_a_saved_configured_target() {
+    assert_eq!(
+      startup_target_url(Some("https://spfi.thuongtruong.me"))
+        .expect("saved target")
+        .as_str(),
+      "https://spfi.thuongtruong.me/"
+    );
+  }
+
+  #[test]
+  fn ignores_a_saved_target_that_is_no_longer_configured() {
+    assert_eq!(
+      startup_target_url(Some("https://example.com"))
+        .expect("fallback target")
+        .as_str(),
+      "http://localhost:3000/"
+    );
+  }
+
+  #[test]
+  fn webview_navigation_is_enabled_for_local_and_remote_webviews() {
+    for capability in [
+      include_str!("../capabilities/default.json"),
+      include_str!("../capabilities/remote-window-controls.json"),
+    ] {
+      let value: serde_json::Value =
+        serde_json::from_str(capability).expect("capability is valid JSON");
+      let permissions = value["permissions"]
+        .as_array()
+        .expect("capability permissions are an array");
+
+      assert!(permissions
+        .iter()
+        .any(|permission| permission == "allow-open-webview-url"));
+    }
+
+    let permission = include_str!("../permissions/webview.toml");
+    assert!(permission.contains("open_webview_url"));
   }
 }
