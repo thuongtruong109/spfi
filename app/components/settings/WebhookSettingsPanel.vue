@@ -426,6 +426,7 @@ onMounted(() => void refresh());
 
 .store-actions {
   display: flex;
+  flex-wrap: nowrap;
   gap: 8px;
 }
 
@@ -554,12 +555,17 @@ onMounted(() => void refresh());
   }
 
   .store-actions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    width: 100%;
   }
 
-  .toolbar-actions :deep(.base-button) {
+  .toolbar-actions :deep(.base-button),
+  .store-actions :deep(.base-button) {
     flex: 1;
+  }
+
+  .store-webhooks > header {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .subscription-row {

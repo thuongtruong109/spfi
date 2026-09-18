@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { ArrowLeftToLine, ArrowRightToLine, Search, X } from "@lucide/vue";
+import type { AddStoreMode } from "~/composables/useAddStoreConnection";
 import { useStoreTabData } from "~/composables/useStoreTabData";
 import { useCredentialVaultStore } from "~/stores/credentialVault";
 import { useMarketStore } from "~/stores/market";
@@ -35,6 +36,7 @@ const { loading: globalLoading } = useLoading();
 const isLayoutActive = ref(true);
 const hasSkippedInitialActivation = ref(false);
 const isSidebarCollapsed = ref(false);
+const addStoreMode = ref<AddStoreMode>("single");
 
 onMounted(() => {
   isSidebarCollapsed.value = localStorage.getItem("spf-sidebar-collapsed") === "true";
@@ -454,12 +456,10 @@ async function deleteStoreOption(id: string) {
         class="modal-card add-store-modal"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="add-store-modal-title"
+        :aria-label="t('store.connectNew')"
       >
         <div class="modal-head add-store-modal-head">
-          <h3 id="add-store-modal-title" class="modal-title">
-            {{ t("store.connectNew") }}
-          </h3>
+          <StoreAddModeToggle v-model="addStoreMode" />
           <BaseButton
             variant="ghost"
             icon-only
@@ -472,7 +472,9 @@ async function deleteStoreOption(id: string) {
         </div>
         <div class="modal-body add-store-modal-body">
           <StoreAddStoreForm
+            v-model:mode="addStoreMode"
             show-cancel
+            :show-mode-toggle="false"
             @cancel="isAddModalOpen = false"
             @connected="isAddModalOpen = false"
           />

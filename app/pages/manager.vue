@@ -32,10 +32,6 @@ const proxyResults = ref<
 >({});
 const addStoreMode = ref<AddStoreMode>("single");
 
-function setAddStoreMode(mode: AddStoreMode) {
-  addStoreMode.value = mode;
-}
-
 // ── Search and Sort state ──────────────────────────────────────────────────
 const searchQuery = ref("");
 const sortOrder = ref("expiry_desc"); // domain_asc, domain_desc, expiry_asc, expiry_desc
@@ -319,28 +315,7 @@ function getProxyCheckErrorMessage(error?: ProxyCheckError) {
       <IconsBulking />
     </template>
     <template #actions>
-      <div class="mode-toggle" role="group" :aria-label="t('store.addMode')">
-        <BaseButton
-          :variant="addStoreMode === 'single' ? 'secondary' : 'ghost'"
-          class="toggle-btn"
-          :class="{ active: addStoreMode === 'single' }"
-          :aria-pressed="addStoreMode === 'single'"
-          @click="setAddStoreMode('single')"
-        >
-          <template #icon><IconsCheck /></template>
-          {{ t("store.single") }}
-        </BaseButton>
-        <BaseButton
-          :variant="addStoreMode === 'bulking' ? 'secondary' : 'ghost'"
-          class="toggle-btn"
-          :class="{ active: addStoreMode === 'bulking' }"
-          :aria-pressed="addStoreMode === 'bulking'"
-          @click="setAddStoreMode('bulking')"
-        >
-          <template #icon><IconsBulking /></template>
-          {{ t("store.bulk") }}
-        </BaseButton>
-      </div>
+      <StoreAddModeToggle v-model="addStoreMode" />
     </template>
     <div class="token-page">
       <!-- ── Add new store ── -->

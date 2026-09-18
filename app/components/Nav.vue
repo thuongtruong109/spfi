@@ -96,14 +96,14 @@ onBeforeUnmount(() => {
   color: var(--text);
   font-weight: 600;
   font-size: 1.3rem;
-  margin-left: 8px;
+  margin-left: 6px;
   text-shadow: 1px 1px 2px rgba(31, 122, 77, 0.2);
 }
 .nav-list {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-center;
 }
 
 .topbar-controls {

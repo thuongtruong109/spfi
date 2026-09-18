@@ -823,6 +823,8 @@ const messages = {
   "store.loadingPaymentData": "Loading payment data",
   "store.loadingPaymentDescription":
     "Fetching transactions, payouts, and store finance details.",
+  "store.loadingData": "Loading store data",
+  "store.loadingDescription": "Fetching the latest data for this store.",
   "store.refreshPayment": "Refresh payment",
   "store.selectBeforeRefresh": "Select a store before refreshing its data.",
   "store.dataRefreshed": "Store data refreshed.",
@@ -1454,11 +1456,7 @@ const messages = {
   "settings.endpointLabel": "Tracktaco API v2 base URL",
   "settings.apiKeyLabel": "API key",
   "settings.apiKeyPlaceholder": "Enter a tt_live_… or tt_test_… key",
-  "settings.apiKeyHint":
-    "Saved in this browser and sent as a Bearer token only for Tracktaco v2 requests.",
   "settings.carrierLabel": "Default carrier",
-  "settings.carrierHint":
-    "Automatic tracking searches use this carrier. The revealed carrier is still used for the Shopify fulfillment.",
   "settings.showApiKey": "Show API key",
   "settings.hideApiKey": "Hide API key",
   "settings.save": "Save settings",

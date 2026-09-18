@@ -1042,6 +1042,8 @@ const messages: Record<MessageKey, string> = {
   "store.loadingPaymentData": "Đang tải dữ liệu thanh toán",
   "store.loadingPaymentDescription":
     "Đang lấy giao dịch, payout và thông tin tài chính store.",
+  "store.loadingData": "Đang tải dữ liệu store",
+  "store.loadingDescription": "Đang lấy dữ liệu mới nhất cho store này.",
   "store.refreshPayment": "Làm mới thanh toán",
   "store.selectBeforeRefresh": "Chọn một store trước khi làm mới dữ liệu.",
   "store.dataRefreshed": "Đã làm mới dữ liệu store.",
@@ -1565,8 +1567,6 @@ const messages: Record<MessageKey, string> = {
   "settings.endpointLabel": "Base URL Tracktaco API v2",
   "settings.apiKeyLabel": "API key",
   "settings.apiKeyPlaceholder": "Nhập key tt_live_… hoặc tt_test_…",
-  "settings.apiKeyHint":
-    "Key được lưu trong trình duyệt này và chỉ gửi dưới dạng Bearer token cho request Tracktaco v2.",
   "settings.showApiKey": "Hiện API key",
   "settings.hideApiKey": "Ẩn API key",
   "settings.save": "Lưu cài đặt",
@@ -1708,8 +1708,6 @@ const messages: Record<MessageKey, string> = {
   "setup.chooseStore": "Chọn store hiện tại, sau đó click Install",
   "setup.noteTitle": "Note vào sheet theo format",
   "settings.carrierLabel": "Hãng vận chuyển mặc định",
-  "settings.carrierHint":
-    "Tìm tracking tự động sẽ dùng hãng này. Fulfillment Shopify vẫn dùng hãng thực tế do Tracktaco trả về.",
   "product.defaultOptionName": "Tiêu đề",
   "product.presentmentCurrencies": "Tiền tệ theo market",
   "product.presentmentCurrenciesPlaceholder": "USD, EUR, VND",

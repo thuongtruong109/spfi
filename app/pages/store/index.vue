@@ -35,9 +35,9 @@
 
       <!-- LOADING STATE -->
       <ShopEmptyState
-        v-else-if="isPaymentTab && paymentStore.isLoading && !hasPaymentData"
-        :title="t('store.loadingPaymentData')"
-        :description="t('store.loadingPaymentDescription')"
+        v-else-if="isInitialTabLoading"
+        :title="t('store.loadingData')"
+        :description="t('store.loadingDescription')"
         loading
       >
         <template #icon>
@@ -48,10 +48,7 @@
       <!-- EMPTY / NOT FETCHED -->
       <ShopEmptyState
         v-else-if="
-          isPaymentTab &&
-          !paymentStore.isLoading &&
-          !hasPaymentData &&
-          !paymentStore.error
+          isPaymentTab && !activeTabLoading && !hasActiveTabData && !paymentStore.error
         "
         :title="storeEmptyState.title"
         :description="storeEmptyState.description"
@@ -128,6 +125,7 @@ import { useActiveShopAuth } from "~/composables/useActiveShopAuth";
 import { useLocalization } from "~/composables/useLocalization";
 import { useStoreFeedback } from "~/composables/useStoreFeedback";
 import { useStoreTabData } from "~/composables/useStoreTabData";
+import { useStoreTabLoadingState } from "~/composables/useStoreTabLoadingState";
 import { useCustomerStore } from "~/stores/customers";
 import { useCommerceOpsStore } from "~/stores/commerceOps";
 import { useFormStore } from "~/stores/form";
@@ -159,6 +157,16 @@ const { t } = useLocalization();
 
 const activeTab = computed<StoreTab>(() => resolveStoreTab(route.query.tab));
 const isPageActive = ref(true);
+const loadingTabKey = ref("");
+let loadSequence = 0;
+const { hasData: hasActiveTabData, isLoading: activeTabLoading } =
+  useStoreTabLoadingState(activeTab);
+const activeTabKey = computed(() => `${formStore.storeId}:${activeTab.value}`);
+const isInitialTabLoading = computed(
+  () =>
+    loadingTabKey.value === activeTabKey.value ||
+    (activeTabLoading.value && !hasActiveTabData.value),
+);
 
 function setActiveTab(tab: StoreTab) {
   void router.replace({
@@ -185,35 +193,11 @@ async function refreshCurrentStore() {
   });
 }
 
-const balances = computed(() => {
-  const b = paymentStore.balance;
-  if (!b) return [];
-  return Array.isArray(b) ? b : [b];
-});
-
-const transactionsCount = computed(() => paymentStore.balanceTransactions.length);
-const payoutsCount = computed(() => paymentStore.payouts.length);
 const isPaymentTab = computed(() =>
   ["transactions", "payouts", "disputes"].includes(activeTab.value),
 );
 const showsStoreSummary = computed(() =>
   ["transactions", "payouts", "disputes", "orders"].includes(activeTab.value),
-);
-const hasPaymentData = computed(
-  () => {
-    if (activeTab.value === "transactions") {
-      return paymentStore.hasFetchedBalanceTransactions || transactionsCount.value > 0;
-    }
-    if (activeTab.value === "payouts") {
-      return (
-        paymentStore.hasFetchedPayouts ||
-        payoutsCount.value > 0 ||
-        balances.value.length > 0
-      );
-    }
-    if (activeTab.value === "disputes") return paymentStore.hasFetchedDisputes;
-    return true;
-  },
 );
 const activeTabError = computed(() => {
   if (["transactions", "payouts", "disputes"].includes(activeTab.value)) {
@@ -299,10 +283,20 @@ onDeactivated(() => {
 watch(
   [() => formStore.storeId, activeTab, activeToken, isPageActive],
   async ([storeId, tab, , pageActive]) => {
-    if (!pageActive || !storeId) return;
-    await loadStoreTabData(tab, storeId);
+    const requestId = ++loadSequence;
+    if (!pageActive || !storeId) {
+      loadingTabKey.value = "";
+      return;
+    }
+
+    loadingTabKey.value = `${storeId}:${tab}`;
+    try {
+      await loadStoreTabData(tab, storeId);
+    } finally {
+      if (requestId === loadSequence) loadingTabKey.value = "";
+    }
   },
-  { immediate: true, flush: "post" },
+  { immediate: true, flush: "sync" },
 );
 
 watch([activeTabError, activeTab], ([message]) => {
