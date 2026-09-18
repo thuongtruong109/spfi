@@ -1,5 +1,9 @@
 import type { H3Event } from "h3";
-import type { DashboardWarning, StoreDashboardSnapshot } from "~~/types/dashboard";
+import type {
+  DashboardService,
+  DashboardWarning,
+  StoreDashboardSnapshot,
+} from "~~/types/dashboard";
 import type {
   ShopifyBalance,
   ShopifyBalanceTransaction,
@@ -19,6 +23,7 @@ import { callShopifyPaginatedApi } from "./callShopifyPaginatedApi";
 import { fetchAllShopifyPaymentsBalanceTransactions } from "./shopify-payments-graphql";
 import { fetchShopifyTraffic } from "./shopify-traffic";
 import { emptyDashboardTraffic } from "~~/utils/dashboard-traffic";
+import { normalizeDashboardServices } from "~~/utils/dashboard-load";
 import {
   aggregateOrderAnalytics,
   aggregatePaymentAnalytics,
@@ -34,6 +39,7 @@ interface DashboardRequestContext {
   storeId: string;
   token: string;
   timezoneOffsetMinutes?: number;
+  services?: DashboardService[];
 }
 
 interface BalanceResponse {
@@ -59,15 +65,22 @@ export async function fetchStoreDashboard({
   storeId,
   token,
   timezoneOffsetMinutes = 0,
+  services,
 }: DashboardRequestContext): Promise<StoreDashboardSnapshot> {
   const common = { event, storeId, token };
   const warnings: DashboardWarning[] = [];
+  const enabledServices = new Set(normalizeDashboardServices(services));
   const [profileResult] = await Promise.allSettled([
-    callShopifyApi<{ shop?: ShopifyShop }>({
-      ...common,
-      path: "/shop.json",
-      forwardResponseHeaders: false,
-    }),
+    loadDashboardService(
+      enabledServices.has("profile"),
+      () =>
+        callShopifyApi<{ shop?: ShopifyShop }>({
+          ...common,
+          path: "/shop.json",
+          forwardResponseHeaders: false,
+        }),
+      { shop: undefined },
+    ),
   ]);
   const profile = settledValue(profileResult, { shop: undefined }, warnings, {
     resource: "profile",
@@ -91,58 +104,103 @@ export async function fetchStoreDashboard({
     usersResult,
     trafficResult,
   ] = await Promise.allSettled([
-    callShopifyPaginatedApi<ShopifyOrder>({
-      ...common,
-      path: "/orders.json",
-      resourceKey: "orders",
-      params: {
-        status: "any",
-        created_at_min: period.monthStartIso,
-        fields:
-          "id,name,order_number,created_at,cancelled_at,financial_status,fulfillment_status,total_price,current_total_price,currency,test,line_items",
-      },
-      preserveUnsafeIntegers: true,
-      forwardResponseHeaders: false,
+    loadDashboardService(
+      enabledServices.has("orders"),
+      () =>
+        callShopifyPaginatedApi<ShopifyOrder>({
+          ...common,
+          path: "/orders.json",
+          resourceKey: "orders",
+          params: {
+            status: "any",
+            created_at_min: period.monthStartIso,
+            fields:
+              "id,name,order_number,created_at,cancelled_at,financial_status,fulfillment_status,total_price,current_total_price,currency,test,line_items",
+          },
+          preserveUnsafeIntegers: true,
+          forwardResponseHeaders: false,
+        }),
+      [],
+    ),
+    loadDashboardService(enabledServices.has("orders"), () => fetchOrderCount(common), {
+      count: 0,
     }),
-    fetchOrderCount(common),
-    fetchPendingOrders(common),
-    callShopifyApi<CustomerCountResponse>({
-      ...common,
-      path: "/customers/count.json",
-      forwardResponseHeaders: false,
-    }),
-    callShopifyApi<ProductCountResponse>({
-      ...common,
-      path: "/products/count.json",
-      forwardResponseHeaders: false,
-    }),
-    callShopifyApi<BalanceResponse>({
-      ...common,
-      path: "/shopify_payments/balance.json",
-      forwardResponseHeaders: false,
-    }),
-    callShopifyPaginatedApi<ShopifyPayout>({
-      ...common,
-      path: "/shopify_payments/payouts.json",
-      resourceKey: "payouts",
-      params: { date_min: period.monthStartKey },
-      preserveUnsafeIntegers: true,
-      forwardResponseHeaders: false,
-    }),
-    fetchAllShopifyPaymentsBalanceTransactions(common, {
-      processed_at_min: period.monthStartKey,
-      processed_at_max: period.todayKey,
-      test: false,
-      hide_transfers: true,
-    }),
-    callShopifyPaginatedApi<UsersResponseItem>({
-      ...common,
-      path: "/users.json",
-      resourceKey: "users",
-      preserveUnsafeIntegers: true,
-      forwardResponseHeaders: false,
-    }),
-    fetchShopifyTraffic(common),
+    loadDashboardService(
+      enabledServices.has("orders"),
+      () => fetchPendingOrders(common),
+      { orders: [] },
+    ),
+    loadDashboardService(
+      enabledServices.has("customers"),
+      () =>
+        callShopifyApi<CustomerCountResponse>({
+          ...common,
+          path: "/customers/count.json",
+          forwardResponseHeaders: false,
+        }),
+      { count: 0 },
+    ),
+    loadDashboardService(
+      enabledServices.has("products"),
+      () =>
+        callShopifyApi<ProductCountResponse>({
+          ...common,
+          path: "/products/count.json",
+          forwardResponseHeaders: false,
+        }),
+      { count: 0 },
+    ),
+    loadDashboardService(
+      enabledServices.has("payments"),
+      () =>
+        callShopifyApi<BalanceResponse>({
+          ...common,
+          path: "/shopify_payments/balance.json",
+          forwardResponseHeaders: false,
+        }),
+      { balance: undefined },
+    ),
+    loadDashboardService(
+      enabledServices.has("payments"),
+      () =>
+        callShopifyPaginatedApi<ShopifyPayout>({
+          ...common,
+          path: "/shopify_payments/payouts.json",
+          resourceKey: "payouts",
+          params: { date_min: period.monthStartKey },
+          preserveUnsafeIntegers: true,
+          forwardResponseHeaders: false,
+        }),
+      [],
+    ),
+    loadDashboardService(
+      enabledServices.has("payments"),
+      () =>
+        fetchAllShopifyPaymentsBalanceTransactions(common, {
+          processed_at_min: period.monthStartKey,
+          processed_at_max: period.todayKey,
+          test: false,
+          hide_transfers: true,
+        }),
+      [],
+    ),
+    loadDashboardService(
+      enabledServices.has("users"),
+      () =>
+        callShopifyPaginatedApi<UsersResponseItem>({
+          ...common,
+          path: "/users.json",
+          resourceKey: "users",
+          preserveUnsafeIntegers: true,
+          forwardResponseHeaders: false,
+        }),
+      [],
+    ),
+    loadDashboardService(
+      enabledServices.has("traffic"),
+      () => fetchShopifyTraffic(common),
+      emptyDashboardTraffic(),
+    ),
   ]);
 
   const monthOrders = settledValue(ordersResult, [], warnings, {
@@ -170,17 +228,19 @@ export async function fetchStoreDashboard({
     message: "Product total could not be refreshed.",
   }).count;
 
-  const paymentResultsAvailable = [
-    balanceResult,
-    payoutsResult,
-    transactionsResult,
-  ].some((result) => result.status === "fulfilled");
-  if (!paymentResultsAvailable) {
+  const paymentsEnabled = enabledServices.has("payments");
+  const paymentResultsAvailable =
+    paymentsEnabled &&
+    [balanceResult, payoutsResult, transactionsResult].some(
+      (result) => result.status === "fulfilled",
+    );
+  if (paymentsEnabled && !paymentResultsAvailable) {
     addWarning(warnings, {
       resource: "payments",
       message: "Shopify Payments data is unavailable or not enabled for this store.",
     });
   } else if (
+    paymentsEnabled &&
     [balanceResult, payoutsResult, transactionsResult].some(
       (result) => result.status === "rejected",
     )
@@ -205,7 +265,7 @@ export async function fetchStoreDashboard({
       };
 
   const users = usersResult.status === "fulfilled" ? usersResult.value : [];
-  if (usersResult.status === "rejected") {
+  if (enabledServices.has("users") && usersResult.status === "rejected") {
     addWarning(warnings, {
       resource: "users",
       message: "Staff access is restricted; showing the store owner profile instead.",
@@ -216,7 +276,7 @@ export async function fetchStoreDashboard({
     trafficResult.status === "fulfilled"
       ? trafficResult.value
       : emptyDashboardTraffic();
-  if (trafficResult.status === "rejected") {
+  if (enabledServices.has("traffic") && trafficResult.status === "rejected") {
     addWarning(warnings, {
       resource: "traffic",
       message:
@@ -263,9 +323,19 @@ export async function fetchStoreDashboard({
       ...paymentAnalytics,
     },
     traffic,
-    users: mapDashboardUsers(users, profile || null),
+    users: enabledServices.has("users")
+      ? mapDashboardUsers(users, profile || null)
+      : [],
     warnings,
   };
+}
+
+function loadDashboardService<T>(
+  enabled: boolean,
+  load: () => Promise<T>,
+  fallback: T,
+) {
+  return enabled ? load() : Promise.resolve(fallback);
 }
 
 function fetchOrderCount(

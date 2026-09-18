@@ -408,9 +408,9 @@ onMounted(() => void refresh());
 }
 
 .store-webhooks > header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
@@ -555,17 +555,11 @@ onMounted(() => void refresh());
   }
 
   .store-actions {
-    width: 100%;
+    justify-self: end;
   }
 
-  .toolbar-actions :deep(.base-button),
-  .store-actions :deep(.base-button) {
+  .toolbar-actions :deep(.base-button) {
     flex: 1;
-  }
-
-  .store-webhooks > header {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .subscription-row {

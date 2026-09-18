@@ -32,6 +32,7 @@ const {
   lastUpdated,
   hasLoaded,
   isPrepared,
+  availableStores,
   prepare,
   ensureLoaded,
   refresh,
@@ -336,6 +337,7 @@ onActivated(prepare);
     <template v-else>
       <DashboardLoadGate
         v-if="!hasLoaded"
+        :stores="availableStores"
         :store-count="totalStores"
         :loading="isLoading"
         :completed-stores="completedStores"

@@ -79,12 +79,21 @@
 }
 
 .sidebar.is-collapsed .sidebar-overview-actions {
+  flex-direction: column;
   gap: 4px;
 }
 
 .sidebar.is-collapsed .sidebar-overview-actions .base-button {
   width: 26px;
   min-height: 28px;
+}
+
+.sidebar.is-collapsed .sidebar-toggle {
+  order: 1;
+}
+
+.sidebar.is-collapsed .sidebar-add-store {
+  order: 2;
 }
 
 .sidebar.is-collapsed .sidebar-content {

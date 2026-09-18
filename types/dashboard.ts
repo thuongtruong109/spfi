@@ -1,3 +1,20 @@
+export const DASHBOARD_SERVICES = [
+  "profile",
+  "orders",
+  "customers",
+  "products",
+  "payments",
+  "users",
+  "traffic",
+] as const;
+
+export type DashboardService = (typeof DASHBOARD_SERVICES)[number];
+
+export interface DashboardLoadOptions {
+  storeIds?: string[];
+  services?: DashboardService[];
+}
+
 export interface DashboardMoney {
   currency: string;
   amount: number;

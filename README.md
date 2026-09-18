@@ -5,7 +5,7 @@
 <h1 align="center">SPFI</h1>
 
 <p align="center">
-  A compact Shopify operations console for setup, token rotation, Google Sheets lookup, payments, orders, products, and storefront status checks.
+  A focused Shopify operations console for multi-store setup, token rotation, dashboard intelligence, order/product workflows, payments, Google Sheets lookup, webhooks, and storefront diagnostics.
 </p>
 
 <p align="center">
@@ -17,53 +17,107 @@
   <img alt="Node 24" src="https://img.shields.io/badge/Node.js-24-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" />
 </p>
 
-## Highlights
+## 🧭 Contents
 
-- One desk for Shopify setup, profile management, product operations, payments, order inspection, sheet lookup, and storefront checks.
-- Nitro server routes keep Shopify, proxy, status, and Google Sheets calls behind the app surface.
-- Proxy-aware status checking supports direct, shared proxy, and per-row proxy modes.
-- Local-first shop profile workflows help reduce repeated credential and token handling.
-- Store Operations groups draft orders, discounts, abandoned checkout recovery, and returns into one per-store queue.
-- Shopify Markets auditing covers buyer conditions, currency and price inclusion, catalogs, localized URLs, market-driven shipping, and country resolution.
-- Automatic tracking uses Tracktaco API v2's search-and-reveal workflow, then submits the revealed tracking number to Shopify fulfillment.
+- [Highlights](#-highlights)
+- [Product Surface](#-product-surface)
+- [Core Workflows](#-core-workflows)
+- [Tech Stack](#-tech-stack)
+- [Quick Start](#-quick-start)
+- [Configuration](#-configuration)
+- [Production](#-production)
+- [Docker Compose + Nginx](#-docker-compose--nginx)
+- [Security Notes](#-security-notes)
+- [Scripts](#-scripts)
 
-## Core Workflows
+## ✨ Highlights
 
-| Route        | Workflow        | What it does                                                                                                                       |
-| ------------ | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `/setup`     | Setup Guide     | Documents the Shopify custom app setup flow and required access scopes.                                                            |
-| `/manager`   | Shop Management | Stores Shopify credentials locally, tests proxies, and generates or rotates access tokens.                                         |
-| `/store`     | Store Console   | Opens one saved store profile with tabs for transactions, payouts, disputes, orders, products, customers, markets, and operations. |
-| `/dashboard` | Dashboard       | Aggregates revenue, traffic, fulfillment, customer, product, and payment signals across saved stores.                              |
-| `/payment`   | Payments        | Reads Shopify Payments payouts, balance transactions, orders, and related product data through server APIs.                        |
-| `/status`    | Status Checker  | Batch-checks Shopify storefront availability with direct, common-proxy, or per-row proxy modes.                                    |
-| `/settings`  | Settings        | Manages Tracktaco, Google Sheets, cache retention, and per-store Shopify webhook diagnostics.                                      |
+- 🏬 **Multi-store operator desk** — connect shops, select stores, refresh dashboard data, and keep credentials local to the browser.
+- 📊 **On-demand dashboard loading** — choose all or selected stores, all or selected services, then aggregate revenue, traffic, fulfillment, product, customer, payment, and staff signals.
+- 🔐 **Server-backed Shopify access** — Nitro routes keep Shopify, proxy, status, webhook, and Google Sheets calls behind a controlled app surface.
+- 🌐 **Proxy-aware diagnostics** — run direct, shared proxy, or per-row proxy storefront checks with actionable per-row feedback.
+- 🧾 **Store operations queue** — manage draft orders, discounts, abandoned checkout recovery, returns, products, customers, markets, and fulfillment-adjacent tasks.
+- 💸 **Payments workspace** — inspect Shopify Payments payouts, balance transactions, disputes, payout detail, and exports with normalized API contracts.
+- 🚚 **Tracktaco automation** — use Tracktaco API v2 search-and-reveal, then submit the revealed tracking number into Shopify fulfillment.
+- 🔔 **Live webhook diagnostics** — register Shopify webhooks per store, verify receiver health, test the pipeline, and rotate stream tokens from Settings.
 
-## Tech Stack
+## 🧩 Product Surface
 
-- Nuxt 4, Vue 3, and TypeScript for the application shell.
-- Nitro server routes for Shopify, proxy, status, and Google Sheets APIs.
-- Pinia for app stores and shared operational state.
-- Google Sheets API via `googleapis`.
-- SOCKS/HTTP proxy support via `socks-proxy-agent` and `https-proxy-agent`.
+| Area           | Icon | Purpose                                                                                                  |
+| -------------- | ---- | -------------------------------------------------------------------------------------------------------- |
+| Store Manager  | 🏪   | Add stores, test proxies, hydrate credentials from Sheets, and rotate Shopify tokens.                    |
+| Dashboard      | 📈   | Load scoped cross-store metrics with operator-selected stores and data services.                         |
+| Store Console  | 🧰   | Work one store at a time across payments, orders, products, customers, markets, traffic, and operations. |
+| Payments       | 💳   | Review balance transactions, payouts, disputes, metadata, and payout exports.                            |
+| Status Checker | 🛰️   | Batch-check storefront reachability through direct or proxy modes.                                       |
+| Settings       | ⚙️   | Configure Tracktaco, Google Sheets, cache retention, and Shopify webhook diagnostics.                    |
 
-## Quick Start
+## 🗺️ Core Workflows
 
-Install dependencies:
+| Route        | Icon | Workflow        | What it does                                                                                                                       |
+| ------------ | ---- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `/setup`     | 🧭   | Setup Guide     | Documents the Shopify custom app setup flow and required access scopes.                                                            |
+| `/manager`   | 🏪   | Shop Management | Stores Shopify credentials locally, tests proxies, and generates or rotates access tokens.                                         |
+| `/store`     | 🧰   | Store Console   | Opens one saved store profile with tabs for transactions, payouts, disputes, orders, products, customers, markets, and operations. |
+| `/dashboard` | 📊   | Dashboard       | Aggregates revenue, traffic, fulfillment, customer, product, and payment signals across saved stores.                              |
+| `/payment`   | 💳   | Payments        | Reads Shopify Payments payouts, balance transactions, orders, and related product data through server APIs.                        |
+| `/status`    | 🛰️   | Status Checker  | Batch-checks Shopify storefront availability with direct, common-proxy, or per-row proxy modes.                                    |
+| `/settings`  | ⚙️   | Settings        | Manages Tracktaco, Google Sheets, cache retention, and per-store Shopify webhook diagnostics.                                      |
+
+## 🛠️ Tech Stack
+
+| Layer          | Tools                                                              |
+| -------------- | ------------------------------------------------------------------ |
+| App shell      | Nuxt 4, Vue 3, TypeScript                                          |
+| Server runtime | Nitro server routes and runtime config                             |
+| State          | Pinia stores and composables                                       |
+| Shopify access | Admin REST, Admin GraphQL, ShopifyQL analytics, webhook receiver   |
+| Integrations   | Google Sheets API via `googleapis`, Tracktaco API v2               |
+| Networking     | `socks-proxy-agent`, `https-proxy-agent`, proxy validation helpers |
+| Quality        | Node test runner, Vitest, Nuxt typecheck, ESLint, Prettier         |
+
+## ⚡ Quick Start
+
+1. Install dependencies:
 
 ```bash
 npm install
 ```
 
-Start the development server:
+2. Start the development server:
 
 ```bash
 npm run dev
 ```
 
-The app runs at `http://localhost:3000` by default.
+3. Open `http://localhost:3000`.
 
-## Configuration
+4. Add local configuration as needed:
+
+```bash
+cp .env.example .env
+```
+
+5. For Sheets workflows, place the Google service account at:
+
+```text
+server/service_account.json
+```
+
+## ✅ Quality Gates
+
+Run the main verification suite before shipping changes:
+
+```bash
+npm test
+npm run typecheck
+npm run lint
+```
+
+Use Prettier on changed files before committing when you touch Markdown, CSS, or
+TypeScript.
+
+## ⚙️ Configuration
 
 ### Browser origin policy
 
@@ -274,7 +328,7 @@ Pinia. Presets range from no cache through one day to the default session mode,
 which keeps data until the browser page is refreshed. Only this preference is
 persisted; the Shopify response data remains in memory.
 
-### Store Operations
+### 🧾 Store Operations
 
 The store page's Operations tab exposes one scoped queue for work that lives
 outside a single order detail page:
@@ -290,7 +344,7 @@ outside a single order detail page:
 
 See `docs/shopify-commerce-operations.md` for endpoint and scope details.
 
-### Shopify Markets
+### 🌍 Shopify Markets
 
 The Markets tab uses the Admin GraphQL 2026-07 Markets model. It reads
 country/subdivision buyer conditions from the non-deprecated conditions tree,
@@ -301,7 +355,7 @@ confirmed Active/Draft status change.
 See `docs/shopify-markets-api.md` for the endpoint matrix, deprecation audit,
 scope requirements, and recommended next-phase editors.
 
-## Production
+## 🚀 Production
 
 Build the application:
 
@@ -321,7 +375,7 @@ For a Node deployment, ship the Nuxt output and start the Nitro server:
 node .output/server/index.mjs
 ```
 
-## Docker Compose + Nginx
+## 🐳 Docker Compose + Nginx
 
 The production stack runs Nuxt behind Nginx. Nginx is the only public
 service; the Nuxt port is available only on the internal Compose network.
@@ -401,7 +455,7 @@ unless the repository or organization has restricted package publishing. The
 token needs `contents: read` and `packages: write`, which are already declared
 in the workflow.
 
-## Proxy Formats
+## 🌐 Proxy Formats
 
 Proxy fields accept SOCKS5H remote-DNS shorthand or full proxy URLs:
 
@@ -417,7 +471,7 @@ The status checker supports three modes:
 - **Common proxy**: applies one SOCKS5 proxy to every target.
 - **Separate proxy**: parses each row as `proxy target`, `proxy|target`, `proxy,target`, or `proxy<TAB>target`.
 
-## Google Sheets
+## 📄 Google Sheets
 
 Sheet routes are backed by `server/service_account.json` and default to the `A:Z` range unless a specific range or tab is selected.
 
@@ -448,7 +502,7 @@ Expected header aliases for store auto-fill:
 - Domain: `domain`, `shop_domain`
 - Proxy URL: `proxy`, `proxy_url`
 
-## Security Notes
+## 🔒 Security Notes
 
 ### API response contracts
 
@@ -470,7 +524,7 @@ routes expose app `camelCase` fields. Shopify responses also send
 - Store status targets and every redirect are restricted to public HTTPS port 443; direct connections use the validated DNS address to reduce DNS-rebinding risk.
 - Production environments must allow outbound HTTPS requests to Shopify, Google APIs, and any proxy endpoints used by status checks.
 
-## Scripts
+## 📜 Scripts
 
 | Command               | Description                                          |
 | --------------------- | ---------------------------------------------------- |

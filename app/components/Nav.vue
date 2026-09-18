@@ -92,9 +92,13 @@ onBeforeUnmount(() => {
   width: 22px;
   height: 22px;
 }
+
 .topbar-title {
-  color: var(--text);
-  font-weight: 600;
+  background: linear-gradient(90deg, #16a085 0%, #20c997 50%, #0ea5a8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
   font-size: 1.3rem;
   margin-left: 6px;
   text-shadow: 1px 1px 2px rgba(31, 122, 77, 0.2);

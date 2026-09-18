@@ -321,4 +321,41 @@ describe("dashboard store", () => {
     await dashboard.load(true);
     expect(request).toHaveBeenCalledTimes(2);
   });
+
+  it("loads only selected stores and dashboard services", async () => {
+    localStorage.setItem(
+      KNOWN_STORES_STORAGE_KEY,
+      JSON.stringify(["shop-a", "shop-b"]),
+    );
+    const vault = useCredentialVaultStore();
+    await vault.saveStoreData("shop-a", {
+      domain: "shop-a.myshopify.com",
+      accessToken: "token-a",
+    });
+    await vault.saveStoreData("shop-b", {
+      domain: "shop-b.myshopify.com",
+      accessToken: "token-b",
+    });
+    const request = vi.fn().mockResolvedValue({ storeId: "shop-b" });
+    vi.stubGlobal("$fetch", request);
+
+    const dashboard = useDashboardStore();
+    await dashboard.load(false, {
+      storeIds: ["shop-b", "unknown-shop"],
+      services: ["orders", "traffic"],
+    });
+
+    expect(dashboard.totalStores).toBe(1);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith(
+      "/api/dashboard",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          storeId: "shop-b",
+          token: "token-b",
+          services: ["orders", "traffic"],
+        }),
+      }),
+    );
+  });
 });
