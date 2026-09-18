@@ -1,4 +1,4 @@
-import { createError } from "h3";
+import { ShopifyContractError } from "./shopify-contract-error.ts";
 import type {
   ShopifyAdjustmentOrderTransaction,
   ShopifyBalanceTransaction,
@@ -43,13 +43,8 @@ export function normalizeShopifyBalanceTransaction(
       transaction.source_type,
       "source_type",
     ) as ShopifyBalanceTransactionSourceType | null,
-    source_order_id: optionalNullableId(
-      transaction.source_order_id,
-      "source_order_id",
-    ),
-    ...(sourceOrderName !== undefined
-      ? { source_order_name: sourceOrderName }
-      : {}),
+    source_order_id: optionalNullableId(transaction.source_order_id, "source_order_id"),
+    ...(sourceOrderName !== undefined ? { source_order_name: sourceOrderName } : {}),
     source_order_transaction_id: optionalNullableId(
       transaction.source_order_transaction_id,
       "source_order_transaction_id",
@@ -59,10 +54,8 @@ export function normalizeShopifyBalanceTransaction(
       transaction.adjustment_order_transactions,
     ),
     adjustment_reason:
-      optionalNullableString(
-        transaction.adjustment_reason,
-        "adjustment_reason",
-      ) ?? null,
+      optionalNullableString(transaction.adjustment_reason, "adjustment_reason") ??
+      null,
   };
 }
 
@@ -74,9 +67,7 @@ function normalizeAdjustmentOrders(
     throw invalidField("adjustment_order_transactions", "an array or null");
   }
 
-  return value.map((adjustment, index) =>
-    normalizeAdjustmentOrder(adjustment, index),
-  );
+  return value.map((adjustment, index) => normalizeAdjustmentOrder(adjustment, index));
 }
 
 function normalizeAdjustmentOrder(
@@ -86,12 +77,19 @@ function normalizeAdjustmentOrder(
   const field = `adjustment_order_transactions[${index}]`;
   const adjustment = requireRecord(value, field);
   const order = requireRecord(adjustment.order, `${field}.order`);
-  const feeValue = adjustment.fee ?? adjustment.fees ?? "0";
+  // Compatibility normalization: REST examples use `fees`, while Shopify's
+  // changelog documents `fee`. Prefer `fee`, but validate either supplied alias.
+  const fee =
+    adjustment.fee == null ? undefined : requireMoney(adjustment.fee, `${field}.fee`);
+  const legacyFee =
+    adjustment.fees == null
+      ? undefined
+      : requireMoney(adjustment.fees, `${field}.fees`);
 
   return {
     id: requireId(adjustment.id, `${field}.id`),
     amount: requireMoney(adjustment.amount, `${field}.amount`),
-    fee: requireMoney(feeValue, `${field}.fee`),
+    fee: requireMoney(fee ?? legacyFee, `${field}.fee`),
     net: requireMoney(adjustment.net, `${field}.net`),
     order: {
       id: optionalNullableId(order.id, `${field}.order.id`),
@@ -107,11 +105,7 @@ function requireRecord(value: unknown, field: string): UnknownRecord {
   return value as UnknownRecord;
 }
 
-function requireString(
-  value: unknown,
-  field: string,
-  allowEmpty = false,
-): string {
+function requireString(value: unknown, field: string, allowEmpty = false): string {
   if (typeof value !== "string" || (!allowEmpty && value.trim() === "")) {
     throw invalidField(field, allowEmpty ? "a string" : "a non-empty string");
   }
@@ -149,22 +143,12 @@ function requireId(value: unknown, field: string): ShopifyNumericId {
   throw invalidField(field, "a string or safe integer ID");
 }
 
-function optionalNullableId(
-  value: unknown,
-  field: string,
-): ShopifyNumericId | null {
+function optionalNullableId(value: unknown, field: string): ShopifyNumericId | null {
   if (value === undefined || value === null) return null;
   return requireId(value, field);
 }
 
 function invalidField(field: string, expected: string) {
   const message = `Invalid Shopify balance transaction: ${field} must be ${expected}.`;
-  return createError({
-    statusCode: 502,
-    statusMessage: message,
-    data: {
-      success: false,
-      error: { message, status: 502 },
-    },
-  });
+  return new ShopifyContractError(message, field, expected);
 }

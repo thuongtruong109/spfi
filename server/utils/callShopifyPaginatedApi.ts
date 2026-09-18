@@ -8,6 +8,10 @@ import {
   getShopifyPageInfo,
   type ShopifyPageInfo,
 } from "./shopify-pagination";
+import {
+  reportShopifyContractError,
+  ShopifyContractError,
+} from "./shopify-contract-error";
 
 type ShopifyQueryParams = Record<string, unknown>;
 
@@ -61,20 +65,36 @@ export async function callShopifyPaginatedApiPage<TItem>({
     preserveUnsafeIntegers: options.preserveUnsafeIntegers ?? true,
     forwardResponseHeaders: options.forwardResponseHeaders ?? true,
   });
-  const rawItems = response.data[options.resourceKey];
+  let itemIndex: number | undefined;
+  try {
+    const data = response.data;
+    const rawItems =
+      data && typeof data === "object" && !Array.isArray(data)
+        ? data[options.resourceKey]
+        : undefined;
+    if (!Array.isArray(rawItems)) {
+      throw new ShopifyContractError(
+        `Shopify response is missing the "${options.resourceKey}" list.`,
+        options.resourceKey,
+        "an array",
+      );
+    }
 
-  if (!Array.isArray(rawItems)) {
-    throw createApiErrorFromMessage(
-      `Shopify response is missing the "${options.resourceKey}" list.`,
-      502,
+    const mapItem = options.mapItem || ((item: unknown) => item as TItem);
+    const items = rawItems.map((item, index) => {
+      itemIndex = index;
+      return mapItem(item);
+    });
+    return { items, pageInfo: getShopifyPageInfo(response.headers) };
+  } catch (error) {
+    reportShopifyContractError(
+      error,
+      response.headers["x-request-id"],
+      options.resourceKey,
+      itemIndex,
     );
+    throw error;
   }
-
-  const mapItem = options.mapItem || ((item: unknown) => item as TItem);
-  return {
-    items: rawItems.map(mapItem),
-    pageInfo: getShopifyPageInfo(response.headers),
-  };
 }
 
 export async function callShopifyPaginatedApi<TItem>(

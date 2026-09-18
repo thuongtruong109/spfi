@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Filter, RotateCcw } from "@lucide/vue";
 import { computed, ref, watch } from "vue";
+import PaymentStatusBadge from "~/components/payment/StatusBadge.vue";
+import PaymentTableScroll from "~/components/payment/TableScroll.vue";
 import { useActiveShopAuth } from "~/composables/useActiveShopAuth";
 import { useLocalization } from "~/composables/useLocalization";
 import { useStoreFeedback } from "~/composables/useStoreFeedback";
@@ -10,10 +12,9 @@ import type {
   ShopifyPayoutFilters,
   ShopifyPayoutStatus,
 } from "~~/types/shopify-payment";
-import { capitalize, fmtDate } from "~~/helpers";
+import { fmtDate } from "~~/helpers";
 
 const paymentStore = usePaymentStore();
-const router = useRouter();
 const route = useRoute();
 const { storeId, token, isReady } = useActiveShopAuth();
 const feedback = useStoreFeedback();
@@ -127,12 +128,6 @@ function getPayoutMetadata(payoutId: string | number) {
   return paymentStore.payoutMetadata[String(payoutId)] || null;
 }
 
-function statusBadge(statusValue: string) {
-  if (statusValue === "paid") return "badge-paid";
-  if (statusValue === "in_transit") return "badge-in-transit";
-  return "badge-pending";
-}
-
 function formatMoney(amount: string, currency: string) {
   const numericAmount = Number(amount || 0);
   try {
@@ -143,10 +138,6 @@ function formatMoney(amount: string, currency: string) {
   } catch {
     return `${numericAmount.toFixed(2)} ${currency}`;
   }
-}
-
-function openPayoutDetail(payoutId: string | number) {
-  void router.push(buildPayoutDetailRoute(payoutId, route.query, storeId.value));
 }
 
 function updatePageSize(size: number) {
@@ -231,50 +222,50 @@ async function changePage(page: number) {
       </template>
     </PaymentFilterPanel>
 
-    <table>
-      <thead>
-        <tr>
-          <th aria-sort="descending">{{ t("payment.payoutDate") }}</th>
-          <th>{{ t("payment.status") }}</th>
-          <th>{{ t("payment.direction") }}</th>
-          <th>{{ t("payment.businessEntity") }}</th>
-          <th>{{ t("payment.bankTrace") }}</th>
-          <th class="right">{{ t("payment.amount") }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          v-for="payout in paginatedPayouts"
-          :key="payout.id"
-          @click="openPayoutDetail(payout.id)"
-        >
-          <td class="td-date">{{ fmtDate(payout.date) }}</td>
-          <td>
-            <span class="badge" :class="statusBadge(payout.status)">
+    <PaymentTableScroll :label="t('payment.payouts')">
+      <table>
+        <thead>
+          <tr>
+            <th aria-sort="descending">{{ t("payment.payoutDate") }}</th>
+            <th>{{ t("payment.status") }}</th>
+            <th>{{ t("payment.direction") }}</th>
+            <th>{{ t("payment.businessEntity") }}</th>
+            <th>{{ t("payment.bankTrace") }}</th>
+            <th class="right">{{ t("payment.amount") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="payout in paginatedPayouts" :key="payout.id">
+            <td class="td-date">
+              <NuxtLink
+                class="payout-link"
+                :to="buildPayoutDetailRoute(payout.id, route.query, storeId)"
+                :aria-label="`${t('payment.payoutDetails')} #${payout.id}, ${fmtDate(payout.date)}`"
+              >
+                {{ fmtDate(payout.date) }}
+              </NuxtLink>
+            </td>
+            <td>
+              <PaymentStatusBadge :status="payout.status" />
+            </td>
+            <td>
               {{
-                payout.status === "paid"
-                  ? t("payment.deposited")
-                  : capitalize(payout.status)
+                formatPaymentLabel(getPayoutMetadata(payout.id)?.transactionType) || "—"
               }}
-            </span>
-          </td>
-          <td>
-            {{
-              formatPaymentLabel(getPayoutMetadata(payout.id)?.transactionType) || "—"
-            }}
-          </td>
-          <td>
-            {{ getPayoutMetadata(payout.id)?.businessEntity.displayName || "—" }}
-          </td>
-          <td class="trace-id">
-            {{ getPayoutMetadata(payout.id)?.externalTraceId || "—" }}
-          </td>
-          <td class="right td-net">
-            {{ formatMoney(payout.amount, payout.currency) }}
-          </td>
-        </tr>
-      </tbody>
-    </table>
+            </td>
+            <td>
+              {{ getPayoutMetadata(payout.id)?.businessEntity.displayName || "—" }}
+            </td>
+            <td class="trace-id">
+              {{ getPayoutMetadata(payout.id)?.externalTraceId || "—" }}
+            </td>
+            <td class="right td-net">
+              {{ formatMoney(payout.amount, payout.currency) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </PaymentTableScroll>
 
     <PaginationControls
       v-if="sortedPayouts.length || paymentStore.payoutPageInfo.hasNextPage"
@@ -294,6 +285,32 @@ async function changePage(page: number) {
 </template>
 
 <style scoped>
+.payouts-tab {
+  min-width: 0;
+}
+
+.payouts-tab tbody tr {
+  cursor: default;
+}
+
+.payout-link {
+  display: inline-block;
+  padding: 4px 0;
+  color: var(--text-link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.payout-link:focus-visible {
+  outline: 2px solid var(--text-link);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.payouts-tab tbody tr:focus-within {
+  background: var(--surface-soft);
+}
+
 .td-date {
   color: var(--text-secondary);
   white-space: nowrap;

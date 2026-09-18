@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ShopifyContractError } from "../server/utils/shopify-contract-error.ts";
 import { normalizeShopifyBalanceTransaction } from "../server/utils/shopify-payment-normalization.ts";
 
 function transaction(overrides: Record<string, unknown> = {}) {
@@ -61,8 +62,7 @@ test("normalizes the REST adjustment fees field without changing IDs", () => {
 test("rejects a null balance transaction with a controlled upstream error", () => {
   assert.throws(
     () => normalizeShopifyBalanceTransaction(null),
-    (error: unknown) =>
-      isStatusError(error, 502, "transaction must be an object"),
+    (error: unknown) => isStatusError(error, 502, "transaction must be an object"),
   );
 });
 
@@ -73,11 +73,7 @@ test("rejects null adjustment entries", () => {
         transaction({ adjustment_order_transactions: [null] }),
       ),
     (error: unknown) =>
-      isStatusError(
-        error,
-        502,
-        "adjustment_order_transactions[0] must be an object",
-      ),
+      isStatusError(error, 502, "adjustment_order_transactions[0] must be an object"),
   );
 });
 
@@ -128,7 +124,7 @@ test("rejects adjustment fields with invalid runtime types", () => {
       isStatusError(
         error,
         502,
-        "adjustment_order_transactions[0].fee must be a non-empty string",
+        "adjustment_order_transactions[0].fees must be a non-empty string",
       ),
   );
 });
@@ -139,6 +135,98 @@ test("rejects invalid root fields before they reach the UI", () => {
     (error: unknown) => isStatusError(error, 502, "test must be a boolean"),
   );
 });
+
+for (const adjustments of [undefined, null, []]) {
+  test(`accepts absent or empty adjustment lists (${String(adjustments)})`, () => {
+    assert.deepEqual(
+      normalizeShopifyBalanceTransaction(
+        transaction({ adjustment_order_transactions: adjustments }),
+      ).adjustment_order_transactions,
+      [],
+    );
+  });
+}
+
+for (const adjustments of [{}, "invalid", false, 0]) {
+  test(`rejects a non-array adjustment list (${String(adjustments)})`, () => {
+    assert.throws(
+      () =>
+        normalizeShopifyBalanceTransaction(
+          transaction({ adjustment_order_transactions: adjustments }),
+        ),
+      (error: unknown) => isStatusError(error, 502, "must be an array or null"),
+    );
+  });
+}
+
+function adjustment(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "2",
+    amount: "10.00",
+    fee: "1.25",
+    net: "8.75",
+    order: { id: "3", name: "#1001" },
+    ...overrides,
+  };
+}
+
+for (const [fields, expectedFee] of [
+  [{ fee: "1.25" }, "1.25"],
+  [{ fee: undefined, fees: "1.25" }, "1.25"],
+  [{ fee: null, fees: "1.25" }, "1.25"],
+  [{ fee: "0.00", fees: "1.25" }, "0.00"],
+] as const) {
+  test(`normalizes fee aliases ${JSON.stringify(fields)}`, () => {
+    const result = normalizeShopifyBalanceTransaction(
+      transaction({
+        adjustment_order_transactions: [adjustment(fields)],
+      }),
+    );
+    assert.equal(result.adjustment_order_transactions[0]?.fee, expectedFee);
+  });
+}
+
+for (const fields of [
+  { fee: undefined },
+  { fee: null, fees: null },
+  { fee: 0 },
+  { fee: "NaN" },
+  { fee: "1.25", fees: {} },
+  { amount: 10 },
+  { net: [] },
+  { id: Number.MAX_SAFE_INTEGER + 1 },
+  { order: [] },
+  { order: { id: {}, name: "#1001" } },
+  { order: { id: "3", name: null } },
+]) {
+  test(`rejects malformed adjustment fields ${JSON.stringify(fields)}`, () => {
+    assert.throws(
+      () =>
+        normalizeShopifyBalanceTransaction(
+          transaction({
+            adjustment_order_transactions: [adjustment(fields)],
+          }),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof ShopifyContractError);
+        assert.equal(error.statusCode, 502);
+        assert.equal(error.data.success, false);
+        assert.equal(error.data.error.code, "SHOPIFY_RESPONSE_CONTRACT_ERROR");
+        assert.equal(error.data.error.status, 502);
+        return true;
+      },
+    );
+  });
+}
+
+for (const value of [undefined, [], "invalid", 1, false]) {
+  test(`rejects a non-record transaction (${String(value)})`, () => {
+    assert.throws(
+      () => normalizeShopifyBalanceTransaction(value),
+      (error: unknown) => isStatusError(error, 502, "transaction must be an object"),
+    );
+  });
+}
 
 function isStatusError(error: unknown, statusCode: number, message: string) {
   if (!error || typeof error !== "object") return false;

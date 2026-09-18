@@ -117,6 +117,41 @@ describe("payment store payout details", () => {
     expect(store.visibleBalanceTransactions.map((item) => item.id)).toEqual(["1", "2"]);
   });
 
+  it("restores an empty payout cache for the correct shop", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(payoutDetailResponse())
+      .mockResolvedValueOnce(payoutDetailResponse({ ...payout, amount: "84.00" }));
+    vi.stubGlobal("$fetch", request);
+    const store = usePaymentStore();
+
+    await store.fetchPayoutDetail("shop-a", "token-a", "123");
+    await store.fetchPayoutDetail("shop-b", "token-b", "123");
+    expect(store.payoutDetails["123"]?.amount).toBe("84.00");
+
+    await store.fetchPayoutDetail("shop-a", "token-a", "123");
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(store.payoutDetails["123"]?.amount).toBe("42.00");
+    expect(store.transactionsByPayout["123"]).toEqual([]);
+    expect(store.payoutDetailStates["123"]?.status).toBe("success");
+  });
+
+  it("retries a failed request instead of caching it as an empty success", async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce({ statusCode: 502 })
+      .mockResolvedValueOnce(payoutDetailResponse());
+    vi.stubGlobal("$fetch", request);
+    const store = usePaymentStore();
+
+    await store.fetchPayoutDetail("shop-a", "token", "123");
+    expect(store.payoutDetailStates["123"]?.status).toBe("error");
+    await store.fetchPayoutDetail("shop-a", "token", "123");
+    await store.fetchPayoutDetail("shop-a", "token", "123");
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(store.payoutDetailStates["123"]?.status).toBe("success");
+  });
+
   it("restores the cached default transaction page after a filtered view", async () => {
     const transaction = {
       id: "1",
@@ -390,9 +425,7 @@ describe("payment store payout details", () => {
     await store.fetchPayoutDetail("shop-a", "token", "123");
     await store.fetchMorePayoutTransactions("shop-a", "token", "123");
 
-    expect(store.transactionsByPayout["123"]?.map((item) => item.id)).toEqual([
-      "1",
-    ]);
+    expect(store.transactionsByPayout["123"]?.map((item) => item.id)).toEqual(["1"]);
     expect(store.payoutDetailPageInfo["123"]?.nextCursor).toBe("next-page");
     expect(store.payoutDetailStates["123"]?.status).toBe("partial");
     expect(store.payoutDetailStates["123"]?.transactionsError).toBe(
@@ -416,9 +449,7 @@ describe("payment store payout details", () => {
     await store.fetchPayoutDetail("shop-a", "token", "123");
     await store.retryPayoutTransactions("shop-a", "token", "123");
 
-    expect(request.mock.calls[1]?.[0]).toBe(
-      "/api/payment/payout/123/transactions",
-    );
+    expect(request.mock.calls[1]?.[0]).toBe("/api/payment/payout/123/transactions");
     expect(request.mock.calls[1]?.[1]).toMatchObject({
       params: { storeId: "shop-a" },
     });
