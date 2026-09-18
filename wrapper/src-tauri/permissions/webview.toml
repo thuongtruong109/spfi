@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-open-webview-url"
+description = "Allows Spfi to verify, remember, and open a configured WebView target."
+commands.allow = ["open_webview_url"]

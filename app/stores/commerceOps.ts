@@ -4,17 +4,12 @@ import { useCommerceOpsApi } from "~/composables/useCommerceOpsApi";
 import { usePerStoreCache } from "~/composables/usePerStoreCache";
 import type {
   AbandonedCheckoutSummary,
-  CommercePageInfo,
   DiscountAction,
   DiscountCreateInput,
   DiscountSummary,
   DraftOrderAction,
   DraftOrderCreateInput,
   DraftOrderSummary,
-  FulfillmentBulkResponse,
-  FulfillmentOrderAction,
-  FulfillmentOrderStatusFilter,
-  FulfillmentOrderSummary,
   ReturnAction,
   ReturnActionInput,
   ReturnSummary,
@@ -22,7 +17,7 @@ import type {
 import { getAppErrorMessage } from "~~/utils/error";
 
 export type CommerceOpsResource =
-  "draftOrders" | "discounts" | "abandonedCheckouts" | "returns" | "fulfillmentOrders";
+  "draftOrders" | "discounts" | "abandonedCheckouts" | "returns";
 
 type ResourceErrors = Record<CommerceOpsResource, string | null>;
 
@@ -31,9 +26,6 @@ interface CommerceOpsCache {
   discounts: DiscountSummary[];
   abandonedCheckouts: AbandonedCheckoutSummary[];
   returns: ReturnSummary[];
-  fulfillmentOrders: FulfillmentOrderSummary[];
-  fulfillmentPageInfo: CommercePageInfo;
-  fulfillmentStatusFilter: FulfillmentOrderStatusFilter;
   errors: ResourceErrors;
   hasLoaded: boolean;
 }
@@ -43,12 +35,6 @@ const EMPTY_ERRORS = (): ResourceErrors => ({
   discounts: null,
   abandonedCheckouts: null,
   returns: null,
-  fulfillmentOrders: null,
-});
-
-const EMPTY_PAGE_INFO = (): CommercePageInfo => ({
-  endCursor: null,
-  hasNextPage: false,
 });
 
 export const useCommerceOpsStore = defineStore("commerceOps", () => {
@@ -57,9 +43,6 @@ export const useCommerceOpsStore = defineStore("commerceOps", () => {
   const discounts = ref<DiscountSummary[]>([]);
   const abandonedCheckouts = ref<AbandonedCheckoutSummary[]>([]);
   const returns = ref<ReturnSummary[]>([]);
-  const fulfillmentOrders = ref<FulfillmentOrderSummary[]>([]);
-  const fulfillmentPageInfo = ref<CommercePageInfo>(EMPTY_PAGE_INFO());
-  const fulfillmentStatusFilter = ref<FulfillmentOrderStatusFilter>("ACTIVE");
   const errors = ref<ResourceErrors>(EMPTY_ERRORS());
   const loadingResources = ref<CommerceOpsResource[]>([]);
   const hasLoaded = ref(false);
@@ -92,7 +75,6 @@ export const useCommerceOpsStore = defineStore("commerceOps", () => {
       loadResource(storeId, token, "discounts", requestVersion),
       loadResource(storeId, token, "abandonedCheckouts", requestVersion),
       loadResource(storeId, token, "returns", requestVersion),
-      loadResource(storeId, token, "fulfillmentOrders", requestVersion),
     ]);
     if (!isActive(storeId, requestVersion)) return false;
     hasLoaded.value = true;
@@ -136,17 +118,9 @@ export const useCommerceOpsStore = defineStore("commerceOps", () => {
         const response = await api.listAbandonedCheckouts(auth);
         if (isActive(storeId, requestVersion))
           abandonedCheckouts.value = response.items;
-      } else if (resource === "returns") {
+      } else {
         const response = await api.listReturns(auth);
         if (isActive(storeId, requestVersion)) returns.value = response.items;
-      } else {
-        const response = await api.listFulfillmentOrders(auth, {
-          status: fulfillmentStatusFilter.value,
-        });
-        if (isActive(storeId, requestVersion)) {
-          fulfillmentOrders.value = response.items;
-          fulfillmentPageInfo.value = response.pageInfo;
-        }
       }
     } catch (error) {
       if (isActive(storeId, requestVersion)) {
@@ -247,100 +221,6 @@ export const useCommerceOpsStore = defineStore("commerceOps", () => {
     );
   }
 
-  async function setFulfillmentStatusFilter(
-    storeId: string,
-    token: string,
-    status: FulfillmentOrderStatusFilter,
-  ) {
-    cache.activate(storeId);
-    fulfillmentStatusFilter.value = status;
-    fulfillmentOrders.value = [];
-    fulfillmentPageInfo.value = EMPTY_PAGE_INFO();
-    return refreshResource(storeId, token, "fulfillmentOrders");
-  }
-
-  async function loadMoreFulfillmentOrders(storeId: string, token: string) {
-    if (
-      !cache.isActive(storeId) ||
-      !fulfillmentPageInfo.value.hasNextPage ||
-      !fulfillmentPageInfo.value.endCursor ||
-      loadingResources.value.includes("fulfillmentOrders")
-    ) {
-      return false;
-    }
-    const requestVersion = scopeVersion;
-    addLoading("fulfillmentOrders");
-    errors.value.fulfillmentOrders = null;
-    try {
-      const response = await api.listFulfillmentOrders(
-        { storeId, token },
-        {
-          status: fulfillmentStatusFilter.value,
-          after: fulfillmentPageInfo.value.endCursor,
-        },
-      );
-      if (!isActive(storeId, requestVersion)) return false;
-      const existingIds = new Set(fulfillmentOrders.value.map((item) => item.id));
-      fulfillmentOrders.value = [
-        ...fulfillmentOrders.value,
-        ...response.items.filter((item) => !existingIds.has(item.id)),
-      ];
-      fulfillmentPageInfo.value = response.pageInfo;
-      cache.remember(storeId);
-      return true;
-    } catch (error) {
-      if (isActive(storeId, requestVersion)) {
-        errors.value.fulfillmentOrders = getAppErrorMessage(
-          error,
-          "Failed to load more fulfillment orders.",
-        );
-      }
-      return false;
-    } finally {
-      if (isActive(storeId, requestVersion)) removeLoading("fulfillmentOrders");
-    }
-  }
-
-  async function actOnFulfillmentOrder(
-    storeId: string,
-    token: string,
-    id: string,
-    action: FulfillmentOrderAction,
-    input: Record<string, unknown> = {},
-  ) {
-    return mutate(
-      storeId,
-      async () => {
-        const result = await api.runFulfillmentOrderAction(
-          { storeId, token },
-          id,
-          action,
-          input,
-        );
-        await refreshResource(storeId, token, "fulfillmentOrders");
-        return result;
-      },
-      "Failed to update the fulfillment order.",
-    );
-  }
-
-  async function bulkFulfill(
-    storeId: string,
-    token: string,
-    ids: string[],
-    notifyCustomer: boolean,
-  ): Promise<FulfillmentBulkResponse | null> {
-    return mutate(
-      storeId,
-      async () => {
-        const result = await api.bulkFulfill({ storeId, token }, ids, notifyCustomer);
-        await refreshResource(storeId, token, "fulfillmentOrders");
-        return result;
-      },
-      "Failed to run bulk fulfillment.",
-    );
-  }
-
   async function mutate<T>(
     storeId: string,
     operation: (requestVersion: number) => Promise<T>,
@@ -386,9 +266,6 @@ export const useCommerceOpsStore = defineStore("commerceOps", () => {
       discounts: [...discounts.value],
       abandonedCheckouts: [...abandonedCheckouts.value],
       returns: [...returns.value],
-      fulfillmentOrders: [...fulfillmentOrders.value],
-      fulfillmentPageInfo: { ...fulfillmentPageInfo.value },
-      fulfillmentStatusFilter: fulfillmentStatusFilter.value,
       errors: { ...errors.value },
       hasLoaded: hasLoaded.value,
     };
@@ -399,9 +276,6 @@ export const useCommerceOpsStore = defineStore("commerceOps", () => {
     discounts.value = [...snapshot.discounts];
     abandonedCheckouts.value = [...snapshot.abandonedCheckouts];
     returns.value = [...snapshot.returns];
-    fulfillmentOrders.value = [...snapshot.fulfillmentOrders];
-    fulfillmentPageInfo.value = { ...snapshot.fulfillmentPageInfo };
-    fulfillmentStatusFilter.value = snapshot.fulfillmentStatusFilter;
     errors.value = { ...snapshot.errors };
     hasLoaded.value = snapshot.hasLoaded;
     loadingResources.value = [];
@@ -414,9 +288,6 @@ export const useCommerceOpsStore = defineStore("commerceOps", () => {
     discounts.value = [];
     abandonedCheckouts.value = [];
     returns.value = [];
-    fulfillmentOrders.value = [];
-    fulfillmentPageInfo.value = EMPTY_PAGE_INFO();
-    fulfillmentStatusFilter.value = "ACTIVE";
     errors.value = EMPTY_ERRORS();
     loadingResources.value = [];
     hasLoaded.value = false;
@@ -429,9 +300,6 @@ export const useCommerceOpsStore = defineStore("commerceOps", () => {
     discounts,
     abandonedCheckouts,
     returns,
-    fulfillmentOrders,
-    fulfillmentPageInfo,
-    fulfillmentStatusFilter,
     errors,
     hasLoaded,
     isLoading,
@@ -449,9 +317,5 @@ export const useCommerceOpsStore = defineStore("commerceOps", () => {
     createCodeDiscount,
     actOnDiscount,
     actOnReturn,
-    setFulfillmentStatusFilter,
-    loadMoreFulfillmentOrders,
-    actOnFulfillmentOrder,
-    bulkFulfill,
   };
 });

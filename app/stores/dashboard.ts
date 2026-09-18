@@ -3,7 +3,16 @@ import { defineStore } from "pinia";
 import { useCredentialVaultStore } from "~/stores/credentialVault";
 import { useDataRetentionStore } from "~/stores/dataRetention";
 import { useFormStore } from "~/stores/form";
-import type { DashboardStoreFailure, StoreDashboardSnapshot } from "~~/types/dashboard";
+import type {
+  DashboardLoadOptions,
+  DashboardService,
+  DashboardStoreFailure,
+  StoreDashboardSnapshot,
+} from "~~/types/dashboard";
+import {
+  normalizeDashboardServices,
+  normalizeDashboardStoreIds,
+} from "~~/utils/dashboard-load";
 import { getAppErrorMessage } from "~~/utils/error";
 import { getStoreTokenState, resolveStoreAccessToken } from "~~/utils/shop-auth";
 
@@ -24,6 +33,7 @@ export const useDashboardStore = defineStore("dashboard", () => {
   let refreshSequence = 0;
   let activeRequest: Promise<void> | null = null;
   let webhookRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastLoadOptions: Required<DashboardLoadOptions> | null = null;
 
   const progress = computed(() =>
     totalStores.value
@@ -31,12 +41,21 @@ export const useDashboardStore = defineStore("dashboard", () => {
       : 0,
   );
 
-  async function load(force = false) {
+  const isPrepared = ref(false);
+
+  function prepare() {
     formStore.loadKnownStores();
     credentialVault.initialize();
     dataRetention.initialize();
+    totalStores.value = formStore.knownStores.length;
+    isPrepared.value = true;
+  }
 
-    const fingerprint = buildStoreFingerprint();
+  async function load(force = false, options?: DashboardLoadOptions) {
+    prepare();
+
+    const resolvedOptions = resolveLoadOptions(options);
+    const fingerprint = buildStoreFingerprint(resolvedOptions);
     const cacheIsAlive =
       hasLoaded.value &&
       loadedFingerprint.value === fingerprint &&
@@ -45,22 +64,25 @@ export const useDashboardStore = defineStore("dashboard", () => {
     if (!force && cacheIsAlive) return;
     if (activeRequest) return activeRequest;
 
-    activeRequest = fetchDashboard(fingerprint).finally(() => {
+    activeRequest = fetchDashboard(fingerprint, resolvedOptions).finally(() => {
       activeRequest = null;
     });
     return activeRequest;
   }
 
-  async function fetchDashboard(fingerprint: string) {
+  async function fetchDashboard(
+    fingerprint: string,
+    options: Required<DashboardLoadOptions>,
+  ) {
     const sequence = ++refreshSequence;
     isLoading.value = true;
     completedStores.value = 0;
-    totalStores.value = formStore.knownStores.length;
+    totalStores.value = options.storeIds.length;
 
     const nextFailures: DashboardStoreFailure[] = [];
     const requests: Array<{ storeId: string; token: string }> = [];
 
-    for (const storeId of formStore.knownStores) {
+    for (const storeId of options.storeIds) {
       const storeData = credentialVault.getStoreData(storeId);
       const tokenState = getStoreTokenState(storeData);
       const label = storeData.domain || storeId;
@@ -93,6 +115,7 @@ export const useDashboardStore = defineStore("dashboard", () => {
               storeId,
               token,
               timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+              services: options.services,
             },
           });
         } catch (error) {
@@ -120,6 +143,7 @@ export const useDashboardStore = defineStore("dashboard", () => {
     failures.value = nextFailures;
     lastUpdated.value = Date.now();
     loadedFingerprint.value = fingerprint;
+    lastLoadOptions = options;
     hasLoaded.value = true;
     isLoading.value = false;
   }
@@ -150,13 +174,27 @@ export const useDashboardStore = defineStore("dashboard", () => {
     lastUpdated.value = null;
     loadedFingerprint.value = "";
     hasLoaded.value = false;
+    isPrepared.value = false;
     activeRequest = null;
+    lastLoadOptions = null;
     if (webhookRefreshTimer) clearTimeout(webhookRefreshTimer);
     webhookRefreshTimer = null;
   }
 
-  function buildStoreFingerprint() {
-    return [...formStore.knownStores]
+  function resolveLoadOptions(
+    options?: DashboardLoadOptions,
+  ): Required<DashboardLoadOptions> {
+    const source = options || lastLoadOptions || {};
+    return {
+      storeIds: normalizeDashboardStoreIds(source.storeIds, formStore.knownStores),
+      services: normalizeDashboardServices(
+        source.services as DashboardService[] | undefined,
+      ),
+    };
+  }
+
+  function buildStoreFingerprint(options: Required<DashboardLoadOptions>) {
+    const storeFingerprint = [...options.storeIds]
       .sort()
       .map((storeId) => {
         const data = credentialVault.getStoreData(storeId);
@@ -168,6 +206,7 @@ export const useDashboardStore = defineStore("dashboard", () => {
         ].join(":");
       })
       .join("|");
+    return `${storeFingerprint}::${[...options.services].sort().join(",")}`;
   }
 
   return {
@@ -178,7 +217,9 @@ export const useDashboardStore = defineStore("dashboard", () => {
     totalStores,
     lastUpdated,
     hasLoaded,
+    isPrepared,
     progress,
+    prepare,
     load,
     invalidate,
     refreshFromWebhook,

@@ -1,3 +1,6 @@
+mod webview;
+mod webview_preferences;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -9,8 +12,11 @@ pub fn run() {
             .build(),
         )?;
       }
+
+      webview::create_main_window(app.handle())?;
       Ok(())
     })
+    .invoke_handler(tauri::generate_handler![webview::open_webview_url])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

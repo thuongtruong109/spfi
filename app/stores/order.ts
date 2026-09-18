@@ -571,14 +571,14 @@ export const useOrderStore = defineStore("order", () => {
   async function refreshPaymentCache(storeId: string, token: string) {
     const paymentStore = usePaymentStore();
     paymentStore.evictStore(storeId);
-    forgetStoreResource(storeId, "payment");
+    forgetStoreResource(storeId, "paymentTransactions");
     await paymentStore.fetchBalanceTransactions(storeId, token, true);
     if (
       paymentStore.isStoreActive(storeId) &&
       paymentStore.hasFetchedBalanceTransactions &&
       !paymentStore.error
     ) {
-      markStoreResourceLoaded(storeId, "payment");
+      markStoreResourceLoaded(storeId, "paymentTransactions");
     }
   }
 

@@ -3,6 +3,7 @@ import type {
   ShopifyPaymentsAccount,
   ShopifyPaymentsBalanceTransactionSearchFilters,
   ShopifyPaymentsBankAccount,
+  ShopifyConnectionPageInfo,
   ShopifyPaymentsDispute,
   ShopifyPaymentsDisputeFilters,
   ShopifyPaymentsPayoutMetadata,
@@ -10,18 +11,16 @@ import type {
 import type {
   ShopifyAdjustmentOrderTransaction,
   ShopifyBalanceTransaction,
+  ShopifyPayout,
 } from "~~/types/shopify";
+import type { ShopifyPayoutFilters } from "~~/types/shopify-payment";
 import { callShopifyGraphql } from "./callShopifyGraphql";
 import { createApiErrorFromMessage } from "./callShopifyApi";
-
-interface PageInfo {
-  hasNextPage: boolean;
-  endCursor: string | null;
-}
+import { buildPayoutQueryParams } from "./shopify-payment-query";
 
 interface Connection<T> {
   nodes: T[];
-  pageInfo: PageInfo;
+  pageInfo: ShopifyConnectionPageInfo;
 }
 
 interface ShopifyPaymentsAccountCore {
@@ -37,20 +36,41 @@ interface ShopifyPaymentsAccountCore {
   chargeStatementDescriptors: ShopifyPaymentsAccount["chargeStatementDescriptors"];
 }
 
-interface AccountCoreData {
-  shopifyPaymentsAccount: ShopifyPaymentsAccountCore | null;
-}
-
-interface BankAccountsData {
-  shopifyPaymentsAccount: {
-    bankAccounts: Connection<ShopifyPaymentsBankAccount>;
-  } | null;
+interface AccountData {
+  shopifyPaymentsAccount:
+    | (ShopifyPaymentsAccountCore & {
+        bankAccounts: Connection<ShopifyPaymentsBankAccount>;
+      })
+    | null;
 }
 
 interface PayoutsData {
   shopifyPaymentsAccount: {
-    payouts: Connection<ShopifyPaymentsPayoutMetadata>;
+    payouts: Connection<GraphqlPayout>;
   } | null;
+}
+
+interface GraphqlPayout extends ShopifyPaymentsPayoutMetadata {
+  net: {
+    amount: string;
+    currencyCode: string;
+  };
+  status: string;
+  summary: {
+    adjustmentsFee: { amount: string };
+    adjustmentsGross: { amount: string };
+    advanceFees: { amount: string };
+    advanceGross: { amount: string };
+    chargesFee: { amount: string };
+    chargesGross: { amount: string };
+    refundsFee: { amount: string };
+    refundsFeeGross: { amount: string };
+    reservedFundsFee: { amount: string };
+    reservedFundsGross: { amount: string };
+    retriedPayoutsFee: { amount: string };
+    retriedPayoutsGross: { amount: string };
+    usdcRebateCreditAmount: { amount: string };
+  };
 }
 
 interface GraphqlAdjustmentOrder {
@@ -119,10 +139,16 @@ interface ShopifyGraphqlRequestContext {
   token: string;
 }
 
-const CONNECTION_PAGE_SIZE = 250;
+interface ConnectionPageInput {
+  first?: number;
+  after?: string | null;
+}
 
-const ACCOUNT_CORE_QUERY = `#graphql
-  query ShopifyPaymentsAccountCore {
+const CONNECTION_PAGE_SIZE = 100;
+const BANK_ACCOUNT_PAGE_SIZE = 50;
+
+const ACCOUNT_QUERY = `#graphql
+  query ShopifyPaymentsAccount($bankAccountLimit: Int!) {
     shopifyPaymentsAccount {
       id
       accountOpenerName
@@ -144,14 +170,7 @@ const ACCOUNT_CORE_QUERY = `#graphql
         default
         prefix
       }
-    }
-  }
-`;
-
-const BANK_ACCOUNTS_QUERY = `#graphql
-  query ShopifyPaymentsBankAccounts($first: Int!, $after: String) {
-    shopifyPaymentsAccount {
-      bankAccounts(first: $first, after: $after) {
+      bankAccounts(first: $bankAccountLimit) {
         nodes {
           id
           accountNumberLastDigits
@@ -170,10 +189,16 @@ const BANK_ACCOUNTS_QUERY = `#graphql
   }
 `;
 
-const PAYOUT_METADATA_QUERY = `#graphql
-  query ShopifyPaymentsPayoutMetadata($first: Int!, $after: String) {
+const PAYOUTS_QUERY = `#graphql
+  query ShopifyPaymentsPayouts($first: Int!, $after: String, $query: String) {
     shopifyPaymentsAccount {
-      payouts(first: $first, after: $after, sortKey: ISSUED_AT, reverse: true) {
+      payouts(
+        first: $first
+        after: $after
+        query: $query
+        sortKey: ISSUED_AT
+        reverse: true
+      ) {
         nodes {
           id
           legacyResourceId
@@ -185,6 +210,26 @@ const PAYOUT_METADATA_QUERY = `#graphql
             displayName
             companyName
             primary
+          }
+          net {
+            amount
+            currencyCode
+          }
+          status
+          summary {
+            adjustmentsFee { amount }
+            adjustmentsGross { amount }
+            advanceFees { amount }
+            advanceGross { amount }
+            chargesFee { amount }
+            chargesGross { amount }
+            refundsFee { amount }
+            refundsFeeGross { amount }
+            reservedFundsFee { amount }
+            reservedFundsGross { amount }
+            retriedPayoutsFee { amount }
+            retriedPayoutsGross { amount }
+            usdcRebateCreditAmount { amount }
           }
         }
         pageInfo {
@@ -309,115 +354,149 @@ const DISPUTES_QUERY = `#graphql
 export async function fetchShopifyPaymentsAccount(
   context: ShopifyGraphqlRequestContext,
 ) {
-  const coreData = await callShopifyGraphql<AccountCoreData>({
+  const data = await callShopifyGraphql<AccountData, { bankAccountLimit: number }>({
     ...context,
-    query: ACCOUNT_CORE_QUERY,
-    operationName: "ShopifyPaymentsAccountCore",
+    query: ACCOUNT_QUERY,
+    operationName: "ShopifyPaymentsAccount",
+    variables: { bankAccountLimit: BANK_ACCOUNT_PAGE_SIZE },
   });
 
-  if (!coreData.shopifyPaymentsAccount) {
-    return { account: null, payouts: [] };
-  }
+  if (!data.shopifyPaymentsAccount) return { account: null };
 
-  const [bankAccounts, payouts] = await Promise.all([
-    collectConnection<ShopifyPaymentsBankAccount>(async (after) => {
-      const data = await callShopifyGraphql<
-        BankAccountsData,
-        { first: number; after: string | null }
-      >({
-        ...context,
-        query: BANK_ACCOUNTS_QUERY,
-        operationName: "ShopifyPaymentsBankAccounts",
-        variables: { first: CONNECTION_PAGE_SIZE, after },
-      });
-      return (
-        data.shopifyPaymentsAccount?.bankAccounts ??
-        emptyConnection<ShopifyPaymentsBankAccount>()
-      );
-    }),
-    collectConnection<ShopifyPaymentsPayoutMetadata>(async (after) => {
-      const data = await callShopifyGraphql<
-        PayoutsData,
-        { first: number; after: string | null }
-      >({
-        ...context,
-        query: PAYOUT_METADATA_QUERY,
-        operationName: "ShopifyPaymentsPayoutMetadata",
-        variables: { first: CONNECTION_PAGE_SIZE, after },
-      });
-      return (
-        data.shopifyPaymentsAccount?.payouts ??
-        emptyConnection<ShopifyPaymentsPayoutMetadata>()
-      );
-    }),
-  ]);
+  const { bankAccounts, ...account } = data.shopifyPaymentsAccount;
 
   return {
     account: {
-      ...coreData.shopifyPaymentsAccount,
-      bankAccounts,
+      ...account,
+      bankAccounts: bankAccounts.nodes,
     } satisfies ShopifyPaymentsAccount,
-    payouts,
   };
+}
+
+export async function fetchShopifyPaymentsPayouts(
+  context: ShopifyGraphqlRequestContext,
+  filters: ShopifyPayoutFilters = {},
+  page: ConnectionPageInput = {},
+) {
+  const connection = await fetchPayoutConnection(
+    context,
+    buildPayoutSearchQuery(filters),
+    page,
+  );
+  const mapped = connection.nodes.map(mapPayout);
+  return {
+    payouts: mapped.map((item) => item.payout),
+    metadata: mapped.map((item) => item.metadata),
+    pageInfo: connection.pageInfo,
+  };
+}
+
+export async function fetchShopifyPaymentsPayoutByLegacyId(
+  context: ShopifyGraphqlRequestContext,
+  payoutId: string,
+) {
+  const connection = await fetchPayoutConnection(context, `id:${payoutId}`, {
+    first: 1,
+  });
+  return connection.nodes[0] ? mapPayout(connection.nodes[0]) : null;
 }
 
 export async function fetchShopifyPaymentsBalanceTransactions(
   context: ShopifyGraphqlRequestContext,
   filters: ShopifyPaymentsBalanceTransactionSearchFilters = {},
+  page: ConnectionPageInput = {},
 ) {
   const searchQuery = buildBalanceTransactionSearchQuery(filters);
-  const nodes = await collectConnection<GraphqlBalanceTransaction>(async (after) => {
-    const data = await callShopifyGraphql<
-      BalanceTransactionsData,
-      {
-        first: number;
-        after: string | null;
-        query: string | null;
-        hideTransfers: boolean;
-      }
-    >({
-      ...context,
-      query: BALANCE_TRANSACTIONS_QUERY,
-      operationName: "ShopifyPaymentsBalanceTransactions",
-      variables: {
-        first: CONNECTION_PAGE_SIZE,
-        after,
-        query: searchQuery || null,
-        hideTransfers: filters.hide_transfers === true,
-      },
-    });
-    return (
-      data.shopifyPaymentsAccount?.balanceTransactions ??
-      emptyConnection<GraphqlBalanceTransaction>()
-    );
+  const data = await callShopifyGraphql<
+    BalanceTransactionsData,
+    {
+      first: number;
+      after: string | null;
+      query: string | null;
+      hideTransfers: boolean;
+    }
+  >({
+    ...context,
+    query: BALANCE_TRANSACTIONS_QUERY,
+    operationName: "ShopifyPaymentsBalanceTransactions",
+    variables: {
+      ...normalizeConnectionPage(page),
+      query: searchQuery || null,
+      hideTransfers: filters.hide_transfers === true,
+    },
   });
+  const connection =
+    data.shopifyPaymentsAccount?.balanceTransactions ??
+    emptyConnection<GraphqlBalanceTransaction>();
+  const mapped = connection.nodes.map(mapBalanceTransaction);
+  return {
+    transactions:
+      typeof filters.test === "boolean"
+        ? mapped.filter((transaction) => transaction.test === filters.test)
+        : mapped,
+    pageInfo: connection.pageInfo,
+  };
+}
 
-  const mapped = nodes.map(mapBalanceTransaction);
-  if (typeof filters.test !== "boolean") return mapped;
-  return mapped.filter((transaction) => transaction.test === filters.test);
+export async function fetchAllShopifyPaymentsBalanceTransactions(
+  context: ShopifyGraphqlRequestContext,
+  filters: ShopifyPaymentsBalanceTransactionSearchFilters = {},
+) {
+  const transactions: ShopifyBalanceTransaction[] = [];
+  const visitedCursors = new Set<string>();
+  let after: string | null = null;
+
+  while (true) {
+    const page = await fetchShopifyPaymentsBalanceTransactions(context, filters, {
+      first: CONNECTION_PAGE_SIZE,
+      after,
+    });
+    transactions.push(...page.transactions);
+
+    if (!page.pageInfo.hasNextPage) return transactions;
+    const nextCursor = page.pageInfo.endCursor;
+    if (!nextCursor || visitedCursors.has(nextCursor)) {
+      throw createApiErrorFromMessage(
+        "Shopify GraphQL pagination returned a missing or repeated cursor.",
+        502,
+      );
+    }
+    visitedCursors.add(nextCursor);
+    after = nextCursor;
+  }
 }
 
 export async function fetchShopifyPaymentsDisputes(
   context: ShopifyGraphqlRequestContext,
   filters: ShopifyPaymentsDisputeFilters = {},
+  page: ConnectionPageInput = {},
 ) {
   const searchQuery = buildDisputeSearchQuery(filters);
-  return collectConnection(async (after) => {
-    const data = await callShopifyGraphql<
-      DisputesData,
-      { first: number; after: string | null; query: string | null }
-    >({
-      ...context,
-      query: DISPUTES_QUERY,
-      operationName: "ShopifyPaymentsDisputes",
-      variables: {
-        first: CONNECTION_PAGE_SIZE,
-        after,
-        query: searchQuery || null,
-      },
-    });
-    return data.disputes;
+  const data = await callShopifyGraphql<
+    DisputesData,
+    { first: number; after: string | null; query: string | null }
+  >({
+    ...context,
+    query: DISPUTES_QUERY,
+    operationName: "ShopifyPaymentsDisputes",
+    variables: {
+      ...normalizeConnectionPage(page),
+      query: searchQuery || null,
+    },
   });
+  return { disputes: data.disputes.nodes, pageInfo: data.disputes.pageInfo };
+}
+
+export function buildPayoutSearchQuery(filters: ShopifyPayoutFilters) {
+  const params = buildPayoutQueryParams(filters);
+  const parts: string[] = [];
+  if (params.date) parts.push(`issued_at:${params.date}`);
+  if (params.date_min) parts.push(`issued_at:>=${params.date_min}`);
+  if (params.date_max) parts.push(`issued_at:<=${params.date_max}`);
+  if (params.since_id) parts.push(`id:>${params.since_id}`);
+  if (params.last_id) parts.push(`id:<${params.last_id}`);
+  if (params.status) parts.push(`status:${params.status}`);
+  return parts.join(" ");
 }
 
 export function buildBalanceTransactionSearchQuery(
@@ -481,28 +560,75 @@ export function buildDisputeSearchQuery(filters: ShopifyPaymentsDisputeFilters) 
   return parts.join(" ");
 }
 
-async function collectConnection<T>(
-  fetchPage: (after: string | null) => Promise<Connection<T>>,
+async function fetchPayoutConnection(
+  context: ShopifyGraphqlRequestContext,
+  searchQuery: string,
+  page: ConnectionPageInput,
 ) {
-  const nodes: T[] = [];
-  const seenCursors = new Set<string>();
-  let after: string | null = null;
+  const data = await callShopifyGraphql<
+    PayoutsData,
+    { first: number; after: string | null; query: string | null }
+  >({
+    ...context,
+    query: PAYOUTS_QUERY,
+    operationName: "ShopifyPaymentsPayouts",
+    variables: {
+      ...normalizeConnectionPage(page),
+      query: searchQuery || null,
+    },
+  });
+  return data.shopifyPaymentsAccount?.payouts ?? emptyConnection<GraphqlPayout>();
+}
 
-  while (true) {
-    const connection = await fetchPage(after);
-    nodes.push(...connection.nodes);
-
-    if (!connection.pageInfo.hasNextPage) return nodes;
-    const nextCursor = connection.pageInfo.endCursor;
-    if (!nextCursor || seenCursors.has(nextCursor)) {
-      throw createApiErrorFromMessage(
-        "Shopify GraphQL pagination returned a missing or repeated cursor.",
-        502,
-      );
-    }
-    seenCursors.add(nextCursor);
-    after = nextCursor;
+export function normalizeConnectionPage(page: ConnectionPageInput = {}) {
+  const requestedFirst = Number(page.first ?? CONNECTION_PAGE_SIZE);
+  const first = Number.isFinite(requestedFirst)
+    ? Math.min(CONNECTION_PAGE_SIZE, Math.max(1, Math.trunc(requestedFirst)))
+    : CONNECTION_PAGE_SIZE;
+  const after = page.after == null ? null : String(page.after).trim();
+  if (after && after.length > 8192) {
+    throw createApiErrorFromMessage("The pagination cursor is too long.", 400);
   }
+  return { first, after: after || null };
+}
+
+export function mapPayout(node: GraphqlPayout): {
+  payout: ShopifyPayout;
+  metadata: ShopifyPaymentsPayoutMetadata;
+} {
+  const metadata: ShopifyPaymentsPayoutMetadata = {
+    id: node.id,
+    legacyResourceId: String(node.legacyResourceId),
+    externalTraceId: node.externalTraceId,
+    issuedAt: node.issuedAt,
+    transactionType: node.transactionType,
+    businessEntity: node.businessEntity,
+  };
+  return {
+    metadata,
+    payout: {
+      id: metadata.legacyResourceId,
+      status: node.status.toLowerCase(),
+      date: node.issuedAt.slice(0, 10),
+      currency: node.net.currencyCode,
+      amount: node.net.amount,
+      summary: {
+        adjustments_fee_amount: node.summary.adjustmentsFee.amount,
+        adjustments_gross_amount: node.summary.adjustmentsGross.amount,
+        advance_fees_amount: node.summary.advanceFees.amount,
+        advance_gross_amount: node.summary.advanceGross.amount,
+        charges_fee_amount: node.summary.chargesFee.amount,
+        charges_gross_amount: node.summary.chargesGross.amount,
+        refunds_fee_amount: node.summary.refundsFee.amount,
+        refunds_gross_amount: node.summary.refundsFeeGross.amount,
+        reserved_funds_fee_amount: node.summary.reservedFundsFee.amount,
+        reserved_funds_gross_amount: node.summary.reservedFundsGross.amount,
+        retried_payouts_fee_amount: node.summary.retriedPayoutsFee.amount,
+        retried_payouts_gross_amount: node.summary.retriedPayoutsGross.amount,
+        usdc_rebate_credit_amount: node.summary.usdcRebateCreditAmount.amount,
+      },
+    },
+  };
 }
 
 function emptyConnection<T>(): Connection<T> {

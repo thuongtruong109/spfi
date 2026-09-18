@@ -9,6 +9,7 @@ import type {
   StoreDashboardSnapshot,
 } from "~~/types/dashboard";
 import { moneyRowsFromMap } from "./dashboard-money.ts";
+import { aggregateDashboardTraffic } from "./dashboard-traffic.ts";
 
 export function aggregateDashboardSnapshots(
   stores: StoreDashboardSnapshot[],
@@ -219,6 +220,7 @@ export function aggregateDashboardSnapshots(
         recent: [],
       },
     },
+    traffic: aggregateDashboardTraffic(stores.map((store) => store.traffic)),
   };
 }
 

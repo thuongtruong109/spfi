@@ -9,6 +9,7 @@ import { usePaymentStore } from "~/stores/payment";
 import type { Transaction } from "~/stores/payment";
 import type { ShopifyPaymentsBalanceTransactionSearchFilters } from "~~/types/shopify-payments-graphql";
 import { capitalize, fmtDate } from "~~/helpers";
+import { getAdjustmentOrderTransactions } from "~~/utils/payment-transactions";
 
 const paymentStore = usePaymentStore();
 const orderStore = useOrderStore();
@@ -114,7 +115,26 @@ async function applyFilters(
     feedback.warning(t("payment.credentialsRequired"));
     return;
   }
-  const filters: ShopifyPaymentsBalanceTransactionSearchFilters = {
+  const filters = buildFilters();
+  currentPage.value = 1;
+  await paymentStore.fetchGraphqlBalanceTransactions(
+    storeId.value,
+    token.value,
+    filters,
+    { force: true },
+  );
+  feedback.requestResult({
+    errorMessage: paymentStore.error,
+    warningMessage: paymentStore.graphqlWarning,
+    successMessage,
+    fallbackError: t("payment.filtersFailed", {
+      resource: t("payment.transactions"),
+    }),
+  });
+}
+
+function buildFilters(): ShopifyPaymentsBalanceTransactionSearchFilters {
+  return {
     ...(transactionType.value ? { transaction_type: transactionType.value } : {}),
     ...(payoutStatus.value ? { payout_status: payoutStatus.value } : {}),
     ...(payoutDate.value ? { payout_date: payoutDate.value } : {}),
@@ -130,20 +150,6 @@ async function applyFilters(
     ...(sinceId.value ? { since_id: sinceId.value } : {}),
     ...(lastId.value ? { last_id: lastId.value } : {}),
   };
-  currentPage.value = 1;
-  await paymentStore.fetchGraphqlBalanceTransactions(
-    storeId.value,
-    token.value,
-    filters,
-  );
-  feedback.requestResult({
-    errorMessage: paymentStore.error,
-    warningMessage: paymentStore.graphqlWarning,
-    successMessage,
-    fallbackError: t("payment.filtersFailed", {
-      resource: t("payment.transactions"),
-    }),
-  });
 }
 
 async function showPending() {
@@ -171,14 +177,6 @@ async function resetFilters() {
       resource: t("payment.transactions"),
     }),
   );
-}
-
-function getPayoutDate(payoutId: string | number | null) {
-  if (!payoutId) return "—";
-  const payout = paymentStore.payouts.find(
-    (item) => String(item.id) === String(payoutId),
-  );
-  return payout ? fmtDate(payout.date) : "—";
 }
 
 function getOrderName(transaction: Transaction) {
@@ -220,6 +218,20 @@ function formatMoney(amount: string, currency: string) {
 function updatePageSize(size: number) {
   pageSize.value = size;
   currentPage.value = 1;
+}
+
+async function changePage(page: number) {
+  if (page <= totalPages.value) {
+    currentPage.value = Math.max(1, page);
+    return;
+  }
+  if (!paymentStore.transactionPageInfo.hasNextPage) return;
+  await paymentStore.fetchMoreBalanceTransactions(
+    storeId.value,
+    token.value,
+    buildFilters(),
+  );
+  if (!paymentStore.error) currentPage.value = Math.min(page, totalPages.value);
 }
 </script>
 
@@ -366,7 +378,6 @@ function updatePageSize(size: number) {
       <thead>
         <tr>
           <th aria-sort="descending">{{ t("payment.processedAt") }}</th>
-          <th>{{ t("payment.payoutDate") }}</th>
           <th>{{ t("payment.payoutStatus") }}</th>
           <th>{{ t("payment.order") }}</th>
           <th>{{ t("payment.customer") }}</th>
@@ -380,7 +391,6 @@ function updatePageSize(size: number) {
       <tbody>
         <tr v-for="transaction in paginatedTransactions" :key="transaction.id">
           <td class="td-date">{{ fmtDate(transaction.processed_at) }}</td>
-          <td class="td-date">{{ getPayoutDate(transaction.payout_id) }}</td>
           <td>
             <span class="badge" :class="payoutBadge(transaction.payout_status)">
               {{
@@ -411,22 +421,22 @@ function updatePageSize(size: number) {
               }}
             </small>
             <details
-              v-if="transaction.adjustment_order_transactions.length"
+              v-if="getAdjustmentOrderTransactions(transaction).length"
               class="adjustment-orders"
             >
               <summary>
                 {{
                   t("payment.adjustedOrders", {
-                    count: transaction.adjustment_order_transactions.length,
+                    count: getAdjustmentOrderTransactions(transaction).length,
                     label:
-                      transaction.adjustment_order_transactions.length === 1
+                      getAdjustmentOrderTransactions(transaction).length === 1
                         ? t("payment.orderSingular")
                         : t("payment.orderPlural"),
                   })
                 }}
               </summary>
               <div
-                v-for="adjustment in transaction.adjustment_order_transactions"
+                v-for="adjustment in getAdjustmentOrderTransactions(transaction)"
                 :key="adjustment.id"
               >
                 <NuxtLink
@@ -466,12 +476,16 @@ function updatePageSize(size: number) {
     </table>
 
     <PaginationControls
-      v-if="sortedTransactions.length"
+      v-if="sortedTransactions.length || paymentStore.transactionPageInfo.hasNextPage"
       :page="currentPage"
       :page-size="pageSize"
       :total-items="sortedTransactions.length"
+      :has-next-page="
+        currentPage < totalPages || paymentStore.transactionPageInfo.hasNextPage
+      "
+      :loading="paymentStore.isLoadingTransactions"
       :item-label="t('payment.transactions')"
-      @update:page="currentPage = $event"
+      @update:page="changePage"
       @update:page-size="updatePageSize"
     />
     <div v-else class="empty">{{ t("payment.noBalanceTransactions") }}</div>

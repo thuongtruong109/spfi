@@ -7,6 +7,10 @@ interface DisputesBody {
   storeId?: string;
   token?: string;
   filters?: ShopifyPaymentsDisputeFilters;
+  pagination?: {
+    first?: number;
+    after?: string | null;
+  };
 }
 
 export default defineEventHandler(async (event) => {
@@ -18,9 +22,9 @@ export default defineEventHandler(async (event) => {
     throw createApiErrorFromMessage("Store ID and Access Token are required.", 400);
   }
 
-  const disputes = await fetchShopifyPaymentsDisputes(
+  return fetchShopifyPaymentsDisputes(
     { event, storeId, token },
     body.filters || {},
+    body.pagination || {},
   );
-  return { disputes };
 });

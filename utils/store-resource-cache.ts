@@ -5,10 +5,12 @@ export type StoreDataResource =
   | "markets"
   | "orders"
   | "commerceOps"
-  | "collections"
-  | "payment"
+  | "paymentAccount"
+  | "paymentPayouts"
+  | "paymentTransactions"
   | "products"
-  | "profile";
+  | "profile"
+  | "traffic";
 
 const resourceLoadedAt = new Map<string, number>();
 const MAX_RESOURCE_TIMESTAMPS = 64;

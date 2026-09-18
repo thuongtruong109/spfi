@@ -3,6 +3,7 @@ import { callShopifyApi } from "~~/server/utils/callShopifyApi";
 import { callShopifyPaginatedApi } from "~~/server/utils/callShopifyPaginatedApi";
 import { createApiSuccessResponse } from "~~/server/utils/api-response";
 import { requireShopifyCredentials } from "~~/server/utils/shopify-admin-request";
+import { normalizeShopifyBalanceTransaction } from "~~/server/utils/shopify-payment-normalization";
 import { groupTransactionsByPayout } from "~~/server/utils/shopify-payment-query";
 import type {
   PaymentsOverviewResponse,
@@ -45,6 +46,7 @@ export default defineEventHandler(async (event) => {
       token,
       path: "/shopify_payments/balance/transactions.json",
       resourceKey: "transactions",
+      mapItem: normalizeShopifyBalanceTransaction,
       preserveUnsafeIntegers: true,
     }),
   ]);

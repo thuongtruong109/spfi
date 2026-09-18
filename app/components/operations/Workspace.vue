@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { BadgePercent, FileText, RotateCcw, ShoppingCart, Truck } from "@lucide/vue";
+import { BadgePercent, FileText, RotateCcw, ShoppingCart } from "@lucide/vue";
 import { computed, ref } from "vue";
 import { useCommerceOpsStore } from "~/stores/commerceOps";
 
-type View = "drafts" | "discounts" | "checkouts" | "returns" | "fulfillments";
+type View = "drafts" | "discounts" | "checkouts" | "returns";
 
 const store = useCommerceOpsStore();
 const { t } = useLocalization();
@@ -38,13 +38,6 @@ const views = computed(() => [
     error: store.errors.returns,
     icon: RotateCcw,
   },
-  {
-    id: "fulfillments" as const,
-    label: t("operations.fulfillments"),
-    count: store.fulfillmentOrders.length,
-    error: store.errors.fulfillmentOrders,
-    icon: Truck,
-  },
 ]);
 </script>
 
@@ -74,8 +67,7 @@ const views = computed(() => [
     <OperationsDraftOrdersPanel v-if="activeView === 'drafts'" />
     <OperationsDiscountsPanel v-else-if="activeView === 'discounts'" />
     <OperationsAbandonedCheckoutsPanel v-else-if="activeView === 'checkouts'" />
-    <OperationsReturnsPanel v-else-if="activeView === 'returns'" />
-    <OperationsFulfillmentsPanel v-else />
+    <OperationsReturnsPanel v-else />
   </section>
 </template>
 

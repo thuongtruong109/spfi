@@ -1,9 +1,24 @@
-import type { ShopifyBalanceTransaction } from "~~/types/shopify";
+import type {
+  ShopifyAdjustmentOrderTransaction,
+  ShopifyBalanceTransaction,
+} from "~~/types/shopify";
 
 type OrderTransactionStatusSource = Pick<
   ShopifyBalanceTransaction,
   "source_order_id" | "payout_status"
 >;
+
+interface AdjustmentTransactionSource {
+  adjustment_order_transactions?: ShopifyAdjustmentOrderTransaction[] | null;
+}
+
+export function getAdjustmentOrderTransactions(
+  transaction: AdjustmentTransactionSource,
+): ShopifyAdjustmentOrderTransaction[] {
+  return Array.isArray(transaction.adjustment_order_transactions)
+    ? transaction.adjustment_order_transactions
+    : [];
+}
 
 export function buildOrderTransactionStatusMap(
   transactions: readonly OrderTransactionStatusSource[],

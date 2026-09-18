@@ -7,11 +7,6 @@ import type {
   DraftOrderAction,
   DraftOrderCreateInput,
   DraftOrderSummary,
-  FulfillmentBulkResponse,
-  FulfillmentMoveLocation,
-  FulfillmentOrderAction,
-  FulfillmentOrderStatusFilter,
-  FulfillmentOrderSummary,
   ReturnAction,
   ReturnActionInput,
   ReturnSummary,
@@ -74,41 +69,5 @@ export function useCommerceOpsApi() {
         action,
         ...input,
       }),
-    listFulfillmentOrders: (
-      auth: CommerceOpsAuth,
-      input: {
-        status: FulfillmentOrderStatusFilter;
-        after?: string | null;
-        limit?: number;
-      },
-    ) =>
-      post<CommerceListResponse<FulfillmentOrderSummary>>(
-        "/api/commerce-ops/fulfillment-orders",
-        auth,
-        input,
-      ),
-    runFulfillmentOrderAction: (
-      auth: CommerceOpsAuth,
-      id: string,
-      action: FulfillmentOrderAction,
-      input: Record<string, unknown> = {},
-    ) =>
-      post<Record<string, unknown>>(
-        "/api/commerce-ops/fulfillment-orders/action",
-        auth,
-        { id, action, ...input },
-      ),
-    listFulfillmentMoveLocations: (auth: CommerceOpsAuth, id: string) =>
-      post<{ items: FulfillmentMoveLocation[]; truncated: boolean }>(
-        "/api/commerce-ops/fulfillment-orders/move-locations",
-        auth,
-        { id },
-      ),
-    bulkFulfill: (auth: CommerceOpsAuth, ids: string[], notifyCustomer: boolean) =>
-      post<FulfillmentBulkResponse>(
-        "/api/commerce-ops/fulfillment-orders/bulk-fulfill",
-        auth,
-        { ids, notifyCustomer },
-      ),
   };
 }

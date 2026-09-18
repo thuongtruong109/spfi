@@ -408,9 +408,9 @@ onMounted(() => void refresh());
 }
 
 .store-webhooks > header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
@@ -426,6 +426,7 @@ onMounted(() => void refresh());
 
 .store-actions {
   display: flex;
+  flex-wrap: nowrap;
   gap: 8px;
 }
 
@@ -554,8 +555,7 @@ onMounted(() => void refresh());
   }
 
   .store-actions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    justify-self: end;
   }
 
   .toolbar-actions :deep(.base-button) {

@@ -1067,17 +1067,6 @@ async function afterMutation() {
           </div>
         </article>
       </div>
-
-      <div class="section-title">
-        <div>
-          <Boxes /><strong>{{ t("product.variants") }}</strong>
-        </div>
-        <span>{{
-          t("product.totalCount", { count: operations.variants.value.length })
-        }}</span>
-      </div>
-
-      
     </div>
 
     <div v-if="showVariants" class="operation-section">
@@ -1339,6 +1328,125 @@ async function afterMutation() {
           </BaseButton>
         </div>
       </div>
+    </div>
+
+    <div v-if="showInventory" class="operation-section">
+      <div class="section-title">
+        <div>
+          <Boxes /><strong>{{ t("product.inventory") }}</strong>
+        </div>
+        <span>{{ t("product.inventoryDescription") }}</span>
+      </div>
+      <div class="inventory-form">
+        <label>
+          <span>{{ t("product.inventoryTargets") }}</span>
+          <BaseSelect
+            :model-value="inventoryTargetMode"
+            :options="inventoryTargetOptions"
+            :aria-label="t('product.inventoryTargets')"
+            @update:model-value="
+              inventoryTargetMode = String($event) as 'single' | 'selected'
+            "
+          />
+        </label>
+        <label>
+          <span>{{ t("product.variant") }}</span>
+          <BaseSelect
+            :model-value="inventoryVariantId"
+            :options="inventoryVariantOptions"
+            :aria-label="t('product.variant')"
+            :disabled="inventoryTargetMode === 'selected'"
+            @update:model-value="inventoryVariantId = $event as ShopifyNumericId"
+          />
+        </label>
+        <label>
+          <span>{{ t("product.location") }}</span>
+          <BaseSelect
+            :model-value="inventoryLocationId"
+            :options="inventoryLocationOptions"
+            :aria-label="t('product.location')"
+            :disabled="isLoadingLocations"
+            @update:model-value="inventoryLocationId = $event as ShopifyNumericId"
+          />
+        </label>
+        <label>
+          <span>{{ t("product.operation") }}</span>
+          <BaseSelect
+            :model-value="inventoryMode"
+            :options="inventoryModeOptions"
+            :aria-label="t('product.operation')"
+            @update:model-value="
+              inventoryMode = String($event) as 'set' | 'adjust' | 'reserve' | 'release'
+            "
+          />
+        </label>
+        <label>
+          <span>{{ t("product.quantityState") }}</span>
+          <BaseSelect
+            :model-value="inventoryQuantityName"
+            :options="inventoryQuantityOptions"
+            :aria-label="t('product.quantityState')"
+            :disabled="['reserve', 'release'].includes(inventoryMode)"
+            @update:model-value="
+              inventoryQuantityName = String($event) as 'available' | 'on_hand'
+            "
+          />
+        </label>
+        <label>
+          <span>{{ t("product.inventoryReason") }}</span>
+          <input v-model.trim="inventoryReason" type="text" maxlength="64" />
+        </label>
+        <label>
+          <span>{{
+            inventoryMode === "set"
+              ? t("product.available")
+              : inventoryMode === "adjust"
+                ? t("product.adjustment")
+                : t("product.quantity")
+          }}</span>
+          <input v-model.number="inventoryAmount" type="number" step="1" />
+        </label>
+        <div class="inventory-current">
+          {{
+            inventoryTargetMode === "selected"
+              ? t("product.inventoryTargetCount", {
+                  count: selectedInventoryVariants.length,
+                })
+              : `${t("product.current")}:`
+          }}
+          <strong>{{
+            inventoryTargetMode === "selected"
+              ? selectedInventoryVariants.length
+              : (getInventoryQuantity(
+                  selectedInventoryLevel,
+                  activeInventoryQuantityName,
+                ) ??
+                (isLoadingLocations ? t("common.loading") : t("product.notConnected")))
+          }}</strong>
+        </div>
+        <BaseButton
+          variant="primary"
+          :disabled="!canUpdateInventory"
+          :loading="operations.isLoading.value"
+          @click="updateInventory"
+        >
+          <template #icon><Save /></template>
+          {{ t("product.updateInventory") }}
+        </BaseButton>
+        <div
+          v-if="
+            inventoryTargets.length && !inventoryTargetsConnected && !isLoadingLocations
+          "
+          class="inventory-warning"
+          :role="locationError ? 'alert' : 'status'"
+        >
+          {{ inventoryConnectionMessage }}
+        </div>
+      </div>
+      <InventoryItemEditor
+        :inventory-item-id="selectedInventoryVariant?.inventory_item_id || null"
+        @saved="afterMutation"
+      />
     </div>
   </section>
 </template>

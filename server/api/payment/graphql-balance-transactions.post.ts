@@ -7,6 +7,10 @@ interface GraphqlTransactionsBody {
   storeId?: string;
   token?: string;
   filters?: ShopifyPaymentsBalanceTransactionSearchFilters;
+  pagination?: {
+    first?: number;
+    after?: string | null;
+  };
 }
 
 export default defineEventHandler(async (event) => {
@@ -18,11 +22,12 @@ export default defineEventHandler(async (event) => {
     throw createApiErrorFromMessage("Store ID and Access Token are required.", 400);
   }
 
-  const transactions = await fetchShopifyPaymentsBalanceTransactions(
+  const response = await fetchShopifyPaymentsBalanceTransactions(
     { event, storeId, token },
     body.filters || {},
+    body.pagination || {},
   );
 
   setResponseHeader(event, "x-spf-field-convention", "shopify-rest");
-  return { transactions };
+  return response;
 });

@@ -343,15 +343,6 @@ export const useProductStore = defineStore("product", () => {
     }
   }
 
-  function invalidateManagementContext(storeId: string) {
-    const cached = storeCache.get(storeId);
-    if (cached) storeCache.set(storeId, { ...cached, managementContext: null });
-    if (storeCache.isActive(storeId)) {
-      managementContext.value = null;
-      storeCache.remember(storeId);
-    }
-  }
-
   async function fetchAdvancedDetails(
     storeId: string,
     token: string,
@@ -496,7 +487,6 @@ export const useProductStore = defineStore("product", () => {
     updateProduct,
     setProductsPublished,
     fetchManagementContext,
-    invalidateManagementContext,
     fetchAdvancedDetails,
     updateAdvancedDetails,
     runBulkAction,

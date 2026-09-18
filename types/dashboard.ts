@@ -1,3 +1,20 @@
+export const DASHBOARD_SERVICES = [
+  "profile",
+  "orders",
+  "customers",
+  "products",
+  "payments",
+  "users",
+  "traffic",
+] as const;
+
+export type DashboardService = (typeof DASHBOARD_SERVICES)[number];
+
+export interface DashboardLoadOptions {
+  storeIds?: string[];
+  services?: DashboardService[];
+}
+
 export interface DashboardMoney {
   currency: string;
   amount: number;
@@ -102,6 +119,90 @@ export interface DashboardUser {
   accountOwner: boolean;
 }
 
+export interface DashboardTrafficMetrics {
+  sessions: number;
+  visitors: number;
+  pageviews: number;
+  bounces: number;
+  cartAdditions: number;
+  reachedCheckouts: number;
+  completedCheckouts: number;
+  pageviewsPerSession: number;
+  averageSessionDuration: number;
+  bounceRate: number;
+  conversionRate: number;
+}
+
+export interface DashboardTrafficPoint {
+  period: string;
+  sessions: number;
+  visitors: number;
+  pageviews: number;
+}
+
+export interface DashboardTrafficBreakdown {
+  label: string;
+  sessions: number;
+  visitors: number;
+}
+
+export interface DashboardTrafficDetailRow {
+  source: string;
+  referrerDomain: string;
+  referrerTerms: string;
+  country: string;
+  countryCode: string;
+  region: string;
+  city: string;
+  browser: string;
+  browserVersion: string;
+  operatingSystem: string;
+  operatingSystemVersion: string;
+  deviceType: string;
+  apiClient: string;
+  trafficType: string;
+  platform: string;
+  channel: string;
+  medium: string;
+  landingPageType: string;
+  landingPagePath: string;
+  campaign: string;
+  campaignContent: string;
+  aiReferral: string;
+  sessions: number;
+  visitors: number;
+  pageviews: number;
+  pageviewsPerSession: number;
+  bounces: number;
+  cartAdditions: number;
+  reachedCheckouts: number;
+  completedCheckouts: number;
+  averageSessionDuration: number;
+  bounceRate: number;
+  conversionRate: number;
+}
+
+export interface DashboardTrafficSummary {
+  available: boolean;
+  availableStores: number;
+  today: DashboardTrafficMetrics;
+  last7Days: DashboardTrafficMetrics;
+  last30Days: DashboardTrafficMetrics;
+  hourly: DashboardTrafficPoint[];
+  daily: DashboardTrafficPoint[];
+  sources: DashboardTrafficBreakdown[];
+  countries: DashboardTrafficBreakdown[];
+  devices: DashboardTrafficBreakdown[];
+  trafficTypes: DashboardTrafficBreakdown[];
+  platforms: DashboardTrafficBreakdown[];
+  browsers: DashboardTrafficBreakdown[];
+  landingPages: DashboardTrafficBreakdown[];
+  campaigns: DashboardTrafficBreakdown[];
+  aiReferrals: DashboardTrafficBreakdown[];
+  details: DashboardTrafficDetailRow[];
+  detailLimitReached: boolean;
+}
+
 export interface DashboardWarning {
   resource:
     | "orders"
@@ -110,7 +211,8 @@ export interface DashboardWarning {
     | "products"
     | "payments"
     | "profile"
-    | "users";
+    | "users"
+    | "traffic";
   message: string;
 }
 
@@ -140,6 +242,7 @@ export interface StoreDashboardSnapshot {
     payouts: DashboardPayoutSummary;
     transactions: DashboardTransactionSummary;
   };
+  traffic: DashboardTrafficSummary;
   users: DashboardUser[];
   warnings: DashboardWarning[];
 }
@@ -171,4 +274,5 @@ export interface DashboardAggregate {
     payouts: DashboardPayoutSummary;
     transactions: DashboardTransactionSummary;
   };
+  traffic: DashboardTrafficSummary;
 }

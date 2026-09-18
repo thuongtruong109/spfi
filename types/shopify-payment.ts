@@ -25,3 +25,19 @@ export interface ShopifyBalanceTransactionFilters {
   since_id?: string | number;
   test?: boolean;
 }
+
+export type PayoutDetailStatus =
+  | "idle"
+  | "loading"
+  | "success"
+  | "not-found"
+  | "unauthorized"
+  | "partial"
+  | "error";
+
+export interface PayoutDetailLoadState {
+  status: PayoutDetailStatus;
+  detailError: string | null;
+  metadataError: string | null;
+  transactionsError: string | null;
+}

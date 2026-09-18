@@ -1,14 +1,16 @@
 import { defineEventHandler, readBody } from "h3";
 import { createApiErrorFromMessage } from "~~/server/utils/callShopifyApi";
-import { callShopifyPaginatedApi } from "~~/server/utils/callShopifyPaginatedApi";
-import { buildPayoutQueryParams } from "~~/server/utils/shopify-payment-query";
-import type { PayoutsResponse } from "~~/types/shopify";
+import { fetchShopifyPaymentsPayouts } from "~~/server/utils/shopify-payments-graphql";
 import type { ShopifyPayoutFilters } from "~~/types/shopify-payment";
 
 interface PayoutAllBody {
   storeId?: string;
   token?: string;
   filters?: ShopifyPayoutFilters;
+  pagination?: {
+    first?: number;
+    after?: string | null;
+  };
 }
 
 export default defineEventHandler(async (event) => {
@@ -20,18 +22,9 @@ export default defineEventHandler(async (event) => {
     throw createApiErrorFromMessage("Store ID and Access Token are required.", 400);
   }
 
-  const payouts = await callShopifyPaginatedApi<PayoutsResponse["payouts"][number]>({
-    event,
-    storeId,
-    token,
-    path: "/shopify_payments/payouts.json",
-    resourceKey: "payouts",
-    params: buildPayoutQueryParams(body.filters),
-    missingProxyMessage: "Missing sock proxy for this store.",
-    preserveUnsafeIntegers: true,
-  });
-
-  return {
-    payouts,
-  } satisfies PayoutsResponse;
+  return fetchShopifyPaymentsPayouts(
+    { event, storeId, token },
+    body.filters || {},
+    body.pagination || {},
+  );
 });

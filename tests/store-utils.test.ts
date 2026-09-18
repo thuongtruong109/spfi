@@ -3,7 +3,10 @@ import test from "node:test";
 import { ref } from "vue";
 import { usePerStoreCache } from "../app/composables/usePerStoreCache.ts";
 import { fmtMoney, formatMoneyInput } from "../utils/order.ts";
-import { buildOrderTransactionStatusMap } from "../utils/payment-transactions.ts";
+import {
+  buildOrderTransactionStatusMap,
+  getAdjustmentOrderTransactions,
+} from "../utils/payment-transactions.ts";
 import { getStoreTokenState, resolveStoreAccessToken } from "../utils/shop-auth.ts";
 
 test("store token resolver applies one expiry policy", () => {
@@ -39,6 +42,13 @@ test("transaction status lookup uses an order-indexed map", () => {
 
   assert.equal(statuses.get("42"), "in_transit");
   assert.equal(statuses.get("43"), "paid");
+});
+
+test("adjustment order lookup tolerates nullable REST data", () => {
+  assert.deepEqual(
+    getAdjustmentOrderTransactions({ adjustment_order_transactions: null }),
+    [],
+  );
 });
 
 test("per-store cache restores and evicts isolated snapshots", () => {

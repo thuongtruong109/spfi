@@ -2,6 +2,17 @@ import {
   DEFAULT_API_RATE_LIMIT_PER_MINUTE,
   DEFAULT_TOKEN_RATE_LIMIT_PER_MINUTE,
 } from "./server/utils/rate-limit-policy";
+import { readFileSync } from "node:fs";
+
+const desktopWebviewTargets = JSON.parse(
+  readFileSync(
+    new URL("./wrapper/src-tauri/webview-targets.json", import.meta.url),
+    "utf8",
+  ),
+) as Array<{ label: string; url: string }>;
+const desktopWebviewUrls = desktopWebviewTargets
+  .map(({ label, url }) => `${label}|${url}`)
+  .join(",");
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -39,6 +50,7 @@ export default defineNuxtConfig({
       sheetUrls: "",
       masterSheetUrl: "",
       masterSheetTabs: "",
+      desktopWebviewUrls,
     },
     // Fail closed when no deployment-specific limits are configured.
     apiRateLimitPerMinute: DEFAULT_API_RATE_LIMIT_PER_MINUTE,
