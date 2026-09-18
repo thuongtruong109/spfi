@@ -1614,6 +1614,14 @@ const messages: Record<MessageKey, string> = {
   "home.checkStatus": "Kiểm tra trạng thái",
   "home.previewAria": "Xem trước vận hành",
   "home.previewLive": "Workspace trực tiếp",
+  "home.previewDashboardEyebrow": "Bảng điều khiển vận hành",
+  "home.previewDashboardTitle": "Nhịp hoạt động workspace",
+  "home.previewHealthy": "Hệ thống ổn định",
+  "home.previewStores": "Store đã kết nối",
+  "home.previewTasks": "Tác vụ đang chạy",
+  "home.previewCapacity": "Dung lượng API",
+  "home.previewActivity": "Hoạt động request",
+  "home.previewRecent": "Hoạt động gần đây",
   "home.previewBatch": "Trạng thái hàng loạt",
   "home.previewAlive": "Alive 18",
   "home.previewHttp": "HTTP",
@@ -1623,6 +1631,12 @@ const messages: Record<MessageKey, string> = {
   "home.previewSheet": "Tra cứu Sheet",
   "home.previewTabs": "4 tab",
   "home.workflowsAria": "Luồng công việc chính",
+  "home.workflowsEyebrow": "Một bàn làm việc liền mạch",
+  "home.workflowsTitle": "Mọi công cụ vận hành chỉ cách một lần bấm.",
+  "home.workflowsBody":
+    "Đi từ tín hiệu tổng quan đến đúng store, payment, sheet hoặc tác vụ kiểm tra mà không mất ngữ cảnh.",
+  "home.quickDashboardDescription":
+    "Xem doanh thu, fulfillment, khách hàng và payment trên nhiều store.",
   "home.quickSetupTitle": "Hướng dẫn thiết lập",
   "home.quickSetupDescription": "Theo dõi checklist tạo app và chuẩn bị credentials.",
   "home.quickManagerTitle": "Quản lý shop",
@@ -1632,6 +1646,10 @@ const messages: Record<MessageKey, string> = {
   "home.quickStatusTitle": "Kiểm tra trạng thái",
   "home.quickStatusDescription":
     "Kiểm tra hàng loạt khả năng truy cập storefront Shopify.",
+  "home.quickStoreDescription":
+    "Mở profile, order, product, customer, transaction, payout và dispute.",
+  "home.quickSettingsDescription":
+    "Điều chỉnh tracking credentials và thời gian cache trong một trang quản trị.",
   "home.motivationEyebrow": "Mục tiêu",
   "home.motivationTitle":
     "Giữ các thao tác Shopify lặp lại thật rõ ràng, bình tĩnh và nhanh.",

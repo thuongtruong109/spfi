@@ -1724,6 +1724,14 @@ const messages = {
   "home.checkStatus": "Check Status",
   "home.previewAria": "Operations preview",
   "home.previewLive": "Live workspace",
+  "home.previewDashboardEyebrow": "Operations console",
+  "home.previewDashboardTitle": "Workspace pulse",
+  "home.previewHealthy": "All systems healthy",
+  "home.previewStores": "Connected stores",
+  "home.previewTasks": "Active tasks",
+  "home.previewCapacity": "API capacity",
+  "home.previewActivity": "Request activity",
+  "home.previewRecent": "Recent activity",
   "home.previewBatch": "Batch status",
   "home.previewAlive": "Alive 18",
   "home.previewHttp": "HTTP",
@@ -1733,6 +1741,12 @@ const messages = {
   "home.previewSheet": "Sheet lookup",
   "home.previewTabs": "4 tabs",
   "home.workflowsAria": "Primary workflows",
+  "home.workflowsEyebrow": "One connected desk",
+  "home.workflowsTitle": "Everything operators reach for, within one click.",
+  "home.workflowsBody":
+    "Move from a high-level signal to the exact store, payment, sheet, or status task without losing context.",
+  "home.quickDashboardDescription":
+    "Review cross-store revenue, fulfillment, customers, and payments.",
   "home.quickSetupTitle": "Setup Guide",
   "home.quickSetupDescription": "Follow the app creation and credential checklist.",
   "home.quickManagerTitle": "Shop Management",
@@ -1741,6 +1755,10 @@ const messages = {
   "home.quickSheetDescription": "Open sheet tabs and inspect rows quickly.",
   "home.quickStatusTitle": "Status Checker",
   "home.quickStatusDescription": "Batch check Shopify storefront availability.",
+  "home.quickStoreDescription":
+    "Open profiles, orders, products, customers, transactions, payouts, and disputes.",
+  "home.quickSettingsDescription":
+    "Tune tracking credentials and cache lifetime from one admin page.",
   "home.motivationEyebrow": "Motivation",
   "home.motivationTitle": "Keep repetitive Shopify ops calm, visible, and fast.",
   "home.motivationBody":
