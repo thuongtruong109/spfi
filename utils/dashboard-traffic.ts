@@ -1,11 +1,15 @@
 import type {
+  DashboardTrafficAvailability,
+  DashboardTrafficAvailabilityState,
   DashboardTrafficBreakdown,
   DashboardTrafficMetrics,
   DashboardTrafficPoint,
   DashboardTrafficRange,
+  DashboardTrafficRangeAvailability,
   DashboardTrafficRangeData,
   DashboardTrafficSummary,
-} from "~~/types/dashboard";
+} from "../types/dashboard.ts";
+import { DASHBOARD_TRAFFIC_OVERVIEW_ALIASES } from "../types/dashboard.ts";
 
 const BREAKDOWN_LIMIT = 8;
 
@@ -13,6 +17,7 @@ export function emptyDashboardTraffic(): DashboardTrafficSummary {
   return {
     available: false,
     availableStores: 0,
+    availability: createDashboardTrafficAvailability(),
     today: emptyTrafficMetrics(),
     last24Hours: emptyTrafficMetrics(),
     last7Days: emptyTrafficMetrics(),
@@ -47,6 +52,7 @@ export function cloneDashboardTraffic(
     ...traffic,
     available,
     availableStores: available ? Math.max(1, traffic.availableStores || 0) : 0,
+    availability: createDashboardTrafficAvailability("unknown", traffic.availability),
     today: { ...traffic.today },
     last24Hours: { ...(traffic.last24Hours || traffic.today) },
     last7Days: { ...traffic.last7Days },
@@ -75,7 +81,19 @@ export function resolveDashboardTrafficRangeData(
   range: DashboardTrafficRange,
 ): DashboardTrafficRangeData {
   const existing = traffic.rangeData?.[range];
-  if (existing) return existing;
+  const fallbackAvailability = rangeAvailability(
+    createDashboardTrafficAvailability("unknown", traffic.availability),
+    range,
+  );
+  if (existing) {
+    return {
+      ...existing,
+      availability: normalizeRangeAvailability(
+        existing.availability,
+        fallbackAvailability,
+      ),
+    };
+  }
 
   const metrics =
     range === "24h"
@@ -89,6 +107,7 @@ export function resolveDashboardTrafficRangeData(
     countries: traffic.countries || [],
     devices: traffic.devices || [],
     dimensions: {},
+    availability: fallbackAvailability,
   };
 }
 
@@ -123,13 +142,41 @@ export function aggregateDashboardTraffic(
   traffic: DashboardTrafficSummary[],
 ): DashboardTrafficSummary {
   const available = traffic.filter(isDashboardTrafficAvailable);
-  if (!available.length) return emptyDashboardTraffic();
+  if (!available.length) {
+    const empty = emptyDashboardTraffic();
+    if (!traffic.length) return empty;
+    empty.availability = aggregateTrafficAvailability(
+      traffic.map((item) =>
+        createDashboardTrafficAvailability("unknown", item.availability),
+      ),
+    );
+    empty.rangeData = {
+      "24h": aggregateTrafficRangeData(
+        [],
+        traffic.map((item) => resolveDashboardTrafficRangeData(item, "24h")),
+      ),
+      "7d": aggregateTrafficRangeData(
+        [],
+        traffic.map((item) => resolveDashboardTrafficRangeData(item, "7d")),
+      ),
+      "30d": aggregateTrafficRangeData(
+        [],
+        traffic.map((item) => resolveDashboardTrafficRangeData(item, "30d")),
+      ),
+    };
+    return empty;
+  }
 
   return {
     available: true,
     availableStores: available.reduce(
       (total, item) => total + Math.max(1, item.availableStores),
       0,
+    ),
+    availability: aggregateTrafficAvailability(
+      traffic.map((item) =>
+        createDashboardTrafficAvailability("unknown", item.availability),
+      ),
     ),
     today: aggregateMetrics(available.map((item) => item.today)),
     last24Hours: aggregateMetrics(
@@ -151,12 +198,15 @@ export function aggregateDashboardTraffic(
     rangeData: {
       "24h": aggregateTrafficRangeData(
         available.map((item) => resolveDashboardTrafficRangeData(item, "24h")),
+        traffic.map((item) => resolveDashboardTrafficRangeData(item, "24h")),
       ),
       "7d": aggregateTrafficRangeData(
         available.map((item) => resolveDashboardTrafficRangeData(item, "7d")),
+        traffic.map((item) => resolveDashboardTrafficRangeData(item, "7d")),
       ),
       "30d": aggregateTrafficRangeData(
         available.map((item) => resolveDashboardTrafficRangeData(item, "30d")),
+        traffic.map((item) => resolveDashboardTrafficRangeData(item, "30d")),
       ),
     },
   };
@@ -201,6 +251,12 @@ function emptyTrafficRangeData(): DashboardTrafficRangeData {
     countries: [],
     devices: [],
     dimensions: {},
+    availability: {
+      metrics: "unknown",
+      sources: "unknown",
+      countries: "unknown",
+      devices: "unknown",
+    },
   };
 }
 
@@ -223,11 +279,13 @@ function cloneTrafficRangeData(
           : result,
       ]),
     ),
+    availability: normalizeRangeAvailability(range.availability),
   };
 }
 
 function aggregateTrafficRangeData(
   ranges: DashboardTrafficRangeData[],
+  availabilityRanges: DashboardTrafficRangeData[] = ranges,
 ): DashboardTrafficRangeData {
   return {
     metrics: aggregateMetrics(ranges.map((range) => range.metrics)),
@@ -235,6 +293,108 @@ function aggregateTrafficRangeData(
     countries: aggregateBreakdowns(ranges.flatMap((range) => range.countries)),
     devices: aggregateBreakdowns(ranges.flatMap((range) => range.devices)),
     dimensions: {},
+    availability: {
+      metrics: aggregateAvailabilityState(
+        availabilityRanges.map(
+          (range) => normalizeRangeAvailability(range.availability).metrics,
+        ),
+      ),
+      sources: aggregateAvailabilityState(
+        availabilityRanges.map(
+          (range) => normalizeRangeAvailability(range.availability).sources,
+        ),
+      ),
+      countries: aggregateAvailabilityState(
+        availabilityRanges.map(
+          (range) => normalizeRangeAvailability(range.availability).countries,
+        ),
+      ),
+      devices: aggregateAvailabilityState(
+        availabilityRanges.map(
+          (range) => normalizeRangeAvailability(range.availability).devices,
+        ),
+      ),
+    },
+  };
+}
+
+export function createDashboardTrafficAvailability(
+  defaultState: DashboardTrafficAvailabilityState = "unknown",
+  overrides?: Partial<DashboardTrafficAvailability>,
+): DashboardTrafficAvailability {
+  return Object.fromEntries(
+    DASHBOARD_TRAFFIC_OVERVIEW_ALIASES.map((alias) => [
+      alias,
+      overrides?.[alias] || defaultState,
+    ]),
+  ) as DashboardTrafficAvailability;
+}
+
+function aggregateTrafficAvailability(
+  rows: DashboardTrafficAvailability[],
+): DashboardTrafficAvailability {
+  return createDashboardTrafficAvailability(
+    "unknown",
+    Object.fromEntries(
+      DASHBOARD_TRAFFIC_OVERVIEW_ALIASES.map((alias) => [
+        alias,
+        aggregateAvailabilityState(rows.map((row) => row[alias])),
+      ]),
+    ),
+  );
+}
+
+function aggregateAvailabilityState(
+  states: DashboardTrafficAvailabilityState[],
+): DashboardTrafficAvailabilityState {
+  if (!states.length || states.every((state) => state === "unknown")) return "unknown";
+  if (states.every((state) => state === "available")) return "available";
+  if (states.every((state) => state === "failed")) return "failed";
+  return "partial";
+}
+
+function rangeAvailability(
+  availability: DashboardTrafficAvailability,
+  range: DashboardTrafficRange,
+): DashboardTrafficRangeAvailability {
+  if (range === "24h") {
+    return {
+      metrics: availability.last24Hours,
+      sources: availability.sources24Hours,
+      countries: availability.countries24Hours,
+      devices: availability.devices24Hours,
+    };
+  }
+  if (range === "7d") {
+    return {
+      metrics: availability.last7Days,
+      sources: availability.sources7Days,
+      countries: availability.countries7Days,
+      devices: availability.devices7Days,
+    };
+  }
+  return {
+    metrics: availability.last30Days,
+    sources: availability.sources,
+    countries: availability.countries,
+    devices: availability.devices,
+  };
+}
+
+function normalizeRangeAvailability(
+  availability?: Partial<DashboardTrafficRangeAvailability>,
+  fallback: DashboardTrafficRangeAvailability = {
+    metrics: "unknown",
+    sources: "unknown",
+    countries: "unknown",
+    devices: "unknown",
+  },
+): DashboardTrafficRangeAvailability {
+  return {
+    metrics: availability?.metrics || fallback.metrics,
+    sources: availability?.sources || fallback.sources,
+    countries: availability?.countries || fallback.countries,
+    devices: availability?.devices || fallback.devices,
   };
 }
 

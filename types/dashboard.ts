@@ -146,6 +146,42 @@ export interface DashboardTrafficBreakdown {
   visitors: number;
 }
 
+export const DASHBOARD_TRAFFIC_OVERVIEW_ALIASES = [
+  "today",
+  "last24Hours",
+  "last7Days",
+  "last30Days",
+  "hourly",
+  "daily",
+  "sources",
+  "sources24Hours",
+  "sources7Days",
+  "countries",
+  "countries24Hours",
+  "countries7Days",
+  "devices",
+  "devices24Hours",
+  "devices7Days",
+] as const;
+
+export type DashboardTrafficOverviewAlias =
+  (typeof DASHBOARD_TRAFFIC_OVERVIEW_ALIASES)[number];
+
+export type DashboardTrafficAvailabilityState =
+  "available" | "partial" | "failed" | "unknown";
+
+export type DashboardTrafficAvailability = Record<
+  DashboardTrafficOverviewAlias,
+  DashboardTrafficAvailabilityState
+>;
+
+export interface DashboardTrafficRangeAvailability {
+  metrics: DashboardTrafficAvailabilityState;
+  sources: DashboardTrafficAvailabilityState;
+  countries: DashboardTrafficAvailabilityState;
+  devices: DashboardTrafficAvailabilityState;
+}
+
 export type DashboardTrafficDimensionKey =
   | "source"
   | "referrerDomain"
@@ -202,6 +238,7 @@ export interface DashboardTrafficRangeData {
   countries: DashboardTrafficBreakdown[];
   devices: DashboardTrafficBreakdown[];
   dimensions: DashboardTrafficDimensions;
+  availability: DashboardTrafficRangeAvailability;
 }
 
 export interface DashboardTrafficDimensionResponse extends DashboardTrafficDimensionResult {
@@ -212,6 +249,7 @@ export interface DashboardTrafficDimensionResponse extends DashboardTrafficDimen
 export interface DashboardTrafficSummary {
   available: boolean;
   availableStores: number;
+  availability: DashboardTrafficAvailability;
   today: DashboardTrafficMetrics;
   last24Hours: DashboardTrafficMetrics;
   last7Days: DashboardTrafficMetrics;

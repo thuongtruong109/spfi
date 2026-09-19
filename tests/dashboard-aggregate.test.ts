@@ -5,7 +5,10 @@ import {
   aggregateDashboardSnapshots,
   filterDashboardAggregateCurrency,
 } from "../utils/dashboard-aggregate.ts";
-import { createTrafficMetrics } from "../utils/dashboard-traffic.ts";
+import {
+  createDashboardTrafficAvailability,
+  createTrafficMetrics,
+} from "../utils/dashboard-traffic.ts";
 
 test("all-store aggregation sums matching currencies without mixing them", () => {
   const result = aggregateDashboardSnapshots([
@@ -159,6 +162,7 @@ function snapshot(
     traffic: {
       available: true,
       availableStores: 1,
+      availability: createDashboardTrafficAvailability("available"),
       today: createTrafficMetrics({
         sessions: revenueAmount,
         visitors: revenueAmount,

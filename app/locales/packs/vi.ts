@@ -737,6 +737,10 @@ const messages: Record<MessageKey, string> = {
   "dashboard.trafficPageviews": "Lượt xem",
   "dashboard.trafficNoData": "Không có traffic được ghi nhận trong khoảng này.",
   "dashboard.trafficNoBreakdown": "Chưa có dữ liệu phân nhóm.",
+  "dashboard.trafficQueryFailed":
+    "Shopify không thể tải tập dữ liệu traffic này trong khoảng đã chọn.",
+  "dashboard.trafficQueryPartial":
+    "Một số store không tải được tập dữ liệu này; các giá trị đang hiển thị chưa đầy đủ.",
   "dashboard.trafficOther": "Khác",
   "dashboard.trafficBreakdownChartLabel":
     "Phân bổ session theo chiều traffic đang chọn",

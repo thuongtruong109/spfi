@@ -22,6 +22,7 @@ import {
   getGraphqlCostSummary,
   getGraphqlThrottleDelayMs,
   getGraphqlThrottleStatus,
+  getShopifyqlCostSummary,
   isGraphqlThrottled,
   parseRetryAfterMs,
   waitForShopifyThrottle,
@@ -30,10 +31,18 @@ import {
 import { resolveShopifyGraphqlTransportRetry } from "./shopify-transport-retry";
 import { buildShopifyGid } from "./shopify-gid.ts";
 
-interface ShopifyGraphqlError {
+export interface ShopifyGraphqlError {
   message: string;
   path?: Array<string | number>;
   extensions?: Record<string, unknown>;
+}
+
+export type ShopifyGraphqlFieldAvailability = "available" | "failed";
+
+export interface ShopifyGraphqlPartialResponse<TData> {
+  data: TData;
+  errors: ShopifyGraphqlError[];
+  availability: Record<string, ShopifyGraphqlFieldAvailability>;
 }
 
 interface ShopifyGraphqlEnvelope<TData> {
@@ -66,6 +75,20 @@ interface ShopifyGraphqlRequest<TVariables> {
 const DEFAULT_GRAPHQL_TIMEOUT_MS = 15000;
 const DEFAULT_MAX_GRAPHQL_THROTTLE_RETRIES = 5;
 
+export function callShopifyGraphql<
+  TData,
+  TVariables extends Record<string, unknown> = Record<string, unknown>,
+>(
+  options: CallShopifyGraphqlOptions<TVariables> & { allowPartialData: true },
+): Promise<ShopifyGraphqlPartialResponse<TData>>;
+export function callShopifyGraphql<
+  TData,
+  TVariables extends Record<string, unknown> = Record<string, unknown>,
+>(
+  options: CallShopifyGraphqlOptions<TVariables> & {
+    allowPartialData?: false;
+  },
+): Promise<TData>;
 export async function callShopifyGraphql<
   TData,
   TVariables extends Record<string, unknown> = Record<string, unknown>,
@@ -80,7 +103,9 @@ export async function callShopifyGraphql<
   retryTransport,
   allowPartialData = false,
   maxThrottleRetries = DEFAULT_MAX_GRAPHQL_THROTTLE_RETRIES,
-}: CallShopifyGraphqlOptions<TVariables>): Promise<TData> {
+}: CallShopifyGraphqlOptions<TVariables>): Promise<
+  TData | ShopifyGraphqlPartialResponse<TData>
+> {
   setResponseHeader(event, "x-spf-field-convention", "app-camel-case");
   if (!storeId) {
     throw createApiErrorFromMessage("Store ID is required.", 400);
@@ -205,10 +230,55 @@ export async function callShopifyGraphql<
       );
     }
 
+    if (allowPartialData) {
+      const partialResponse = createShopifyGraphqlPartialResponse(
+        envelope.data,
+        envelope.errors,
+      );
+      if (!partialResponse) {
+        throw createApiErrorFromMessage(
+          "Shopify GraphQL returned partial errors without an attributable field path.",
+          422,
+          envelope.errors,
+        );
+      }
+      return partialResponse;
+    }
+
     return envelope.data;
   }
 
   throw createApiError(lastTransportError, "Shopify GraphQL request failed.");
+}
+
+export function createShopifyGraphqlPartialResponse<TData>(
+  data: TData,
+  errors: ShopifyGraphqlError[] | undefined,
+): ShopifyGraphqlPartialResponse<TData> | null {
+  const dataRecord = isRecord(data) ? data : {};
+  const availability: Record<string, ShopifyGraphqlFieldAvailability> = {};
+  for (const alias of Object.keys(dataRecord)) availability[alias] = "available";
+
+  const unattributedErrors: ShopifyGraphqlError[] = [];
+  for (const error of errors || []) {
+    const alias = typeof error.path?.[0] === "string" ? error.path[0] : "";
+    if (alias) availability[alias] = "failed";
+    else unattributedErrors.push(error);
+  }
+
+  if (unattributedErrors.length) {
+    const nullAliases = Object.entries(dataRecord)
+      .filter(([, value]) => value === null)
+      .map(([alias]) => alias);
+    if (!nullAliases.length) return null;
+    for (const alias of nullAliases) availability[alias] = "failed";
+  }
+
+  return {
+    data,
+    errors: [...(errors || [])],
+    availability,
+  };
 }
 
 function normalizeMaxThrottleRetries(value: number) {
@@ -243,6 +313,19 @@ function forwardGraphqlThrottleHeaders(
     );
   }
 
+  const shopifyqlCost = getShopifyqlCostSummary(extensions);
+  const shopifyqlHeaders = {
+    "x-shopifyql-requested-cost": shopifyqlCost?.requestedQueryCost,
+    "x-shopifyql-maximum-available": shopifyqlCost?.maximumAvailable,
+    "x-shopifyql-currently-available": shopifyqlCost?.currentlyAvailable,
+    "x-shopifyql-window-reset-at": shopifyqlCost?.windowResetAt,
+  };
+  for (const [name, value] of Object.entries(shopifyqlHeaders)) {
+    if (value !== null && value !== undefined) {
+      setResponseHeader(event, name, String(value));
+    }
+  }
+
   const status = getGraphqlThrottleStatus(extensions);
   if (!status) return;
 
@@ -271,4 +354,8 @@ export function assertNoGraphqlUserErrors(
     422,
     errors,
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

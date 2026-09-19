@@ -5,6 +5,7 @@ import {
   getGraphqlCostSummary,
   getGraphqlThrottleDelayMs,
   getRestCallLimitDelayMs,
+  getShopifyqlCostSummary,
   isGraphqlThrottled,
   parseShopifyRestCallLimit,
   parseRetryAfterMs,
@@ -66,4 +67,24 @@ test("GraphQL cost metadata exposes requested and actual query cost", () => {
     { requestedQueryCost: 240, actualQueryCost: 37 },
   );
   assert.equal(getGraphqlCostSummary(), null);
+});
+
+test("ShopifyQL cost metadata exposes its independent query budget", () => {
+  assert.deepEqual(
+    getShopifyqlCostSummary({
+      shopifyqlCost: {
+        requestedQueryCost: "7",
+        maximumAvailable: 1000,
+        currentlyAvailable: 993,
+        windowResetAt: "2026-07-16T07:06:00+00:00",
+      },
+    }),
+    {
+      requestedQueryCost: 7,
+      maximumAvailable: 1000,
+      currentlyAvailable: 993,
+      windowResetAt: "2026-07-16T07:06:00+00:00",
+    },
+  );
+  assert.equal(getShopifyqlCostSummary(), null);
 });

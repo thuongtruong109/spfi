@@ -520,6 +520,10 @@ const messages = {
   "dashboard.trafficPageviews": "Pageviews",
   "dashboard.trafficNoData": "No traffic was reported for this period.",
   "dashboard.trafficNoBreakdown": "No breakdown data is available.",
+  "dashboard.trafficQueryFailed":
+    "Shopify could not load this traffic dataset for the selected period.",
+  "dashboard.trafficQueryPartial":
+    "Some stores could not load this dataset; the values shown are partial.",
   "dashboard.trafficOther": "Other",
   "dashboard.trafficBreakdownChartLabel":
     "Session distribution for the selected traffic dimension",

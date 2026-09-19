@@ -121,7 +121,7 @@ function width(value: number) {
       </div>
     </header>
 
-    <article class="traffic-funnel-card">
+    <article v-if="data.availability.metrics !== 'failed'" class="traffic-funnel-card">
       <header>
         <div>
           <h3><Funnel />{{ t("dashboard.trafficFunnelTitle") }}</h3>
@@ -146,7 +146,13 @@ function width(value: number) {
           </small>
         </div>
       </div>
+      <p v-if="data.availability.metrics === 'partial'" class="traffic-funnel-warning">
+        {{ t("dashboard.trafficQueryPartial") }}
+      </p>
     </article>
+    <div v-else class="traffic-funnel-card traffic-funnel-unavailable">
+      {{ t("dashboard.trafficQueryFailed") }}
+    </div>
 
     <div class="traffic-analysis-grid">
       <DashboardTrafficDimensionCard
@@ -252,6 +258,21 @@ function width(value: number) {
   border: 1px solid var(--border);
   border-radius: 13px;
   background: var(--surface);
+}
+
+.traffic-funnel-warning {
+  margin-top: 9px;
+  color: var(--amber);
+  font-size: 9px;
+}
+
+.traffic-funnel-unavailable {
+  display: grid;
+  min-height: 150px;
+  place-items: center;
+  color: var(--amber);
+  font-size: 11px;
+  text-align: center;
 }
 
 .traffic-funnel-card > header {

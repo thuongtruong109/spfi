@@ -151,6 +151,8 @@ describe("Shopify traffic analytics", () => {
     expect(traffic.rangeData["24h"].sources[0]?.label).toBe("Direct");
     expect(traffic.rangeData["30d"].metrics.sessions).toBe(300);
     expect(traffic.rangeData["30d"].dimensions).toEqual({});
+    expect(traffic.availability.daily).toBe("available");
+    expect(traffic.rangeData["7d"].availability.sources).toBe("available");
     expect(traffic.sources[1]?.label).toBe("Direct / unknown");
     expect(traffic.trafficTypes[0]?.label).toBe("Organic");
     expect(traffic.campaigns).toHaveLength(1);
@@ -210,10 +212,42 @@ describe("Shopify traffic analytics", () => {
 
     expect(traffic.available).toBe(true);
     expect(traffic.today.sessions).toBe(9);
-    expect(traffic.last24Hours.sessions).toBe(9);
+    expect(traffic.last24Hours.sessions).toBe(0);
     expect(traffic.last7Days.sessions).toBe(40);
     expect(traffic.hourly).toEqual([]);
     expect(traffic.sources).toEqual([]);
+    expect(traffic.availability.today).toBe("available");
+    expect(traffic.availability.last24Hours).toBe("failed");
+    expect(traffic.availability.hourly).toBe("failed");
+    expect(traffic.availability.sources).toBe("failed");
+    expect(traffic.availability.countries).toBe("available");
+  });
+
+  it("preserves GraphQL field failures as alias availability", () => {
+    const traffic = parseShopifyTrafficResponse({
+      data: {
+        today: result([{ sessions: 9 }]),
+        sources7Days: null,
+      },
+      errors: [
+        {
+          message: "The query returned too much data.",
+          path: ["sources7Days"],
+          extensions: { code: "RESPONSE_TOO_LARGE" },
+        },
+      ],
+      availability: {
+        today: "available",
+        sources7Days: "failed",
+      },
+    });
+
+    expect(traffic.available).toBe(true);
+    expect(traffic.today.sessions).toBe(9);
+    expect(traffic.rangeData["7d"].sources).toEqual([]);
+    expect(traffic.availability.today).toBe("available");
+    expect(traffic.availability.sources7Days).toBe("failed");
+    expect(traffic.rangeData["7d"].availability.sources).toBe("failed");
   });
 
   it("marks traffic unavailable only when every summary alias is unusable", () => {
@@ -226,6 +260,19 @@ describe("Shopify traffic analytics", () => {
 
     expect(traffic.available).toBe(false);
     expect(traffic.availableStores).toBe(0);
+  });
+
+  it("distinguishes a valid empty alias from a failed query", () => {
+    const traffic = parseShopifyTrafficResponse({
+      today: { tableData: null, parseErrors: ["Column not found"] },
+      daily: result([]),
+    });
+
+    expect(traffic.available).toBe(true);
+    expect(traffic.availableStores).toBe(1);
+    expect(traffic.daily).toEqual([]);
+    expect(traffic.availability.today).toBe("failed");
+    expect(traffic.availability.daily).toBe("available");
   });
 
   it("surfaces dimension parse errors and missing totals", () => {

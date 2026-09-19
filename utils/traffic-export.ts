@@ -34,6 +34,7 @@ export function buildTrafficExportPayload(input: TrafficExportInput) {
     exportedAt: input.exportedAt.toISOString(),
     range: input.rangeLabel,
     metrics: input.data.metrics,
+    availability: input.data.availability,
     trend: input.points,
     breakdowns: {
       sources: input.data.sources,

@@ -60,6 +60,7 @@ describe("traffic export", () => {
     const payload = buildTrafficExportPayload(input());
     expect(payload.range).toBe("Last 7 days");
     expect(payload.metrics.sessions).toBe(42);
+    expect(payload.availability.metrics).toBe("unknown");
     expect(payload.breakdowns.sources[0]?.label).toBe("Search & Social");
     expect(payload.dimensions.source?.totalSessions).toBe(42);
     expect(payload.dimensions.source?.hasMore).toBe(true);

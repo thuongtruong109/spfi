@@ -1,17 +1,26 @@
 import type { H3Event } from "h3";
 import type {
+  DashboardTrafficAvailability,
+  DashboardTrafficAvailabilityState,
   DashboardTrafficBreakdown,
   DashboardTrafficDimensionKey,
   DashboardTrafficDimensionResponse,
   DashboardTrafficDimensionRow,
   DashboardTrafficMetrics,
+  DashboardTrafficOverviewAlias,
   DashboardTrafficPoint,
   DashboardTrafficRange,
   DashboardTrafficSummary,
 } from "~~/types/dashboard";
-import { createTrafficMetrics } from "~~/utils/dashboard-traffic";
+import {
+  createDashboardTrafficAvailability,
+  createTrafficMetrics,
+} from "~~/utils/dashboard-traffic";
 import { createApiErrorFromMessage } from "./callShopifyApi";
-import { callShopifyGraphql } from "./callShopifyGraphql";
+import {
+  callShopifyGraphql,
+  type ShopifyGraphqlPartialResponse,
+} from "./callShopifyGraphql";
 
 interface ShopifyqlColumn {
   name?: string;
@@ -53,24 +62,7 @@ interface TrafficQueryResponse {
   aiReferrals?: OptionalShopifyqlResult;
 }
 
-type TrafficQueryVariables = Record<
-  | "today"
-  | "last24Hours"
-  | "last7Days"
-  | "last30Days"
-  | "hourly"
-  | "daily"
-  | "sources"
-  | "sources24Hours"
-  | "sources7Days"
-  | "countries"
-  | "countries24Hours"
-  | "countries7Days"
-  | "devices24Hours"
-  | "devices7Days"
-  | "devices",
-  string
->;
+type TrafficQueryVariables = Record<DashboardTrafficOverviewAlias, string>;
 
 const SHOPIFYQL_RESULT_FIELDS = `
   tableData {
@@ -272,15 +264,17 @@ export function buildTrafficQueryVariables(): TrafficQueryVariables {
 }
 
 export function parseShopifyTrafficResponse(
-  response: TrafficQueryResponse,
+  input: TrafficQueryResponse | ShopifyGraphqlPartialResponse<TrafficQueryResponse>,
 ): DashboardTrafficSummary {
+  const { response, graphqlAvailability } = unwrapTrafficResponse(input);
+  const availability = resolveTrafficAvailability(response, graphqlAvailability);
   const todayResult = parseOptionalMetrics(response.today);
   const last24HoursResult = parseOptionalMetrics(response.last24Hours);
   const last7DaysResult = parseOptionalMetrics(response.last7Days);
   const last30DaysResult = parseOptionalMetrics(response.last30Days);
   const emptyMetrics = createTrafficMetrics({});
   const today = todayResult || emptyMetrics;
-  const last24Hours = last24HoursResult || todayResult || emptyMetrics;
+  const last24Hours = last24HoursResult || emptyMetrics;
   const last7Days = last7DaysResult || emptyMetrics;
   const last30Days = last30DaysResult || emptyMetrics;
   const sources = parseOptionalBreakdown(
@@ -304,39 +298,32 @@ export function parseShopifyTrafficResponse(
   const sources24Hours = parseOptionalRangeBreakdown(
     response.sources24Hours,
     "referrer_source",
-    sources,
   );
   const sources7Days = parseOptionalRangeBreakdown(
     response.sources7Days,
     "referrer_source",
-    sources,
   );
   const countries24Hours = parseOptionalRangeBreakdown(
     response.countries24Hours,
     "session_country",
-    countries,
   );
   const countries7Days = parseOptionalRangeBreakdown(
     response.countries7Days,
     "session_country",
-    countries,
   );
   const devices24Hours = parseOptionalRangeBreakdown(
     response.devices24Hours,
     "session_device_type",
-    devices,
   );
   const devices7Days = parseOptionalRangeBreakdown(
     response.devices7Days,
     "session_device_type",
-    devices,
   );
+  const available = Object.values(availability).some((state) => state === "available");
   return {
-    available: Boolean(
-      todayResult || last24HoursResult || last7DaysResult || last30DaysResult,
-    ),
-    availableStores:
-      todayResult || last24HoursResult || last7DaysResult || last30DaysResult ? 1 : 0,
+    available,
+    availableStores: available ? 1 : 0,
+    availability,
     today,
     last24Hours,
     last7Days,
@@ -367,6 +354,12 @@ export function parseShopifyTrafficResponse(
         countries: countries24Hours,
         devices: devices24Hours,
         dimensions: {},
+        availability: {
+          metrics: availability.last24Hours,
+          sources: availability.sources24Hours,
+          countries: availability.countries24Hours,
+          devices: availability.devices24Hours,
+        },
       },
       "7d": {
         metrics: last7Days,
@@ -374,6 +367,12 @@ export function parseShopifyTrafficResponse(
         countries: countries7Days,
         devices: devices7Days,
         dimensions: {},
+        availability: {
+          metrics: availability.last7Days,
+          sources: availability.sources7Days,
+          countries: availability.countries7Days,
+          devices: availability.devices7Days,
+        },
       },
       "30d": {
         metrics: last30Days,
@@ -381,9 +380,52 @@ export function parseShopifyTrafficResponse(
         countries,
         devices,
         dimensions: {},
+        availability: {
+          metrics: availability.last30Days,
+          sources: availability.sources,
+          countries: availability.countries,
+          devices: availability.devices,
+        },
       },
     },
   };
+}
+
+function unwrapTrafficResponse(
+  input: TrafficQueryResponse | ShopifyGraphqlPartialResponse<TrafficQueryResponse>,
+) {
+  if ("data" in input && "errors" in input && "availability" in input) {
+    return {
+      response: input.data,
+      graphqlAvailability: input.availability,
+    };
+  }
+  return {
+    response: input,
+    graphqlAvailability: undefined,
+  };
+}
+
+function resolveTrafficAvailability(
+  response: TrafficQueryResponse,
+  graphqlAvailability?: Record<string, "available" | "failed">,
+): DashboardTrafficAvailability {
+  const availability = createDashboardTrafficAvailability("failed");
+  for (const alias of Object.keys(availability) as DashboardTrafficOverviewAlias[]) {
+    availability[alias] = resolveTrafficAliasAvailability(
+      response[alias],
+      graphqlAvailability?.[alias],
+    );
+  }
+  return availability;
+}
+
+function resolveTrafficAliasAvailability(
+  result: OptionalShopifyqlResult,
+  graphqlAvailability?: "available" | "failed",
+): DashboardTrafficAvailabilityState {
+  if (graphqlAvailability === "failed") return "failed";
+  return readOptionalRows(result) ? "available" : "failed";
 }
 
 function summaryQuery(period: string) {
@@ -442,10 +484,9 @@ function parseOptionalPoints(
 function parseOptionalRangeBreakdown(
   result: OptionalShopifyqlResult,
   dimension: string,
-  fallback: DashboardTrafficBreakdown[],
 ) {
   const rows = parseBreakdownIfAvailable(result, dimension, false, "Direct / unknown");
-  return rows === null ? fallback.map((row) => ({ ...row })) : rows;
+  return rows || [];
 }
 
 function parseOptionalBreakdown(

@@ -22,8 +22,16 @@ interface ShopifyGraphqlCost {
   throttleStatus?: ShopifyGraphqlThrottleStatus;
 }
 
+interface ShopifyqlCost {
+  requestedQueryCost?: unknown;
+  maximumAvailable?: unknown;
+  currentlyAvailable?: unknown;
+  windowResetAt?: unknown;
+}
+
 export interface ShopifyGraphqlExtensions {
   cost?: ShopifyGraphqlCost;
+  shopifyqlCost?: ShopifyqlCost;
   [key: string]: unknown;
 }
 
@@ -170,6 +178,19 @@ export function getGraphqlCostSummary(extensions?: ShopifyGraphqlExtensions) {
   return {
     requestedQueryCost: toFiniteNumber(cost.requestedQueryCost),
     actualQueryCost: toFiniteNumber(cost.actualQueryCost),
+  };
+}
+
+export function getShopifyqlCostSummary(extensions?: ShopifyGraphqlExtensions) {
+  const cost = extensions?.shopifyqlCost;
+  if (!cost) return null;
+
+  const windowResetAt = String(cost.windowResetAt || "").trim();
+  return {
+    requestedQueryCost: toFiniteNumber(cost.requestedQueryCost),
+    maximumAvailable: toFiniteNumber(cost.maximumAvailable),
+    currentlyAvailable: toFiniteNumber(cost.currentlyAvailable),
+    windowResetAt: windowResetAt || null,
   };
 }
 

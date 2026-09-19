@@ -32,6 +32,33 @@ describe("DashboardTrafficPanel", () => {
 
     expect(wrapper.text()).toContain("dashboard.trafficUnavailable");
   });
+
+  it("does not present a failed metrics alias as zero traffic", () => {
+    installNuxtImports();
+    const traffic = emptyDashboardTraffic();
+    traffic.available = true;
+    traffic.availableStores = 1;
+    traffic.last24Hours = createTrafficMetrics({ sessions: 9 });
+    traffic.rangeData["24h"].metrics = traffic.last24Hours;
+    traffic.availability.last24Hours = "failed";
+    traffic.rangeData["24h"].availability.metrics = "failed";
+
+    const wrapper = mountPanel(traffic);
+
+    expect(wrapper.text()).toContain("dashboard.trafficQueryFailed");
+    expect(wrapper.find(".traffic-metric-grid strong").text()).toBe("—");
+  });
+
+  it("distinguishes a fully failed query from genuinely unavailable traffic", () => {
+    installNuxtImports();
+    const traffic = emptyDashboardTraffic();
+    traffic.availability.today = "failed";
+
+    const wrapper = mountPanel(traffic);
+
+    expect(wrapper.text()).toContain("dashboard.trafficQueryFailed");
+    expect(wrapper.text()).not.toContain("dashboard.trafficPermissionHint");
+  });
 });
 
 function installNuxtImports() {
