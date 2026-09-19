@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ChevronDown, ChevronUp } from "@lucide/vue";
 import type { Component } from "vue";
-import type { DashboardTrafficDetailRow } from "~~/types/dashboard";
+import type {
+  DashboardTrafficDimensionKey,
+  DashboardTrafficDimensions,
+  DashboardTrafficRange,
+} from "~~/types/dashboard";
 import {
-  aggregateTrafficDimension,
-  type DashboardTrafficDimensionKey,
+  trafficDimensionRequestKey,
   type DashboardTrafficDimensionOption,
 } from "~~/utils/dashboard-traffic-dimensions";
 
@@ -12,9 +15,15 @@ const props = defineProps<{
   icon: Component;
   title: string;
   subtitle: string;
-  rows: DashboardTrafficDetailRow[];
+  dimensions: DashboardTrafficDimensions;
   options: DashboardTrafficDimensionOption[];
+  range: DashboardTrafficRange;
   rangeLabel: string;
+  loadingDimensions?: string[];
+}>();
+
+const emit = defineEmits<{
+  dimensionChange: [dimension: DashboardTrafficDimensionKey];
 }>();
 
 const { locale, t } = useLocalization();
@@ -23,14 +32,21 @@ const activeDimension = ref<DashboardTrafficDimensionKey>(
 );
 const expanded = ref(false);
 
-const dimensionRows = computed(() =>
-  aggregateTrafficDimension(props.rows, activeDimension.value),
+const dimensionResult = computed(() => props.dimensions[activeDimension.value]);
+const dimensionRows = computed(() => dimensionResult.value?.rows || []);
+const loading = computed(() =>
+  (props.loadingDimensions || []).includes(
+    trafficDimensionRequestKey(props.range, activeDimension.value),
+  ),
 );
 const visibleRows = computed(() =>
   expanded.value ? dimensionRows.value : dimensionRows.value.slice(0, 6),
 );
 const totalSessions = computed(() =>
-  dimensionRows.value.reduce((total, row) => total + row.sessions, 0),
+  Math.max(
+    dimensionResult.value?.totalSessions || 0,
+    dimensionRows.value.reduce((total, row) => total + row.sessions, 0),
+  ),
 );
 const activeDimensionLabel = computed(
   () =>
@@ -39,7 +55,12 @@ const activeDimensionLabel = computed(
 );
 const donutSegments = computed(() => {
   const populatedRows = dimensionRows.value.filter((row) => row.sessions > 0);
-  if (populatedRows.length <= 4) {
+  const returnedTotal = populatedRows.reduce((total, row) => total + row.sessions, 0);
+  if (
+    populatedRows.length <= 4 &&
+    !dimensionResult.value?.hasMore &&
+    returnedTotal >= totalSessions.value
+  ) {
     return populatedRows.map((row) => ({
       label: row.label,
       value: row.sessions,
@@ -50,16 +71,30 @@ const donutSegments = computed(() => {
     label: row.label,
     value: row.sessions,
   }));
-  leadingRows.push({
-    label: t("dashboard.trafficOther"),
-    value: populatedRows.slice(3).reduce((total, row) => total + row.sessions, 0),
-  });
+  const leadingTotal = leadingRows.reduce((total, row) => total + row.value, 0);
+  const remainder = Math.max(0, totalSessions.value - leadingTotal);
+  if (remainder > 0) {
+    leadingRows.push({
+      label: t("dashboard.trafficOther"),
+      value: remainder,
+    });
+  }
   return leadingRows;
 });
 
-watch(activeDimension, () => {
-  expanded.value = false;
-});
+watch(
+  () =>
+    [
+      props.range,
+      activeDimension.value,
+      Boolean(props.dimensions[activeDimension.value]),
+    ] as const,
+  ([, dimension]) => {
+    expanded.value = false;
+    emit("dimensionChange", dimension);
+  },
+  { immediate: true },
+);
 
 function formatNumber(value: number, compact = false) {
   return new Intl.NumberFormat(locale.value, {
@@ -97,11 +132,16 @@ function formatDuration(value: number) {
           <h3><component :is="icon" aria-hidden="true" />{{ title }}</h3>
           <p>{{ subtitle }}</p>
         </div>
-        <span v-if="dimensionRows.length" class="traffic-dimension-count">
+        <span v-if="dimensionResult" class="traffic-dimension-count">
           {{
-            t("dashboard.trafficDimensionValues", {
-              count: dimensionRows.length,
-            })
+            t(
+              dimensionResult.hasMore
+                ? "dashboard.trafficDimensionValuesMore"
+                : "dashboard.trafficDimensionValues",
+              {
+                count: dimensionRows.length,
+              },
+            )
           }}
         </span>
       </header>
@@ -119,7 +159,11 @@ function formatDuration(value: number) {
         </button>
       </div>
 
-      <template v-if="dimensionRows.length">
+      <div v-if="loading && !dimensionResult" class="traffic-dimension-empty">
+        {{ t("dashboard.trafficInsightsLoading") }}
+      </div>
+
+      <template v-else-if="dimensionRows.length">
         <div class="traffic-dimension-table-area">
           <div class="traffic-dimension-table-scroll">
             <table>

@@ -506,7 +506,8 @@ const messages = {
   "dashboard.trafficExportHtml": "HTML report",
   "dashboard.trafficExportHtmlDetail": "Standalone report with tables",
   "dashboard.trafficExportJson": "JSON data",
-  "dashboard.trafficExportJsonDetail": "Complete data for the selected range",
+  "dashboard.trafficExportJsonDetail":
+    "Overview and loaded dimensions for the selected range",
   "dashboard.trafficExportSuccess": "Traffic exported as {format}.",
   "dashboard.trafficExportFailed": "Traffic export failed.",
   "dashboard.trafficInsightsLoading": "Loading detailed traffic analysis…",
@@ -560,6 +561,7 @@ const messages = {
     "Measure landing paths, page types, UTM campaigns, and campaign content.",
   "dashboard.trafficDimension": "Dimension",
   "dashboard.trafficDimensionValues": "{count} values",
+  "dashboard.trafficDimensionValuesMore": "Top {count}+ values",
   "dashboard.trafficDimensionChartLabel": "Top session distribution for {title}",
   "dashboard.trafficDimensionShowAll": "Show all {count} values",
   "dashboard.trafficDimensionShowLess": "Show fewer values",

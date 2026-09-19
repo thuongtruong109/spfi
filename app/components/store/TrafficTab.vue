@@ -1,24 +1,26 @@
 <script setup lang="ts">
-import type { DashboardTrafficRange } from "~~/types/dashboard";
+import type {
+  DashboardTrafficDimensionKey,
+  DashboardTrafficRange,
+} from "~~/types/dashboard";
 import { useActiveShopAuth } from "~/composables/useActiveShopAuth";
 import { useTrafficStore } from "~/stores/traffic";
 
 const trafficStore = useTrafficStore();
 const { storeId, token } = useActiveShopAuth();
 
-function loadInsightRange(range: DashboardTrafficRange) {
+function loadInsightDimension(request: {
+  range: DashboardTrafficRange;
+  dimension: DashboardTrafficDimensionKey;
+}) {
   if (!storeId.value || !token.value) return;
-  void trafficStore.fetchTrafficRange(storeId.value, token.value, range);
+  void trafficStore.fetchTrafficDimension(
+    storeId.value,
+    token.value,
+    request.range,
+    request.dimension,
+  );
 }
-
-watch(
-  [storeId, token, () => trafficStore.hasFetched],
-  ([activeStoreId, accessToken, hasFetched]) => {
-    if (!activeStoreId || !accessToken || !hasFetched) return;
-    void trafficStore.fetchTrafficRange(activeStoreId, accessToken, "24h");
-  },
-  { immediate: true },
-);
 </script>
 
 <template>
@@ -36,10 +38,10 @@ watch(
     <DashboardTrafficPanel
       :traffic="trafficStore.traffic"
       :loading="trafficStore.isLoading"
-      :insights-loading="Boolean(trafficStore.loadingInsightRange)"
+      :loading-insight-dimensions="trafficStore.loadingInsightDimensions"
       :store-count="1"
       show-insights
-      @range-change="loadInsightRange"
+      @dimension-change="loadInsightDimension"
     />
   </section>
 </template>

@@ -40,8 +40,7 @@ export function buildTrafficExportPayload(input: TrafficExportInput) {
       countries: input.data.countries,
       devices: input.data.devices,
     },
-    details: input.data.details,
-    detailLimitReached: input.data.detailLimitReached,
+    dimensions: input.data.dimensions,
   };
 }
 
@@ -80,12 +79,21 @@ export function buildTrafficHtmlReport(input: TrafficExportInput) {
         )}</section>`,
     )
     .join("");
-  const detailRows = data.details
-    .map(
-      (row) => `<tr>
-        <td>${escapeHtml(row.source)}</td><td>${escapeHtml(row.country)}</td><td>${escapeHtml(row.deviceType)}</td><td>${escapeHtml(row.browser)}</td><td>${escapeHtml(row.landingPagePath)}</td><td>${formatNumber(row.sessions)}</td><td>${formatNumber(row.visitors)}</td><td>${formatNumber(row.pageviews)}</td><td>${formatPercent(row.bounceRate)}</td><td>${formatPercent(row.conversionRate)}</td>
-      </tr>`,
-    )
+  const dimensionTables = Object.entries(data.dimensions)
+    .flatMap(([dimension, result]) => {
+      if (!result) return [];
+      const rows = result.rows
+        .map(
+          (row) => `<tr>
+            <td>${escapeHtml(row.label)}</td><td>${formatNumber(row.sessions)}</td><td>${formatNumber(row.visitors)}</td><td>${formatNumber(row.pageviews)}</td><td>${formatPercent(row.bounceRate)}</td><td>${formatPercent(row.conversionRate)}</td>
+          </tr>`,
+        )
+        .join("");
+      const count = `${result.rows.length}${result.hasMore ? "+" : ""}`;
+      return [
+        `<section class="wide"><h2>${escapeHtml(labels.details)} · ${escapeHtml(dimension)} <small>${escapeHtml(count)}</small></h2><table><thead><tr><th>${escapeHtml(labels.dimension)}</th><th>${escapeHtml(labels.sessions)}</th><th>${escapeHtml(labels.visitors)}</th><th>${escapeHtml(labels.pageviews)}</th><th>${escapeHtml(labels.bounceRate)}</th><th>${escapeHtml(labels.conversionRate)}</th></tr></thead><tbody>${rows}</tbody></table></section>`,
+      ];
+    })
     .join("");
 
   return `<!doctype html>
@@ -103,7 +111,7 @@ export function buildTrafficHtmlReport(input: TrafficExportInput) {
   <section class="metrics">${metricCards}</section>
   <section class="wide"><h2>${escapeHtml(labels.trend)}</h2><table><thead><tr><th>${escapeHtml(labels.range)}</th><th>${escapeHtml(labels.sessions)}</th><th>${escapeHtml(labels.visitors)}</th><th>${escapeHtml(labels.pageviews)}</th></tr></thead><tbody>${trendRows}</tbody></table></section>
   <div class="grid">${breakdowns}</div>
-  <section class="wide"><h2>${escapeHtml(labels.details)}</h2><table><thead><tr><th>${escapeHtml(labels.sources)}</th><th>${escapeHtml(labels.countries)}</th><th>${escapeHtml(labels.devices)}</th><th>Browser</th><th>Landing page</th><th>${escapeHtml(labels.sessions)}</th><th>${escapeHtml(labels.visitors)}</th><th>${escapeHtml(labels.pageviews)}</th><th>${escapeHtml(labels.bounceRate)}</th><th>${escapeHtml(labels.conversionRate)}</th></tr></thead><tbody>${detailRows}</tbody></table></section>
+  ${dimensionTables}
 </main></body></html>`;
 }
 

@@ -1,8 +1,9 @@
 import type { H3Event } from "h3";
 import type {
   DashboardTrafficBreakdown,
-  DashboardTrafficDetailRangeResponse,
-  DashboardTrafficDetailRow,
+  DashboardTrafficDimensionKey,
+  DashboardTrafficDimensionResponse,
+  DashboardTrafficDimensionRow,
   DashboardTrafficMetrics,
   DashboardTrafficPoint,
   DashboardTrafficRange,
@@ -50,9 +51,6 @@ interface TrafficQueryResponse {
   landingPages?: OptionalShopifyqlResult;
   campaigns?: OptionalShopifyqlResult;
   aiReferrals?: OptionalShopifyqlResult;
-  details?: OptionalShopifyqlResult;
-  details24Hours?: OptionalShopifyqlResult;
-  details7Days?: OptionalShopifyqlResult;
 }
 
 type TrafficQueryVariables = Record<
@@ -122,13 +120,13 @@ export const DASHBOARD_TRAFFIC_QUERY = `#graphql
   }
 `;
 
-export const TRAFFIC_DETAILS_QUERY = `#graphql
-  query StoreTrafficDetails($details: String!) {
-    details: shopifyqlQuery(query: $details) { ${SHOPIFYQL_RESULT_FIELDS} }
+export const TRAFFIC_DIMENSION_QUERY = `#graphql
+  query StoreTrafficDimension($dimension: String!) {
+    dimension: shopifyqlQuery(query: $dimension) { ${SHOPIFYQL_RESULT_FIELDS} }
   }
 `;
 
-const DETAIL_ROW_LIMIT = 250;
+const DIMENSION_ROW_LIMIT = 250;
 const HUMAN_FILTER = "WHERE human_or_bot_session = 'human'";
 const TRAFFIC_PERIODS: Record<DashboardTrafficRange, string> = {
   "24h": "SINCE -24h UNTIL now",
@@ -145,6 +143,30 @@ const SUMMARY_METRICS = [
   "sessions_that_completed_checkout",
   "average_session_duration",
 ].join(", ");
+
+const TRAFFIC_DIMENSION_FIELDS = {
+  source: "referrer_source",
+  referrerDomain: "referrer_domain",
+  referrerTerms: "referrer_terms",
+  country: "session_country",
+  region: "session_region",
+  city: "session_city",
+  browser: "session_device_browser",
+  browserVersion: "session_device_browser_version",
+  operatingSystem: "session_device_os",
+  operatingSystemVersion: "session_device_os_version",
+  deviceType: "session_device_type",
+  apiClient: "session_api_client",
+  trafficType: "traffic_type",
+  platform: "referring_platform",
+  channel: "referring_channel",
+  medium: "referring_medium",
+  landingPageType: "landing_page_type",
+  landingPagePath: "landing_page_path",
+  campaign: "utm_campaign",
+  campaignContent: "utm_content",
+  aiReferral: "agentic_referring_channel",
+} as const satisfies Record<DashboardTrafficDimensionKey, string>;
 
 export async function fetchShopifyTraffic(input: {
   event: H3Event;
@@ -166,41 +188,67 @@ export async function fetchShopifyTraffic(input: {
   return parseShopifyTrafficResponse(response);
 }
 
-export async function fetchShopifyTrafficDetails(input: {
+export async function fetchShopifyTrafficDimension(input: {
   event: H3Event;
   storeId: string;
   token: string;
   range: DashboardTrafficRange;
-}): Promise<DashboardTrafficDetailRangeResponse> {
+  dimension: DashboardTrafficDimensionKey;
+}): Promise<DashboardTrafficDimensionResponse> {
   const response = await callShopifyGraphql<
-    { details?: OptionalShopifyqlResult },
-    { details: string }
+    { dimension?: OptionalShopifyqlResult },
+    { dimension: string }
   >({
     ...input,
-    query: TRAFFIC_DETAILS_QUERY,
-    operationName: "StoreTrafficDetails",
-    variables: buildTrafficDetailQueryVariables(input.range),
+    query: TRAFFIC_DIMENSION_QUERY,
+    operationName: "StoreTrafficDimension",
+    variables: buildTrafficDimensionQueryVariables(input.range, input.dimension),
     timeoutMs: 30_000,
   });
-  return parseShopifyTrafficDetailsResponse(response, input.range);
+  return parseShopifyTrafficDimensionResponse(response, input.range, input.dimension);
 }
 
-export function parseShopifyTrafficDetailsResponse(
-  response: { details?: OptionalShopifyqlResult },
+export function parseShopifyTrafficDimensionResponse(
+  response: { dimension?: OptionalShopifyqlResult },
   range: DashboardTrafficRange,
-): DashboardTrafficDetailRangeResponse {
-  const details = parseTrafficDetails(response.details, `${range} traffic details`);
+  dimension: DashboardTrafficDimensionKey,
+): DashboardTrafficDimensionResponse {
+  const field = TRAFFIC_DIMENSION_FIELDS[dimension];
+  const resultRows = readRows(
+    response.dimension,
+    `${range} ${dimension} traffic dimension`,
+  );
+  const hasMore = resultRows.length > DIMENSION_ROW_LIMIT;
+  const rows = resultRows
+    .slice(0, DIMENSION_ROW_LIMIT)
+    .map((row) => parseTrafficDimensionRow(row, field));
+  const totalSessions = readDimensionTotal(resultRows, "sessions");
+
   return {
     range,
-    details,
-    detailLimitReached: details.length >= DETAIL_ROW_LIMIT,
+    dimension,
+    rows,
+    totalSessions,
+    hasMore,
   };
 }
 
-export function buildTrafficDetailQueryVariables(range: DashboardTrafficRange) {
+export function buildTrafficDimensionQueryVariables(
+  range: DashboardTrafficRange,
+  dimension: DashboardTrafficDimensionKey,
+) {
   return {
-    details: detailQuery(TRAFFIC_PERIODS[range]),
+    dimension: dimensionQuery(
+      TRAFFIC_DIMENSION_FIELDS[dimension],
+      TRAFFIC_PERIODS[range],
+    ),
   };
+}
+
+export function isDashboardTrafficDimensionKey(
+  value: string,
+): value is DashboardTrafficDimensionKey {
+  return Object.hasOwn(TRAFFIC_DIMENSION_FIELDS, value);
 }
 
 export function buildTrafficQueryVariables(): TrafficQueryVariables {
@@ -235,9 +283,6 @@ export function parseShopifyTrafficResponse(
   const last24Hours = last24HoursResult || todayResult || emptyMetrics;
   const last7Days = last7DaysResult || emptyMetrics;
   const last30Days = last30DaysResult || emptyMetrics;
-  const details = parseTrafficDetails(response.details);
-  const details24Hours = parseTrafficDetails(response.details24Hours);
-  const details7Days = parseTrafficDetails(response.details7Days);
   const sources = parseOptionalBreakdown(
     response.sources,
     "referrer_source",
@@ -315,32 +360,27 @@ export function parseShopifyTrafficResponse(
       "agentic_referring_channel",
       true,
     ),
-    details,
-    detailLimitReached: details.length >= DETAIL_ROW_LIMIT,
     rangeData: {
       "24h": {
         metrics: last24Hours,
         sources: sources24Hours,
         countries: countries24Hours,
         devices: devices24Hours,
-        details: details24Hours,
-        detailLimitReached: details24Hours.length >= DETAIL_ROW_LIMIT,
+        dimensions: {},
       },
       "7d": {
         metrics: last7Days,
         sources: sources7Days,
         countries: countries7Days,
         devices: devices7Days,
-        details: details7Days,
-        detailLimitReached: details7Days.length >= DETAIL_ROW_LIMIT,
+        dimensions: {},
       },
       "30d": {
         metrics: last30Days,
         sources,
         countries,
         devices,
-        details,
-        detailLimitReached: details.length >= DETAIL_ROW_LIMIT,
+        dimensions: {},
       },
     },
   };
@@ -358,43 +398,8 @@ function breakdownQuery(dimension: string, period = "SINCE -29d UNTIL now") {
   return `FROM sessions\nSHOW sessions, online_store_visitors\n${HUMAN_FILTER}\nGROUP BY ${dimension}\n${period}\nORDER BY sessions DESC\nLIMIT 8`;
 }
 
-function detailQuery(period: string) {
-  const dimensions = [
-    "referrer_source",
-    "referrer_domain",
-    "referrer_terms",
-    "session_country",
-    "session_country_code",
-    "session_region",
-    "session_city",
-    "session_device_browser",
-    "session_device_browser_version",
-    "session_device_os",
-    "session_device_os_version",
-    "session_device_type",
-    "session_api_client",
-    "traffic_type",
-    "referring_platform",
-    "referring_channel",
-    "referring_medium",
-    "landing_page_type",
-    "landing_page_path",
-    "utm_campaign",
-    "utm_content",
-    "agentic_referring_channel",
-  ];
-  const metrics = [
-    "sessions",
-    "online_store_visitors",
-    "pageviews",
-    "bounces",
-    "sessions_with_cart_additions",
-    "sessions_that_reached_checkout",
-    "sessions_that_completed_checkout",
-    "average_session_duration",
-  ];
-
-  return `FROM sessions\nSHOW ${metrics.join(", ")}\n${HUMAN_FILTER}\nGROUP BY ${dimensions.join(", ")}\n${period}\nORDER BY sessions DESC\nLIMIT ${DETAIL_ROW_LIMIT}`;
+function dimensionQuery(dimension: string, period: string) {
+  return `FROM sessions\nSHOW ${SUMMARY_METRICS}\n${HUMAN_FILTER}\nGROUP BY ${dimension} WITH TOTALS\n${period}\nORDER BY sessions DESC, ${dimension} ASC\nLIMIT ${DIMENSION_ROW_LIMIT + 1}`;
 }
 
 function parseOptionalMetrics(
@@ -487,66 +492,38 @@ function readOptionalRows(
   return result.tableData.rows;
 }
 
-function parseTrafficDetails(
-  result: OptionalShopifyqlResult,
-  requiredLabel?: string,
-): DashboardTrafficDetailRow[] {
-  const rows = requiredLabel
-    ? readRows(result, requiredLabel)
-    : !result?.tableData ||
-        !Array.isArray(result.tableData.rows) ||
-        (result.parseErrors?.length || 0) > 0
-      ? []
-      : result.tableData.rows;
-
-  return rows.map((row) => {
-    const metrics = createTrafficMetrics({
-      sessions: numberValue(row.sessions),
-      visitors: numberValue(row.online_store_visitors),
-      pageviews: numberValue(row.pageviews),
-      bounces: numberValue(row.bounces),
-      cartAdditions: numberValue(row.sessions_with_cart_additions),
-      reachedCheckouts: numberValue(row.sessions_that_reached_checkout),
-      completedCheckouts: numberValue(row.sessions_that_completed_checkout),
-      averageSessionDuration: numberValue(row.average_session_duration),
-    });
-
-    return {
-      source: detailValue(row.referrer_source),
-      referrerDomain: detailValue(row.referrer_domain),
-      referrerTerms: detailValue(row.referrer_terms),
-      country: detailValue(row.session_country),
-      countryCode: detailValue(row.session_country_code),
-      region: detailValue(row.session_region),
-      city: detailValue(row.session_city),
-      browser: detailValue(row.session_device_browser),
-      browserVersion: detailValue(row.session_device_browser_version),
-      operatingSystem: detailValue(row.session_device_os),
-      operatingSystemVersion: detailValue(row.session_device_os_version),
-      deviceType: detailValue(row.session_device_type),
-      apiClient: detailValue(row.session_api_client),
-      trafficType: detailValue(row.traffic_type),
-      platform: detailValue(row.referring_platform),
-      channel: detailValue(row.referring_channel),
-      medium: detailValue(row.referring_medium),
-      landingPageType: detailValue(row.landing_page_type),
-      landingPagePath: detailValue(row.landing_page_path),
-      campaign: detailValue(row.utm_campaign),
-      campaignContent: detailValue(row.utm_content),
-      aiReferral: detailValue(row.agentic_referring_channel),
-      sessions: metrics.sessions,
-      visitors: metrics.visitors,
-      pageviews: metrics.pageviews,
-      pageviewsPerSession: metrics.pageviewsPerSession,
-      bounces: metrics.bounces,
-      cartAdditions: metrics.cartAdditions,
-      reachedCheckouts: metrics.reachedCheckouts,
-      completedCheckouts: metrics.completedCheckouts,
-      averageSessionDuration: metrics.averageSessionDuration,
-      bounceRate: metrics.bounceRate,
-      conversionRate: metrics.conversionRate,
-    };
+function parseTrafficDimensionRow(
+  row: Record<string, unknown>,
+  dimension: string,
+): DashboardTrafficDimensionRow {
+  const metrics = createTrafficMetrics({
+    sessions: numberValue(row.sessions),
+    visitors: numberValue(row.online_store_visitors),
+    pageviews: numberValue(row.pageviews),
+    bounces: numberValue(row.bounces),
+    cartAdditions: numberValue(row.sessions_with_cart_additions),
+    reachedCheckouts: numberValue(row.sessions_that_reached_checkout),
+    completedCheckouts: numberValue(row.sessions_that_completed_checkout),
+    averageSessionDuration: numberValue(row.average_session_duration),
   });
+
+  return {
+    label: detailValue(row[dimension]),
+    ...metrics,
+  };
+}
+
+function readDimensionTotal(rows: Array<Record<string, unknown>>, metric: string) {
+  if (!rows.length) return 0;
+
+  const totalField = `${metric}__totals`;
+  if (!Object.hasOwn(rows[0] || {}, totalField)) {
+    throw createApiErrorFromMessage(
+      `ShopifyQL did not return ${totalField} for the traffic dimension.`,
+      502,
+    );
+  }
+  return numberValue(rows[0]?.[totalField]);
 }
 
 function readRows(result: OptionalShopifyqlResult, label: string) {

@@ -11,6 +11,7 @@ import {
 } from "@lucide/vue";
 import type {
   DashboardTrafficBreakdown,
+  DashboardTrafficDimensionKey,
   DashboardTrafficRange,
   DashboardTrafficSummary,
 } from "~~/types/dashboard";
@@ -19,13 +20,18 @@ import { resolveDashboardTrafficRangeData } from "~~/utils/dashboard-traffic";
 const props = defineProps<{
   traffic: DashboardTrafficSummary;
   loading?: boolean;
-  insightsLoading?: boolean;
+  loadingInsightDimensions?: string[];
   storeCount: number;
   showInsights?: boolean;
 }>();
 
 const emit = defineEmits<{
-  rangeChange: [range: DashboardTrafficRange];
+  dimensionChange: [
+    request: {
+      range: DashboardTrafficRange;
+      dimension: DashboardTrafficDimensionKey;
+    },
+  ];
 }>();
 
 const { locale, t } = useLocalization();
@@ -73,8 +79,6 @@ const breakdownSegments = computed(() => {
 
   return leadingRows;
 });
-
-watch(range, (value) => emit("rangeChange", value));
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat(locale.value, {
@@ -219,8 +223,10 @@ function formatDuration(value: number) {
       <DashboardTrafficInsights
         v-if="showInsights"
         :data="selectedRangeData"
+        :range="range"
         :range-label="rangeLabel"
-        :loading="insightsLoading"
+        :loading-dimensions="loadingInsightDimensions"
+        @dimension-change="emit('dimensionChange', { range, dimension: $event })"
       />
     </template>
   </article>
@@ -279,7 +285,7 @@ function formatDuration(value: number) {
 
 .traffic-overview-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px;
+  grid-template-columns: minmax(0, 1fr) 58px;
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -295,7 +301,7 @@ function formatDuration(value: number) {
   display: grid;
   gap: 3px;
   min-width: 0;
-  padding: 12px;
+  padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface-soft);
@@ -306,10 +312,9 @@ function formatDuration(value: number) {
   align-items: center;
   gap: 5px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.045em;
-  text-transform: uppercase;
 }
 
 .traffic-metric-grid span svg {
@@ -321,9 +326,11 @@ function formatDuration(value: number) {
 .traffic-metric-grid strong {
   overflow: hidden;
   color: var(--text);
-  font-size: 20px;
+  font-size: 2rem;
+  font-weight: 700;
   line-height: 1.2;
   text-overflow: ellipsis;
+  text-align: center;
 }
 
 .traffic-metric-grid small {
@@ -332,6 +339,7 @@ function formatDuration(value: number) {
   font-size: 8px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: center;
 }
 
 .traffic-content-grid {

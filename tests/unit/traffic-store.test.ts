@@ -1,10 +1,7 @@
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useTrafficStore } from "~/stores/traffic";
-import type {
-  DashboardTrafficDetailRow,
-  DashboardTrafficSummary,
-} from "~~/types/dashboard";
+import type { DashboardTrafficSummary } from "~~/types/dashboard";
 import {
   createTrafficMetrics,
   emptyDashboardTraffic,
@@ -61,14 +58,29 @@ describe("traffic store", () => {
     expect(request).toHaveBeenCalledTimes(3);
   });
 
-  it("loads range details independently without invalidating the overview", async () => {
-    const detail = { source: "Email", sessions: 7 } as DashboardTrafficDetailRow;
+  it("loads one dimension independently without invalidating the overview", async () => {
+    const row = {
+      label: "Email",
+      sessions: 7,
+      visitors: 6,
+      pageviews: 14,
+      pageviewsPerSession: 2,
+      bounces: 2,
+      cartAdditions: 2,
+      reachedCheckouts: 1,
+      completedCheckouts: 1,
+      averageSessionDuration: 60,
+      bounceRate: 2 / 7,
+      conversionRate: 1 / 7,
+    };
     const request = vi.fn((url: string) => {
       if (url === "/api/traffic/details") {
         return Promise.resolve({
           range: "7d",
-          details: [detail],
-          detailLimitReached: false,
+          dimension: "source",
+          rows: [row],
+          totalSessions: 7,
+          hasMore: false,
         });
       }
       return Promise.resolve(trafficFixture(12));
@@ -77,11 +89,15 @@ describe("traffic store", () => {
     const store = useTrafficStore();
 
     expect(await store.fetchTraffic("shop-a", "token-a")).toBe(true);
-    expect(await store.fetchTrafficRange("shop-a", "token-a", "7d")).toBe(true);
+    expect(await store.fetchTrafficDimension("shop-a", "token-a", "7d", "source")).toBe(
+      true,
+    );
 
     expect(store.traffic.available).toBe(true);
-    expect(store.traffic.rangeData["7d"].details[0]?.source).toBe("Email");
-    expect(store.loadedInsightRanges).toContain("7d");
+    expect(store.traffic.rangeData["7d"].dimensions.source?.rows[0]?.label).toBe(
+      "Email",
+    );
+    expect(store.loadedInsightDimensions).toContain("7d:source");
     expect(store.error).toBeNull();
   });
 
@@ -95,10 +111,53 @@ describe("traffic store", () => {
     const store = useTrafficStore();
 
     expect(await store.fetchTraffic("shop-a", "token-a")).toBe(true);
-    expect(await store.fetchTrafficRange("shop-a", "token-a", "24h")).toBe(false);
+    expect(
+      await store.fetchTrafficDimension("shop-a", "token-a", "24h", "country"),
+    ).toBe(false);
 
     expect(store.traffic.available).toBe(true);
     expect(store.error).toBeNull();
     expect(store.insightError).toContain("Detail query exceeded");
+  });
+
+  it("keeps concurrent lazy dimension requests independent", async () => {
+    const request = vi.fn(
+      (
+        url: string,
+        options?: {
+          body: {
+            range: "24h" | "7d" | "30d";
+            dimension: "source" | "country";
+          };
+        },
+      ) => {
+        if (url !== "/api/traffic/details") {
+          return Promise.resolve(trafficFixture(12));
+        }
+        return Promise.resolve({
+          range: options?.body.range,
+          dimension: options?.body.dimension,
+          rows: [],
+          totalSessions: 12,
+          hasMore: false,
+        });
+      },
+    );
+    vi.stubGlobal("$fetch", request);
+    const store = useTrafficStore();
+
+    await store.fetchTraffic("shop-a", "token-a");
+    const [sourceLoaded, countryLoaded] = await Promise.all([
+      store.fetchTrafficDimension("shop-a", "token-a", "24h", "source"),
+      store.fetchTrafficDimension("shop-a", "token-a", "24h", "country"),
+    ]);
+
+    expect(sourceLoaded).toBe(true);
+    expect(countryLoaded).toBe(true);
+    expect(store.loadedInsightDimensions).toEqual(
+      expect.arrayContaining(["24h:source", "24h:country"]),
+    );
+    expect(store.traffic.rangeData["24h"].dimensions.source).toBeDefined();
+    expect(store.traffic.rangeData["24h"].dimensions.country).toBeDefined();
   });
 });

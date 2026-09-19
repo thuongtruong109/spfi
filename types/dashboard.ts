@@ -146,29 +146,31 @@ export interface DashboardTrafficBreakdown {
   visitors: number;
 }
 
-export interface DashboardTrafficDetailRow {
-  source: string;
-  referrerDomain: string;
-  referrerTerms: string;
-  country: string;
-  countryCode: string;
-  region: string;
-  city: string;
-  browser: string;
-  browserVersion: string;
-  operatingSystem: string;
-  operatingSystemVersion: string;
-  deviceType: string;
-  apiClient: string;
-  trafficType: string;
-  platform: string;
-  channel: string;
-  medium: string;
-  landingPageType: string;
-  landingPagePath: string;
-  campaign: string;
-  campaignContent: string;
-  aiReferral: string;
+export type DashboardTrafficDimensionKey =
+  | "source"
+  | "referrerDomain"
+  | "referrerTerms"
+  | "country"
+  | "region"
+  | "city"
+  | "browser"
+  | "browserVersion"
+  | "operatingSystem"
+  | "operatingSystemVersion"
+  | "deviceType"
+  | "apiClient"
+  | "trafficType"
+  | "platform"
+  | "channel"
+  | "medium"
+  | "landingPageType"
+  | "landingPagePath"
+  | "campaign"
+  | "campaignContent"
+  | "aiReferral";
+
+export interface DashboardTrafficDimensionRow {
+  label: string;
   sessions: number;
   visitors: number;
   pageviews: number;
@@ -184,19 +186,27 @@ export interface DashboardTrafficDetailRow {
 
 export type DashboardTrafficRange = "24h" | "7d" | "30d";
 
+export interface DashboardTrafficDimensionResult {
+  rows: DashboardTrafficDimensionRow[];
+  totalSessions: number;
+  hasMore: boolean;
+}
+
+export type DashboardTrafficDimensions = Partial<
+  Record<DashboardTrafficDimensionKey, DashboardTrafficDimensionResult>
+>;
+
 export interface DashboardTrafficRangeData {
   metrics: DashboardTrafficMetrics;
   sources: DashboardTrafficBreakdown[];
   countries: DashboardTrafficBreakdown[];
   devices: DashboardTrafficBreakdown[];
-  details: DashboardTrafficDetailRow[];
-  detailLimitReached: boolean;
+  dimensions: DashboardTrafficDimensions;
 }
 
-export interface DashboardTrafficDetailRangeResponse {
+export interface DashboardTrafficDimensionResponse extends DashboardTrafficDimensionResult {
   range: DashboardTrafficRange;
-  details: DashboardTrafficDetailRow[];
-  detailLimitReached: boolean;
+  dimension: DashboardTrafficDimensionKey;
 }
 
 export interface DashboardTrafficSummary {
@@ -217,8 +227,6 @@ export interface DashboardTrafficSummary {
   landingPages: DashboardTrafficBreakdown[];
   campaigns: DashboardTrafficBreakdown[];
   aiReferrals: DashboardTrafficBreakdown[];
-  details: DashboardTrafficDetailRow[];
-  detailLimitReached: boolean;
   rangeData: Record<DashboardTrafficRange, DashboardTrafficRangeData>;
 }
 

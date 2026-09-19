@@ -7,13 +7,22 @@ import {
   Megaphone,
   MonitorSmartphone,
 } from "@lucide/vue";
-import type { DashboardTrafficRangeData } from "~~/types/dashboard";
+import type {
+  DashboardTrafficDimensionKey,
+  DashboardTrafficRange,
+  DashboardTrafficRangeData,
+} from "~~/types/dashboard";
 import type { DashboardTrafficDimensionOption } from "~~/utils/dashboard-traffic-dimensions";
 
 const props = defineProps<{
   data: DashboardTrafficRangeData;
+  range: DashboardTrafficRange;
   rangeLabel: string;
-  loading?: boolean;
+  loadingDimensions?: string[];
+}>();
+
+const emit = defineEmits<{
+  dimensionChange: [dimension: DashboardTrafficDimensionKey];
 }>();
 
 const { locale, t } = useLocalization();
@@ -110,20 +119,9 @@ function width(value: number) {
         <h3><BarChart3 />{{ t("dashboard.trafficAnalysisTitle") }}</h3>
         <p>{{ t("dashboard.trafficAnalysisSubtitle") }}</p>
       </div>
-      <span v-if="data.detailLimitReached">
-        {{
-          t("dashboard.trafficDetailLimited", {
-            count: data.details.length,
-          })
-        }}
-      </span>
     </header>
 
-    <div v-if="loading" class="traffic-insights-loading" aria-live="polite">
-      {{ t("dashboard.trafficInsightsLoading") }}
-    </div>
-
-    <article v-else class="traffic-funnel-card">
+    <article class="traffic-funnel-card">
       <header>
         <div>
           <h3><Funnel />{{ t("dashboard.trafficFunnelTitle") }}</h3>
@@ -150,38 +148,50 @@ function width(value: number) {
       </div>
     </article>
 
-    <div v-if="!loading" class="traffic-analysis-grid">
+    <div class="traffic-analysis-grid">
       <DashboardTrafficDimensionCard
         :icon="Megaphone"
         :title="t('dashboard.trafficAcquisitionTitle')"
         :subtitle="t('dashboard.trafficAcquisitionIntegratedSubtitle')"
-        :rows="data.details"
+        :dimensions="data.dimensions"
         :options="acquisitionOptions"
+        :range="range"
         :range-label="rangeLabel"
+        :loading-dimensions="loadingDimensions"
+        @dimension-change="emit('dimensionChange', $event)"
       />
       <DashboardTrafficDimensionCard
         :icon="MapPin"
         :title="t('dashboard.trafficAudienceTitle')"
         :subtitle="t('dashboard.trafficAudienceSubtitle')"
-        :rows="data.details"
+        :dimensions="data.dimensions"
         :options="audienceOptions"
+        :range="range"
         :range-label="rangeLabel"
+        :loading-dimensions="loadingDimensions"
+        @dimension-change="emit('dimensionChange', $event)"
       />
       <DashboardTrafficDimensionCard
         :icon="MonitorSmartphone"
         :title="t('dashboard.trafficTechnologyTitle')"
         :subtitle="t('dashboard.trafficTechnologySubtitle')"
-        :rows="data.details"
+        :dimensions="data.dimensions"
         :options="technologyOptions"
+        :range="range"
         :range-label="rangeLabel"
+        :loading-dimensions="loadingDimensions"
+        @dimension-change="emit('dimensionChange', $event)"
       />
       <DashboardTrafficDimensionCard
         :icon="FileText"
         :title="t('dashboard.trafficContentTitle')"
         :subtitle="t('dashboard.trafficContentSubtitle')"
-        :rows="data.details"
+        :dimensions="data.dimensions"
         :options="contentOptions"
+        :range="range"
         :range-label="rangeLabel"
+        :loading-dimensions="loadingDimensions"
+        @dimension-change="emit('dimensionChange', $event)"
       />
     </div>
   </section>
@@ -230,31 +240,10 @@ function width(value: number) {
   line-height: 1.4;
 }
 
-.traffic-analysis-header > span {
-  flex: 0 0 auto;
-  padding: 5px 8px;
-  border-radius: 999px;
-  background: var(--amber-soft);
-  color: var(--amber);
-  font-size: 8px;
-  font-weight: 700;
-}
-
 .traffic-analysis-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
-}
-
-.traffic-insights-loading {
-  display: grid;
-  min-height: 160px;
-  place-items: center;
-  border: 1px dashed var(--border);
-  border-radius: 13px;
-  background: var(--surface-soft);
-  color: var(--muted);
-  font-size: 11px;
 }
 
 .traffic-funnel-card {

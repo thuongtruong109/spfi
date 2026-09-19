@@ -28,8 +28,6 @@ export function emptyDashboardTraffic(): DashboardTrafficSummary {
     landingPages: [],
     campaigns: [],
     aiReferrals: [],
-    details: [],
-    detailLimitReached: false,
     rangeData: {
       "24h": emptyTrafficRangeData(),
       "7d": emptyTrafficRangeData(),
@@ -64,7 +62,6 @@ export function cloneDashboardTraffic(
     landingPages: traffic.landingPages.map((row) => ({ ...row })),
     campaigns: traffic.campaigns.map((row) => ({ ...row })),
     aiReferrals: traffic.aiReferrals.map((row) => ({ ...row })),
-    details: traffic.details.map((row) => ({ ...row })),
     rangeData: {
       "24h": cloneTrafficRangeData(range24Hours),
       "7d": cloneTrafficRangeData(range7Days),
@@ -91,8 +88,7 @@ export function resolveDashboardTrafficRangeData(
     sources: traffic.sources || [],
     countries: traffic.countries || [],
     devices: traffic.devices || [],
-    details: traffic.details || [],
-    detailLimitReached: Boolean(traffic.detailLimitReached),
+    dimensions: {},
   };
 }
 
@@ -152,8 +148,6 @@ export function aggregateDashboardTraffic(
     landingPages: aggregateBreakdowns(available.flatMap((item) => item.landingPages)),
     campaigns: aggregateBreakdowns(available.flatMap((item) => item.campaigns)),
     aiReferrals: aggregateBreakdowns(available.flatMap((item) => item.aiReferrals)),
-    details: [],
-    detailLimitReached: false,
     rangeData: {
       "24h": aggregateTrafficRangeData(
         available.map((item) => resolveDashboardTrafficRangeData(item, "24h")),
@@ -196,7 +190,6 @@ export function isDashboardTrafficAvailable(traffic: DashboardTrafficSummary) {
       traffic.sources,
       traffic.countries,
       traffic.devices,
-      traffic.details,
     ].some((rows) => Array.isArray(rows) && rows.length > 0)
   );
 }
@@ -207,8 +200,7 @@ function emptyTrafficRangeData(): DashboardTrafficRangeData {
     sources: [],
     countries: [],
     devices: [],
-    details: [],
-    detailLimitReached: false,
+    dimensions: {},
   };
 }
 
@@ -220,8 +212,17 @@ function cloneTrafficRangeData(
     sources: range.sources.map((row) => ({ ...row })),
     countries: range.countries.map((row) => ({ ...row })),
     devices: range.devices.map((row) => ({ ...row })),
-    details: range.details.map((row) => ({ ...row })),
-    detailLimitReached: range.detailLimitReached,
+    dimensions: Object.fromEntries(
+      Object.entries(range.dimensions || {}).map(([dimension, result]) => [
+        dimension,
+        result
+          ? {
+              ...result,
+              rows: result.rows.map((row) => ({ ...row })),
+            }
+          : result,
+      ]),
+    ),
   };
 }
 
@@ -233,8 +234,7 @@ function aggregateTrafficRangeData(
     sources: aggregateBreakdowns(ranges.flatMap((range) => range.sources)),
     countries: aggregateBreakdowns(ranges.flatMap((range) => range.countries)),
     devices: aggregateBreakdowns(ranges.flatMap((range) => range.devices)),
-    details: [],
-    detailLimitReached: ranges.some((range) => range.detailLimitReached),
+    dimensions: {},
   };
 }
 

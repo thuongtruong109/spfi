@@ -10,6 +10,26 @@ function input(): TrafficExportInput {
   const data = emptyDashboardTraffic().rangeData["7d"];
   data.metrics.sessions = 42;
   data.sources = [{ label: "Search & Social", sessions: 30, visitors: 24 }];
+  data.dimensions.source = {
+    rows: [
+      {
+        label: "Search & Social",
+        sessions: 30,
+        visitors: 24,
+        pageviews: 60,
+        pageviewsPerSession: 2,
+        bounces: 6,
+        cartAdditions: 5,
+        reachedCheckouts: 4,
+        completedCheckouts: 3,
+        averageSessionDuration: 70,
+        bounceRate: 0.2,
+        conversionRate: 0.1,
+      },
+    ],
+    totalSessions: 42,
+    hasMore: true,
+  };
   return {
     data,
     points: [{ period: "2026-09-19", sessions: 42, visitors: 30, pageviews: 90 }],
@@ -41,6 +61,8 @@ describe("traffic export", () => {
     expect(payload.range).toBe("Last 7 days");
     expect(payload.metrics.sessions).toBe(42);
     expect(payload.breakdowns.sources[0]?.label).toBe("Search & Social");
+    expect(payload.dimensions.source?.totalSessions).toBe(42);
+    expect(payload.dimensions.source?.hasMore).toBe(true);
     expect(payload.trend).toHaveLength(1);
   });
 

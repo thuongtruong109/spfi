@@ -723,7 +723,8 @@ const messages: Record<MessageKey, string> = {
   "dashboard.trafficExportHtml": "Báo cáo HTML",
   "dashboard.trafficExportHtmlDetail": "Báo cáo độc lập kèm bảng dữ liệu",
   "dashboard.trafficExportJson": "Dữ liệu JSON",
-  "dashboard.trafficExportJsonDetail": "Toàn bộ dữ liệu theo khoảng đang chọn",
+  "dashboard.trafficExportJsonDetail":
+    "Tổng quan và các dimension đã tải trong khoảng đang chọn",
   "dashboard.trafficExportSuccess": "Đã xuất traffic dạng {format}.",
   "dashboard.trafficExportFailed": "Không thể xuất traffic.",
   "dashboard.trafficInsightsLoading": "Đang tải phân tích traffic chi tiết…",
@@ -778,6 +779,7 @@ const messages: Record<MessageKey, string> = {
     "Đo lường landing path, loại trang, chiến dịch UTM và nội dung chiến dịch.",
   "dashboard.trafficDimension": "Chiều phân tích",
   "dashboard.trafficDimensionValues": "{count} giá trị",
+  "dashboard.trafficDimensionValuesMore": "Top {count}+ giá trị",
   "dashboard.trafficDimensionChartLabel": "Phân bổ session hàng đầu của {title}",
   "dashboard.trafficDimensionShowAll": "Hiện tất cả {count} giá trị",
   "dashboard.trafficDimensionShowLess": "Thu gọn danh sách",

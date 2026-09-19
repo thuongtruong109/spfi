@@ -3,7 +3,8 @@ import { ref } from "vue";
 import { usePerStoreCache } from "~/composables/usePerStoreCache";
 import { useLocalizationStore } from "~/stores/localization";
 import type {
-  DashboardTrafficDetailRangeResponse,
+  DashboardTrafficDimensionKey,
+  DashboardTrafficDimensionResponse,
   DashboardTrafficRange,
   DashboardTrafficSummary,
 } from "~~/types/dashboard";
@@ -11,12 +12,13 @@ import {
   cloneDashboardTraffic,
   emptyDashboardTraffic,
 } from "~~/utils/dashboard-traffic";
+import { trafficDimensionRequestKey } from "~~/utils/dashboard-traffic-dimensions";
 import { getAppErrorMessage } from "~~/utils/error";
 
 interface TrafficStoreCache {
   traffic: DashboardTrafficSummary;
   hasFetched: boolean;
-  loadedInsightRanges: DashboardTrafficRange[];
+  loadedInsightDimensions: string[];
 }
 
 export const useTrafficStore = defineStore("traffic", () => {
@@ -24,26 +26,28 @@ export const useTrafficStore = defineStore("traffic", () => {
   const traffic = ref<DashboardTrafficSummary>(emptyDashboardTraffic());
   const hasFetched = ref(false);
   const isLoading = ref(false);
-  const loadingInsightRange = ref<DashboardTrafficRange | null>(null);
-  const loadedInsightRanges = ref<DashboardTrafficRange[]>([]);
+  const loadingInsightDimensions = ref<string[]>([]);
+  const loadedInsightDimensions = ref<string[]>([]);
   const error = ref<string | null>(null);
   const insightError = ref<string | null>(null);
   let scopeVersion = 0;
   let requestSequence = 0;
   let insightRequestSequence = 0;
+  const activeInsightRequests = new Map<string, number>();
 
   const cache = usePerStoreCache<TrafficStoreCache>({
     capture: () => ({
       traffic: cloneDashboardTraffic(traffic.value),
       hasFetched: hasFetched.value,
-      loadedInsightRanges: [...loadedInsightRanges.value],
+      loadedInsightDimensions: [...loadedInsightDimensions.value],
     }),
     restore: (snapshot) => {
       traffic.value = cloneDashboardTraffic(snapshot.traffic);
       hasFetched.value = snapshot.hasFetched;
-      loadedInsightRanges.value = [...(snapshot.loadedInsightRanges || [])];
+      loadedInsightDimensions.value = [...(snapshot.loadedInsightDimensions || [])];
       isLoading.value = false;
-      loadingInsightRange.value = null;
+      loadingInsightDimensions.value = [];
+      activeInsightRequests.clear();
       error.value = null;
       insightError.value = null;
     },
@@ -52,6 +56,7 @@ export const useTrafficStore = defineStore("traffic", () => {
       scopeVersion += 1;
       requestSequence += 1;
       insightRequestSequence += 1;
+      activeInsightRequests.clear();
     },
   });
 
@@ -78,7 +83,9 @@ export const useTrafficStore = defineStore("traffic", () => {
 
       traffic.value = cloneDashboardTraffic(response);
       hasFetched.value = true;
-      loadedInsightRanges.value = [];
+      loadedInsightDimensions.value = [];
+      loadingInsightDimensions.value = [];
+      activeInsightRequests.clear();
       cache.remember(storeId);
       return true;
     } catch (requestError) {
@@ -94,57 +101,65 @@ export const useTrafficStore = defineStore("traffic", () => {
     }
   }
 
-  async function fetchTrafficRange(
+  async function fetchTrafficDimension(
     storeId: string,
     token: string,
     range: DashboardTrafficRange,
+    dimension: DashboardTrafficDimensionKey,
     force = false,
   ) {
     if (!storeId || !token) return false;
 
     cache.activate(storeId);
-    if (loadedInsightRanges.value.includes(range) && !force) return true;
+    const requestKey = trafficDimensionRequestKey(range, dimension);
+    if (loadedInsightDimensions.value.includes(requestKey) && !force) return true;
+    if (loadingInsightDimensions.value.includes(requestKey) && !force) return true;
 
     const requestVersion = scopeVersion;
     const requestId = ++insightRequestSequence;
-    loadingInsightRange.value = range;
+    activeInsightRequests.set(requestKey, requestId);
+    loadingInsightDimensions.value = Array.from(
+      new Set([...loadingInsightDimensions.value, requestKey]),
+    );
     insightError.value = null;
 
     try {
-      const response = await $fetch<DashboardTrafficDetailRangeResponse>(
+      const response = await $fetch<DashboardTrafficDimensionResponse>(
         "/api/traffic/details",
         {
           method: "POST",
-          body: { storeId, token, range },
+          body: { storeId, token, range, dimension },
         },
       );
-      if (!isInsightActive(storeId, requestVersion, requestId)) return false;
+      if (!isInsightActive(storeId, requestVersion, requestKey, requestId)) {
+        return false;
+      }
 
       const rangeData = traffic.value.rangeData[response.range];
       traffic.value = {
         ...traffic.value,
-        ...(response.range === "30d"
-          ? {
-              details: response.details,
-              detailLimitReached: response.detailLimitReached,
-            }
-          : {}),
         rangeData: {
           ...traffic.value.rangeData,
           [response.range]: {
             ...rangeData,
-            details: response.details,
-            detailLimitReached: response.detailLimitReached,
+            dimensions: {
+              ...rangeData.dimensions,
+              [response.dimension]: {
+                rows: response.rows,
+                totalSessions: response.totalSessions,
+                hasMore: response.hasMore,
+              },
+            },
           },
         },
       };
-      loadedInsightRanges.value = Array.from(
-        new Set([...loadedInsightRanges.value, response.range]),
+      loadedInsightDimensions.value = Array.from(
+        new Set([...loadedInsightDimensions.value, requestKey]),
       );
       cache.remember(storeId);
       return true;
     } catch (requestError) {
-      if (isInsightActive(storeId, requestVersion, requestId)) {
+      if (isInsightActive(storeId, requestVersion, requestKey, requestId)) {
         insightError.value = getAppErrorMessage(
           requestError,
           localizationStore.t("traffic.errorInsights"),
@@ -152,8 +167,11 @@ export const useTrafficStore = defineStore("traffic", () => {
       }
       return false;
     } finally {
-      if (isInsightActive(storeId, requestVersion, requestId)) {
-        loadingInsightRange.value = null;
+      if (isInsightActive(storeId, requestVersion, requestKey, requestId)) {
+        activeInsightRequests.delete(requestKey);
+        loadingInsightDimensions.value = loadingInsightDimensions.value.filter(
+          (key) => key !== requestKey,
+        );
       }
     }
   }
@@ -166,10 +184,15 @@ export const useTrafficStore = defineStore("traffic", () => {
     );
   }
 
-  function isInsightActive(storeId: string, requestVersion: number, requestId: number) {
+  function isInsightActive(
+    storeId: string,
+    requestVersion: number,
+    requestKey: string,
+    requestId: number,
+  ) {
     return (
       scopeVersion === requestVersion &&
-      insightRequestSequence === requestId &&
+      activeInsightRequests.get(requestKey) === requestId &&
       cache.isActive(storeId)
     );
   }
@@ -178,8 +201,9 @@ export const useTrafficStore = defineStore("traffic", () => {
     traffic.value = emptyDashboardTraffic();
     hasFetched.value = false;
     isLoading.value = false;
-    loadingInsightRange.value = null;
-    loadedInsightRanges.value = [];
+    loadingInsightDimensions.value = [];
+    loadedInsightDimensions.value = [];
+    activeInsightRequests.clear();
     error.value = null;
     insightError.value = null;
   }
@@ -195,13 +219,13 @@ export const useTrafficStore = defineStore("traffic", () => {
     traffic,
     hasFetched,
     isLoading,
-    loadingInsightRange,
-    loadedInsightRanges,
+    loadingInsightDimensions,
+    loadedInsightDimensions,
     error,
     insightError,
     isStoreActive: cache.isActive,
     fetchTraffic,
-    fetchTrafficRange,
+    fetchTrafficDimension,
     hydrate: cache.hydrate,
     evictStore: cache.evict,
     $reset,

@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { Braces, ChevronDown, CodeXml, Download, Image } from "@lucide/vue";
+import { Braces, CodeXml, Download, Image } from "@lucide/vue";
+import {
+  useTrafficExport,
+  type TrafficExportFormat,
+} from "~/composables/useTrafficExport";
 import type {
   DashboardTrafficPoint,
   DashboardTrafficRange,
   DashboardTrafficRangeData,
 } from "~~/types/dashboard";
-import {
-  useTrafficExport,
-  type TrafficExportFormat,
-} from "~/composables/useTrafficExport";
 
 const props = defineProps<{
   data: DashboardTrafficRangeData;
@@ -67,8 +67,11 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
 
 <template>
   <aside class="traffic-controls">
-    <span class="traffic-controls-label">{{ t("dashboard.trafficRange") }}</span>
-    <div class="traffic-range-tabs" :aria-label="t('dashboard.trafficRange')">
+    <div
+      class="traffic-range-tabs"
+      role="group"
+      :aria-label="t('dashboard.trafficRange')"
+    >
       <button
         v-for="option in rangeOptions"
         :key="option.value"
@@ -81,16 +84,18 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
       </button>
     </div>
 
-    <BasePopover align="right">
+    <BasePopover class="traffic-export-popover" align="right">
       <template #trigger="{ triggerProps }">
         <BaseButton
           v-bind="triggerProps"
           class="traffic-export-trigger"
           size="medium"
-          :disabled="isExporting"
+          icon-only
+          :loading="isExporting"
+          :aria-label="t('dashboard.trafficExport')"
+          :title="t('dashboard.trafficExport')"
         >
           <template #icon><Download /></template>
-          {{ t("dashboard.trafficExport") }} <ChevronDown />
         </BaseButton>
       </template>
       <template #default="{ close }">
@@ -117,28 +122,17 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
 
 <style scoped>
 .traffic-controls {
-  display: flex;
+  display: grid;
+  width: 38px;
   min-width: 0;
-  flex-direction: column;
-  justify-content: center;
-  gap: 9px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface-soft);
-}
-
-.traffic-controls-label {
-  color: var(--muted);
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.045em;
-  text-transform: uppercase;
+  align-content: center;
+  justify-self: end;
+  gap: 6px;
 }
 
 .traffic-range-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--border);
@@ -147,9 +141,8 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
 }
 
 .traffic-range-tabs button {
-  min-width: 0;
-  min-height: 28px;
-  padding: 0 5px;
+  min-height: 32px;
+  padding: 0 2px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -176,25 +169,22 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
 }
 
 .traffic-export-trigger {
-  width: 100%;
-  justify-content: center;
+  width: 100% !important;
   border-radius: 9px;
-  font-size: 10px;
 }
 
-.traffic-export-trigger :deep(.button-label) {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.traffic-export-popover {
+  width: 100%;
 }
 
-.traffic-export-trigger :deep(.button-label svg:last-child) {
-  width: 11px;
+.traffic-export-popover :deep(.popover-trigger) {
+  display: flex;
+  width: 100%;
 }
 
 .traffic-export-menu {
   display: grid;
-  width: 270px;
+  width: 220px;
   padding: 6px;
 }
 
@@ -203,7 +193,7 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
   grid-template-columns: 34px 1fr;
   align-items: center;
   gap: 9px;
-  padding: 9px;
+  padding: 6px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -250,19 +240,5 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
 .traffic-export-menu small {
   color: var(--muted);
   font-size: 9px;
-}
-
-@media (max-width: 1120px) {
-  .traffic-controls {
-    display: grid;
-    grid-template-columns: auto minmax(190px, 1fr) minmax(150px, 210px);
-    align-items: center;
-  }
-}
-
-@media (max-width: 620px) {
-  .traffic-controls {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

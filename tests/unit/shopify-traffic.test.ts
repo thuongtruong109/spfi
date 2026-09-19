@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   DASHBOARD_TRAFFIC_QUERY,
-  TRAFFIC_DETAILS_QUERY,
-  buildTrafficDetailQueryVariables,
+  TRAFFIC_DIMENSION_QUERY,
+  buildTrafficDimensionQueryVariables,
   buildTrafficQueryVariables,
-  parseShopifyTrafficDetailsResponse,
+  isDashboardTrafficDimensionKey,
+  parseShopifyTrafficDimensionResponse,
   parseShopifyTrafficResponse,
 } from "~~/server/utils/shopify-traffic";
 
@@ -18,7 +19,7 @@ function result(rows: Array<Record<string, unknown>>) {
 }
 
 describe("Shopify traffic analytics", () => {
-  it("builds bounded human-traffic queries", () => {
+  it("builds bounded human-traffic overview queries", () => {
     const queries = buildTrafficQueryVariables();
 
     expect(queries.today).toContain("DURING today");
@@ -28,7 +29,6 @@ describe("Shopify traffic analytics", () => {
     expect(queries.hourly).toContain("TIMESERIES hour");
     expect(queries.daily).toContain("TIMESERIES day");
     expect(queries.today).toContain("sessions_with_cart_additions");
-    expect(queries.today).toContain("sessions_that_reached_checkout");
     expect(queries.sources24Hours).toContain("SINCE -24h UNTIL now");
     expect(queries.countries7Days).toContain("SINCE -6d UNTIL now");
     expect(
@@ -36,24 +36,32 @@ describe("Shopify traffic analytics", () => {
         query.includes("human_or_bot_session = 'human'"),
       ),
     ).toBe(true);
-
-    const details24Hours = buildTrafficDetailQueryVariables("24h").details;
-    const details7Days = buildTrafficDetailQueryVariables("7d").details;
-    const details30Days = buildTrafficDetailQueryVariables("30d").details;
-    expect(details30Days).toContain("GROUP BY referrer_source");
-    expect(details30Days).toContain("session_device_browser_version");
-    expect(details30Days).toContain("sessions_with_cart_additions");
-    expect(details30Days).toContain("ORDER BY sessions DESC");
-    expect(details30Days).toContain("LIMIT 250");
-    expect(details24Hours).toContain("SINCE -24h UNTIL now");
-    expect(details7Days).toContain("SINCE -6d UNTIL now");
-    expect(details30Days).toContain("human_or_bot_session = 'human'");
-    expect(DASHBOARD_TRAFFIC_QUERY).not.toContain("$details");
-    expect(TRAFFIC_DETAILS_QUERY).toContain("$details");
-    expect(TRAFFIC_DETAILS_QUERY).not.toContain("$daily");
+    expect(DASHBOARD_TRAFFIC_QUERY).not.toContain("$dimension");
   });
 
-  it("maps ShopifyQL table rows and derives rates safely", () => {
+  it("builds one whitelisted dimension query with totals and an overflow row", () => {
+    const source = buildTrafficDimensionQueryVariables("30d", "source").dimension;
+    const browser = buildTrafficDimensionQueryVariables(
+      "7d",
+      "browserVersion",
+    ).dimension;
+
+    expect(source).toContain("GROUP BY referrer_source WITH TOTALS");
+    expect(source).not.toContain("session_country");
+    expect(source).toContain("sessions_with_cart_additions");
+    expect(source).toContain("ORDER BY sessions DESC, referrer_source ASC");
+    expect(source).toContain("LIMIT 251");
+    expect(source).toContain("SINCE -29d UNTIL now");
+    expect(source).toContain("human_or_bot_session = 'human'");
+    expect(browser).toContain("GROUP BY session_device_browser_version WITH TOTALS");
+    expect(browser).toContain("SINCE -6d UNTIL now");
+    expect(TRAFFIC_DIMENSION_QUERY).toContain("$dimension");
+    expect(TRAFFIC_DIMENSION_QUERY).not.toContain("$daily");
+    expect(isDashboardTrafficDimensionKey("campaign")).toBe(true);
+    expect(isDashboardTrafficDimensionKey("source, session_country")).toBe(false);
+  });
+
+  it("maps ShopifyQL overview rows and derives rates safely", () => {
     const traffic = parseShopifyTrafficResponse({
       today: result([
         {
@@ -117,16 +125,6 @@ describe("Shopify traffic analytics", () => {
       trafficTypes: result([
         { traffic_type: "Organic", sessions: "6", online_store_visitors: "5" },
       ]),
-      platforms: result([
-        { referring_platform: "Google", sessions: "6", online_store_visitors: "5" },
-      ]),
-      browsers: result([
-        {
-          session_device_browser: "Chrome",
-          sessions: "7",
-          online_store_visitors: "6",
-        },
-      ]),
       landingPages: result([{ landing_page_path: "/products/tee", sessions: "4" }]),
       campaigns: result([
         { utm_campaign: "spring", sessions: "3" },
@@ -136,58 +134,6 @@ describe("Shopify traffic analytics", () => {
         tableData: null,
         parseErrors: ["Dimension unavailable on this API version"],
       },
-      details: result([
-        {
-          referrer_source: "Facebook",
-          referrer_domain: "facebook.com",
-          session_country: "Vietnam",
-          session_country_code: "VN",
-          session_region: "Ho Chi Minh",
-          session_city: "Ho Chi Minh City",
-          session_device_browser: "Chrome Mobile",
-          session_device_browser_version: "140",
-          session_device_os: "Android",
-          session_device_os_version: "15",
-          session_device_type: "Mobile",
-          session_api_client: "online_store",
-          traffic_type: "Paid",
-          referring_platform: "Meta",
-          referring_channel: "Social",
-          referring_medium: "social",
-          landing_page_type: "product",
-          landing_page_path: "/products/tee",
-          utm_campaign: "spring",
-          utm_content: "hero-a",
-          sessions: "5",
-          online_store_visitors: "4",
-          pageviews: "12",
-          bounces: "2",
-          sessions_with_cart_additions: "3",
-          sessions_that_reached_checkout: "2",
-          sessions_that_completed_checkout: "1",
-          average_session_duration: "82",
-        },
-      ]),
-      details24Hours: result([
-        {
-          referrer_source: "Direct",
-          session_country: "Vietnam",
-          session_device_type: "Mobile",
-          sessions: "8",
-          online_store_visitors: "7",
-          pageviews: "18",
-        },
-      ]),
-      details7Days: result([
-        {
-          referrer_source: "Email",
-          session_country: "Vietnam",
-          session_device_type: "Desktop",
-          sessions: "20",
-          online_store_visitors: "16",
-          pageviews: "42",
-        },
-      ]),
     });
 
     expect(traffic.available).toBe(true);
@@ -197,34 +143,56 @@ describe("Shopify traffic analytics", () => {
       pageviews: 25,
       pageviewsPerSession: 2.5,
       bounceRate: 0.4,
-      cartAdditions: 5,
-      reachedCheckouts: 3,
       conversionRate: 0.2,
       averageSessionDuration: 75.5,
     });
     expect(traffic.hourly[0]).toMatchObject({ sessions: 3, visitors: 2 });
     expect(traffic.last24Hours.sessions).toBe(12);
     expect(traffic.rangeData["24h"].sources[0]?.label).toBe("Direct");
-    expect(traffic.rangeData["7d"].details[0]).toMatchObject({
-      source: "Email",
-      sessions: 20,
-    });
     expect(traffic.rangeData["30d"].metrics.sessions).toBe(300);
+    expect(traffic.rangeData["30d"].dimensions).toEqual({});
     expect(traffic.sources[1]?.label).toBe("Direct / unknown");
     expect(traffic.trafficTypes[0]?.label).toBe("Organic");
-    expect(traffic.landingPages[0]?.label).toBe("/products/tee");
     expect(traffic.campaigns).toHaveLength(1);
     expect(traffic.aiReferrals).toEqual([]);
-    expect(traffic.details[0]).toMatchObject({
-      source: "Facebook",
-      countryCode: "VN",
-      browser: "Chrome Mobile",
-      operatingSystem: "Android",
-      sessions: 5,
-      bounceRate: 0.4,
-      conversionRate: 0.2,
+  });
+
+  it("returns exactly 250 dimension rows and detects only a real overflow row", () => {
+    const makeRows = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        referrer_source: `Source ${index}`,
+        sessions: count - index,
+        sessions__totals: 40_000,
+        online_store_visitors: count - index - 1,
+        pageviews: (count - index) * 2,
+        bounces: 1,
+        sessions_that_completed_checkout: 1,
+        average_session_duration: 60,
+      }));
+
+    const exact = parseShopifyTrafficDimensionResponse(
+      { dimension: result(makeRows(250)) },
+      "30d",
+      "source",
+    );
+    const truncated = parseShopifyTrafficDimensionResponse(
+      { dimension: result(makeRows(251)) },
+      "30d",
+      "source",
+    );
+
+    expect(exact.rows).toHaveLength(250);
+    expect(exact.hasMore).toBe(false);
+    expect(truncated.rows).toHaveLength(250);
+    expect(truncated.hasMore).toBe(true);
+    expect(truncated.totalSessions).toBe(40_000);
+    expect(truncated.rows[0]).toMatchObject({
+      label: "Source 0",
+      sessions: 251,
+      pageviewsPerSession: 2,
+      bounceRate: 1 / 251,
+      conversionRate: 1 / 251,
     });
-    expect(traffic.detailLimitReached).toBe(false);
   });
 
   it("keeps valid overview data when individual ShopifyQL aliases fail", () => {
@@ -260,17 +228,26 @@ describe("Shopify traffic analytics", () => {
     expect(traffic.availableStores).toBe(0);
   });
 
-  it("surfaces detail parse errors without invalidating overview parsing", () => {
+  it("surfaces dimension parse errors and missing totals", () => {
     expect(() =>
-      parseShopifyTrafficDetailsResponse(
+      parseShopifyTrafficDimensionResponse(
         {
-          details: {
+          dimension: {
             tableData: null,
             parseErrors: ["Response is too large"],
           },
         },
         "24h",
+        "country",
       ),
     ).toThrow(/Response is too large/);
+
+    expect(() =>
+      parseShopifyTrafficDimensionResponse(
+        { dimension: result([{ session_country: "Vietnam", sessions: 2 }]) },
+        "24h",
+        "country",
+      ),
+    ).toThrow(/sessions__totals/);
   });
 });
