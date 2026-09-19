@@ -116,7 +116,6 @@ const messages: Partial<Record<MessageKey, string>> = {
   "dashboard.openManager": "ストア管理を開く",
   "dashboard.cachedAt": "{time} にキャッシュ",
   "dashboard.refreshAll": "すべてのストアを更新",
-  "dashboard.loadGateEyebrow": "オンデマンドダッシュボード",
   "dashboard.loadGateTitle": "ダッシュボードデータを読み込みますか？",
   "dashboard.loadGateDescription":
     "保存済み {count} ストアのうち読み込むストアと、読み込むデータサービスを選択します。",

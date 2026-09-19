@@ -110,7 +110,6 @@ const messages: Partial<Record<MessageKey, string>> = {
   "dashboard.openManager": "打开店铺管理",
   "dashboard.cachedAt": "缓存时间 {time}",
   "dashboard.refreshAll": "刷新全部店铺",
-  "dashboard.loadGateEyebrow": "按需仪表板",
   "dashboard.loadGateTitle": "加载仪表板数据？",
   "dashboard.loadGateDescription":
     "选择要从 {count} 个已保存店铺中加载的店铺，以及需要加载的数据服务。",

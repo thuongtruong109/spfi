@@ -643,7 +643,6 @@ const messages: Record<MessageKey, string> = {
   "dashboard.openManager": "Mở quản lý store",
   "dashboard.cachedAt": "Đã lưu lúc {time}",
   "dashboard.refreshAll": "Làm mới tất cả store",
-  "dashboard.loadGateEyebrow": "Dashboard theo yêu cầu",
   "dashboard.loadGateTitle": "Tải dữ liệu Dashboard?",
   "dashboard.loadGateDescription":
     "Chọn store và dịch vụ dữ liệu cần tải trong tổng số {count} store đã lưu.",

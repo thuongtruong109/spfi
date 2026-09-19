@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { LayoutDashboard } from "@lucide/vue";
+import {
+  Boxes,
+  CheckCheck,
+  CirclePlay,
+  Eraser,
+  LayoutDashboard,
+  Store,
+} from "@lucide/vue";
 import { computed, ref, watch } from "vue";
 import {
   DASHBOARD_SERVICES,
   type DashboardLoadOptions,
   type DashboardService,
 } from "~~/types/dashboard";
+import { useDocumentScrollLock } from "~/composables/useDocumentScrollLock";
 
 const props = defineProps<{
   stores: Array<{ id: string; label: string }>;
@@ -20,8 +28,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useLocalization();
-const storeMode = ref<"all" | "selected">("all");
-const serviceMode = ref<"all" | "selected">("all");
+useDocumentScrollLock();
 const selectedStoreIds = ref<string[]>(props.stores.map((store) => store.id));
 const selectedServices = ref<DashboardService[]>([...DASHBOARD_SERVICES]);
 const availableStoreIds = ref(props.stores.map((store) => store.id));
@@ -32,14 +39,8 @@ const serviceOptions = computed<Array<{ id: DashboardService; label: string }>>(
     label: t(`dashboard.loadGateService.${id}`),
   })),
 );
-const targetStoreCount = computed(() =>
-  storeMode.value === "all" ? props.stores.length : selectedStoreIds.value.length,
-);
-const targetServiceCount = computed(() =>
-  serviceMode.value === "all"
-    ? DASHBOARD_SERVICES.length
-    : selectedServices.value.length,
-);
+const targetStoreCount = computed(() => selectedStoreIds.value.length);
+const targetServiceCount = computed(() => selectedServices.value.length);
 const canConfirm = computed(
   () => targetStoreCount.value > 0 && targetServiceCount.value > 0 && !props.loading,
 );
@@ -81,12 +82,8 @@ function toggleService(service: DashboardService, event: Event) {
 function confirmLoad() {
   if (!canConfirm.value) return;
   emit("confirm", {
-    storeIds:
-      storeMode.value === "all"
-        ? props.stores.map((store) => store.id)
-        : selectedStoreIds.value,
-    services:
-      serviceMode.value === "all" ? [...DASHBOARD_SERVICES] : selectedServices.value,
+    storeIds: selectedStoreIds.value,
+    services: selectedServices.value,
   });
 }
 </script>
@@ -103,9 +100,6 @@ function confirmLoad() {
       <span class="dashboard-load-gate-icon" aria-hidden="true">
         <LayoutDashboard />
       </span>
-      <p class="dashboard-load-gate-eyebrow">
-        {{ t("dashboard.loadGateEyebrow") }}
-      </p>
       <h1 id="dashboard-load-gate-title">
         {{ t("dashboard.loadGateTitle") }}
       </h1>
@@ -115,37 +109,27 @@ function confirmLoad() {
 
       <div class="dashboard-load-options">
         <fieldset :disabled="loading">
-          <legend>{{ t("dashboard.loadGateStores") }}</legend>
-          <div class="dashboard-load-segments">
-            <button
-              type="button"
-              :class="{ active: storeMode === 'all' }"
-              :aria-pressed="storeMode === 'all'"
-              @click="storeMode = 'all'"
-            >
-              {{ t("dashboard.loadGateAllStores") }}
-            </button>
-            <button
-              type="button"
-              :class="{ active: storeMode === 'selected' }"
-              :aria-pressed="storeMode === 'selected'"
-              @click="storeMode = 'selected'"
-            >
-              {{ t("dashboard.loadGateSelectedStores") }}
-            </button>
-          </div>
-          <div v-if="storeMode === 'selected'" class="dashboard-load-checklist">
+          <legend class="sr-only">{{ t("dashboard.loadGateStores") }}</legend>
+          <div class="dashboard-load-option-header">
+            <span class="dashboard-load-option-title">
+              <Store aria-hidden="true" />
+              {{ t("dashboard.loadGateStores") }}
+            </span>
             <div class="dashboard-load-checklist-actions">
               <button
                 type="button"
                 @click="selectedStoreIds = stores.map((store) => store.id)"
               >
+                <CheckCheck aria-hidden="true" />
                 {{ t("dashboard.loadGateSelectAll") }}
               </button>
               <button type="button" @click="selectedStoreIds = []">
+                <Eraser aria-hidden="true" />
                 {{ t("dashboard.loadGateClear") }}
               </button>
             </div>
+          </div>
+          <div class="dashboard-load-checklist">
             <label v-for="store in stores" :key="store.id">
               <input
                 type="checkbox"
@@ -158,34 +142,24 @@ function confirmLoad() {
         </fieldset>
 
         <fieldset :disabled="loading">
-          <legend>{{ t("dashboard.loadGateServices") }}</legend>
-          <div class="dashboard-load-segments">
-            <button
-              type="button"
-              :class="{ active: serviceMode === 'all' }"
-              :aria-pressed="serviceMode === 'all'"
-              @click="serviceMode = 'all'"
-            >
-              {{ t("dashboard.loadGateAllServices") }}
-            </button>
-            <button
-              type="button"
-              :class="{ active: serviceMode === 'selected' }"
-              :aria-pressed="serviceMode === 'selected'"
-              @click="serviceMode = 'selected'"
-            >
-              {{ t("dashboard.loadGateSelectedServices") }}
-            </button>
-          </div>
-          <div v-if="serviceMode === 'selected'" class="dashboard-load-checklist">
+          <legend class="sr-only">{{ t("dashboard.loadGateServices") }}</legend>
+          <div class="dashboard-load-option-header">
+            <span class="dashboard-load-option-title">
+              <Boxes aria-hidden="true" />
+              {{ t("dashboard.loadGateServices") }}
+            </span>
             <div class="dashboard-load-checklist-actions">
               <button type="button" @click="selectedServices = [...DASHBOARD_SERVICES]">
+                <CheckCheck aria-hidden="true" />
                 {{ t("dashboard.loadGateSelectAll") }}
               </button>
               <button type="button" @click="selectedServices = []">
+                <Eraser aria-hidden="true" />
                 {{ t("dashboard.loadGateClear") }}
               </button>
             </div>
+          </div>
+          <div class="dashboard-load-checklist dashboard-load-service-list">
             <label v-for="service in serviceOptions" :key="service.id">
               <input
                 type="checkbox"
@@ -235,6 +209,7 @@ function confirmLoad() {
         :disabled="!canConfirm"
         @click="confirmLoad"
       >
+        <template #icon><CirclePlay aria-hidden="true" /></template>
         {{ loading ? t("dashboard.loadGateLoading") : t("dashboard.loadGateAction") }}
       </BaseButton>
     </div>
@@ -253,6 +228,7 @@ function confirmLoad() {
   border-radius: 18px;
   background: color-mix(in srgb, var(--bg) 48%, transparent);
   backdrop-filter: blur(8px);
+  overscroll-behavior: contain;
 }
 
 .dashboard-load-gate-card {
@@ -285,15 +261,6 @@ function confirmLoad() {
   height: 25px;
 }
 
-.dashboard-load-gate-eyebrow {
-  margin: 0 0 7px;
-  color: var(--green);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .dashboard-load-gate-card h1 {
   margin: 0;
   color: var(--text);
@@ -320,30 +287,41 @@ function confirmLoad() {
 .dashboard-load-options fieldset {
   min-width: 0;
   margin: 0;
-  padding: 12px;
+  padding: 11px 12px 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface-raised);
 }
 
-.dashboard-load-options legend {
-  padding: 0 5px;
+.dashboard-load-option-header,
+.dashboard-load-option-title,
+.dashboard-load-checklist-actions button {
+  display: flex;
+  align-items: center;
+}
+
+.dashboard-load-option-header {
+  min-height: 24px;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dashboard-load-option-title {
+  min-width: 0;
+  gap: 6px;
   color: var(--text);
   font-size: 12px;
   font-weight: 700;
 }
 
-.dashboard-load-segments {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 3px;
-  border-radius: 9px;
-  background: var(--surface-soft);
-  padding: 3px;
+.dashboard-load-option-title svg {
+  width: 14px;
+  height: 14px;
+  color: var(--green);
 }
 
-.dashboard-load-segments button,
 .dashboard-load-checklist-actions button {
+  gap: 4px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -353,19 +331,6 @@ function confirmLoad() {
   font-weight: 700;
 }
 
-.dashboard-load-segments button {
-  min-height: 32px;
-  border-radius: 7px;
-  padding: 0 8px;
-}
-
-.dashboard-load-segments button.active {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow-soft);
-}
-
-.dashboard-load-segments button:focus-visible,
 .dashboard-load-checklist-actions button:focus-visible,
 .dashboard-load-checklist input:focus-visible {
   outline: none;
@@ -376,20 +341,30 @@ function confirmLoad() {
   display: grid;
   max-height: 190px;
   gap: 3px;
-  margin-top: 9px;
+  margin-top: 7px;
   overflow-y: auto;
+}
+
+.dashboard-load-service-list {
+  max-height: none;
+  overflow: visible;
 }
 
 .dashboard-load-checklist-actions {
   display: flex;
+  flex: 0 0 auto;
   justify-content: flex-end;
   gap: 10px;
-  padding: 1px 4px 4px;
 }
 
 .dashboard-load-checklist-actions button {
   color: var(--green);
   padding: 2px;
+}
+
+.dashboard-load-checklist-actions svg {
+  width: 13px;
+  height: 13px;
 }
 
 .dashboard-load-checklist label {

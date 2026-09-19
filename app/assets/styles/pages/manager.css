@@ -95,6 +95,21 @@
   display: flex;
   gap: 8px;
 }
+
+@media (max-width: 760px) {
+  .store-actions {
+    gap: 6px;
+  }
+
+  .store-actions :deep(.store-action-button) {
+    width: var(--control-height-sm);
+    padding-inline: 0;
+  }
+
+  .store-action-label {
+    display: none;
+  }
+}
 /* Add form */
 .inp {
   width: 100%;

@@ -45,7 +45,6 @@ const messages: Partial<Record<MessageKey, string>> = {
   "dashboard.openManager": "فتح مدير المتاجر",
   "dashboard.cachedAt": "تم التخزين المؤقت في {time}",
   "dashboard.refreshAll": "تحديث كل المتاجر",
-  "dashboard.loadGateEyebrow": "لوحة معلومات عند الطلب",
   "dashboard.loadGateTitle": "هل تريد تحميل بيانات لوحة المعلومات؟",
   "dashboard.loadGateDescription":
     "اختر المتاجر المطلوب تحميلها من أصل {count} متجرًا محفوظًا، واختر خدمات البيانات.",

@@ -425,7 +425,6 @@ const messages = {
   "dashboard.openManager": "Open Store Manager",
   "dashboard.cachedAt": "Cached at {time}",
   "dashboard.refreshAll": "Refresh all stores",
-  "dashboard.loadGateEyebrow": "On-demand dashboard",
   "dashboard.loadGateTitle": "Load dashboard data?",
   "dashboard.loadGateDescription":
     "Choose which of {count} saved stores and which data services to load.",

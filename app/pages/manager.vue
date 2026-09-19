@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { ArrowDown, ArrowUp, X } from "@lucide/vue";
+import { ArrowDown, ArrowUp, Pencil, X } from "@lucide/vue";
 import { useCredentialVaultStore } from "~/stores/credentialVault";
 import { useFormStore } from "~/stores/form";
 import type { AddStoreMode } from "~/composables/useAddStoreConnection";
@@ -444,29 +444,50 @@ function getProxyCheckErrorMessage(error?: ProxyCheckError) {
           </div>
           <div class="store-actions">
             <BaseButton
+              class="store-action-button"
               :disabled="testingProxies[store.id]"
+              :aria-label="testingProxies[store.id] ? 'Testing proxy' : 'Check proxy'"
+              :title="testingProxies[store.id] ? 'Testing proxy' : 'Check proxy'"
               @click="testProxy(store.id)"
             >
               <template #icon>
                 <IconsSync v-if="testingProxies[store.id]" />
                 <IconsCheck v-else />
               </template>
-              {{ testingProxies[store.id] ? "Testing…" : "Check" }}
+              <span class="store-action-label">
+                {{ testingProxies[store.id] ? "Testing…" : "Check" }}
+              </span>
             </BaseButton>
             <BaseButton
+              class="store-action-button"
               :disabled="rotatingIds[store.id]"
+              :aria-label="rotatingIds[store.id] ? 'Rotating token' : 'Rotate token'"
+              :title="rotatingIds[store.id] ? 'Rotating token' : 'Rotate token'"
               @click="rotateToken(store.id)"
             >
               <template #icon><IconsSync /></template>
-              {{ rotatingIds[store.id] ? "Rotating…" : "Rotate" }}
+              <span class="store-action-label">
+                {{ rotatingIds[store.id] ? "Rotating…" : "Rotate" }}
+              </span>
             </BaseButton>
-            <BaseButton @click="openEditModal(store.id)">
-              <template #icon><IconsMore /></template>
-              Edit
+            <BaseButton
+              class="store-action-button"
+              aria-label="Edit store"
+              title="Edit store"
+              @click="openEditModal(store.id)"
+            >
+              <template #icon><Pencil aria-hidden="true" /></template>
+              <span class="store-action-label">Edit</span>
             </BaseButton>
-            <BaseButton variant="danger-ghost" @click="deleteStore(store.id)">
+            <BaseButton
+              class="store-action-button"
+              variant="danger-ghost"
+              aria-label="Delete store"
+              title="Delete store"
+              @click="deleteStore(store.id)"
+            >
               <template #icon><IconsDelete /></template>
-              Delete
+              <span class="store-action-label">Delete</span>
             </BaseButton>
           </div>
         </div>

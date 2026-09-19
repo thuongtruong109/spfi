@@ -118,7 +118,6 @@ const messages: Partial<Record<MessageKey, string>> = {
   "dashboard.openManager": "Abrir gestor de tiendas",
   "dashboard.cachedAt": "En caché a las {time}",
   "dashboard.refreshAll": "Actualizar todas las tiendas",
-  "dashboard.loadGateEyebrow": "Panel bajo demanda",
   "dashboard.loadGateTitle": "¿Cargar datos del panel?",
   "dashboard.loadGateDescription":
     "Elige qué tiendas de las {count} guardadas y qué servicios de datos cargar.",
