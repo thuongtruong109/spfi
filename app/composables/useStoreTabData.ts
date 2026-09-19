@@ -18,6 +18,7 @@ import {
   markStoreResourceLoaded,
   type StoreDataResource,
 } from "~~/utils/store-resource-cache";
+import { hydrateInactiveStoreScopes } from "~~/utils/store-scope";
 
 const MISSING_TOKEN_MESSAGE =
   "Access token is missing. Update this store's credentials and try again.";
@@ -84,15 +85,17 @@ export function useStoreTabData() {
   }
 
   function hydrateStoreData(storeId: string) {
-    orderStore.hydrate(storeId);
-    paymentStore.hydrate(storeId);
-    productStore.hydrate(storeId);
-    locationStore.hydrate(storeId);
-    marketStore.hydrate(storeId);
-    customerStore.hydrate(storeId);
-    commerceOpsStore.hydrate(storeId);
-    profileStore.hydrate(storeId);
-    trafficStore.hydrate(storeId);
+    hydrateInactiveStoreScopes(storeId, [
+      orderStore,
+      paymentStore,
+      productStore,
+      locationStore,
+      marketStore,
+      customerStore,
+      commerceOpsStore,
+      profileStore,
+      trafficStore,
+    ]);
   }
 
   function ensureStoreScope(storeId: string) {

@@ -14,6 +14,7 @@ const props = defineProps<{
   subtitle: string;
   rows: DashboardTrafficDetailRow[];
   options: DashboardTrafficDimensionOption[];
+  rangeLabel: string;
 }>();
 
 const { locale, t } = useLocalization();
@@ -176,7 +177,7 @@ function formatDuration(value: number) {
     <aside v-if="dimensionRows.length" class="traffic-dimension-donut">
       <header>
         <strong>{{ activeDimensionLabel }}</strong>
-        <span>{{ t("dashboard.trafficThirtyDays") }}</span>
+        <span>{{ rangeLabel }}</span>
       </header>
       <DashboardDonutChart
         :segments="donutSegments"

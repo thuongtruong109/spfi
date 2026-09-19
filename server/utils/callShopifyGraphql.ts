@@ -52,6 +52,8 @@ interface CallShopifyGraphqlOptions<TVariables> {
   timeoutMs?: number;
   /** Defaults to true for read-only documents and false for mutations. */
   retryTransport?: boolean;
+  /** Return usable fields when Shopify responds with both data and field errors. */
+  allowPartialData?: boolean;
   maxThrottleRetries?: number;
 }
 
@@ -76,6 +78,7 @@ export async function callShopifyGraphql<
   operationName,
   timeoutMs = DEFAULT_GRAPHQL_TIMEOUT_MS,
   retryTransport,
+  allowPartialData = false,
   maxThrottleRetries = DEFAULT_MAX_GRAPHQL_THROTTLE_RETRIES,
 }: CallShopifyGraphqlOptions<TVariables>): Promise<TData> {
   setResponseHeader(event, "x-spf-field-convention", "app-camel-case");
@@ -188,7 +191,7 @@ export async function callShopifyGraphql<
 
     if (!envelope) continue;
 
-    if (envelope.errors?.length) {
+    if (envelope.errors?.length && !(allowPartialData && envelope.data)) {
       throw createApiErrorFromMessage(
         envelope.errors.map((error) => error.message).join("; "),
         422,

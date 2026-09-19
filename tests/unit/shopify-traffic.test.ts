@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildTrafficInsightQueryVariables,
+  DASHBOARD_TRAFFIC_QUERY,
+  TRAFFIC_DETAILS_QUERY,
+  buildTrafficDetailQueryVariables,
   buildTrafficQueryVariables,
+  parseShopifyTrafficDetailsResponse,
   parseShopifyTrafficResponse,
 } from "~~/server/utils/shopify-traffic";
 
@@ -19,34 +22,35 @@ describe("Shopify traffic analytics", () => {
     const queries = buildTrafficQueryVariables();
 
     expect(queries.today).toContain("DURING today");
+    expect(queries.last24Hours).toContain("SINCE -24h UNTIL now");
     expect(queries.last7Days).toContain("SINCE -6d UNTIL now");
     expect(queries.last30Days).toContain("SINCE -29d UNTIL now");
     expect(queries.hourly).toContain("TIMESERIES hour");
     expect(queries.daily).toContain("TIMESERIES day");
     expect(queries.today).toContain("sessions_with_cart_additions");
     expect(queries.today).toContain("sessions_that_reached_checkout");
+    expect(queries.sources24Hours).toContain("SINCE -24h UNTIL now");
+    expect(queries.countries7Days).toContain("SINCE -6d UNTIL now");
     expect(
       Object.values(queries).every((query) =>
         query.includes("human_or_bot_session = 'human'"),
       ),
     ).toBe(true);
 
-    const insights = buildTrafficInsightQueryVariables();
-    expect(insights.trafficTypes).toContain("GROUP BY traffic_type");
-    expect(insights.platforms).toContain("GROUP BY referring_platform");
-    expect(insights.landingPages).toContain("GROUP BY landing_page_path");
-    expect(insights.campaigns).toContain("GROUP BY utm_campaign");
-    expect(insights.aiReferrals).toContain("GROUP BY agentic_referring_channel");
-    expect(insights.details).toContain("GROUP BY referrer_source");
-    expect(insights.details).toContain("session_device_browser_version");
-    expect(insights.details).toContain("sessions_with_cart_additions");
-    expect(insights.details).toContain("ORDER BY sessions DESC");
-    expect(insights.details).toContain("LIMIT 250");
-    expect(
-      Object.values(insights).every((query) =>
-        query.includes("human_or_bot_session = 'human'"),
-      ),
-    ).toBe(true);
+    const details24Hours = buildTrafficDetailQueryVariables("24h").details;
+    const details7Days = buildTrafficDetailQueryVariables("7d").details;
+    const details30Days = buildTrafficDetailQueryVariables("30d").details;
+    expect(details30Days).toContain("GROUP BY referrer_source");
+    expect(details30Days).toContain("session_device_browser_version");
+    expect(details30Days).toContain("sessions_with_cart_additions");
+    expect(details30Days).toContain("ORDER BY sessions DESC");
+    expect(details30Days).toContain("LIMIT 250");
+    expect(details24Hours).toContain("SINCE -24h UNTIL now");
+    expect(details7Days).toContain("SINCE -6d UNTIL now");
+    expect(details30Days).toContain("human_or_bot_session = 'human'");
+    expect(DASHBOARD_TRAFFIC_QUERY).not.toContain("$details");
+    expect(TRAFFIC_DETAILS_QUERY).toContain("$details");
+    expect(TRAFFIC_DETAILS_QUERY).not.toContain("$daily");
   });
 
   it("maps ShopifyQL table rows and derives rates safely", () => {
@@ -63,6 +67,7 @@ describe("Shopify traffic analytics", () => {
           average_session_duration: "75.5",
         },
       ]),
+      last24Hours: result([{ sessions: 12, online_store_visitors: 9, pageviews: 30 }]),
       last7Days: result([{ sessions: 70, online_store_visitors: 50 }]),
       last30Days: result([{ sessions: 300, online_store_visitors: 180 }]),
       hourly: result([
@@ -85,11 +90,29 @@ describe("Shopify traffic analytics", () => {
         { referrer_source: "Search", sessions: "7", online_store_visitors: "6" },
         { referrer_source: null, sessions: "3", online_store_visitors: "2" },
       ]),
+      sources24Hours: result([
+        { referrer_source: "Direct", sessions: "8", online_store_visitors: "7" },
+      ]),
+      sources7Days: result([
+        { referrer_source: "Email", sessions: "20", online_store_visitors: "16" },
+      ]),
       countries: result([
         { session_country: "Vietnam", sessions: "10", online_store_visitors: "8" },
       ]),
+      countries24Hours: result([
+        { session_country: "Vietnam", sessions: "12", online_store_visitors: "9" },
+      ]),
+      countries7Days: result([
+        { session_country: "Vietnam", sessions: "70", online_store_visitors: "50" },
+      ]),
       devices: result([
         { session_device_type: "Mobile", sessions: "9", online_store_visitors: "7" },
+      ]),
+      devices24Hours: result([
+        { session_device_type: "Mobile", sessions: "11", online_store_visitors: "8" },
+      ]),
+      devices7Days: result([
+        { session_device_type: "Mobile", sessions: "60", online_store_visitors: "45" },
       ]),
       trafficTypes: result([
         { traffic_type: "Organic", sessions: "6", online_store_visitors: "5" },
@@ -145,6 +168,26 @@ describe("Shopify traffic analytics", () => {
           average_session_duration: "82",
         },
       ]),
+      details24Hours: result([
+        {
+          referrer_source: "Direct",
+          session_country: "Vietnam",
+          session_device_type: "Mobile",
+          sessions: "8",
+          online_store_visitors: "7",
+          pageviews: "18",
+        },
+      ]),
+      details7Days: result([
+        {
+          referrer_source: "Email",
+          session_country: "Vietnam",
+          session_device_type: "Desktop",
+          sessions: "20",
+          online_store_visitors: "16",
+          pageviews: "42",
+        },
+      ]),
     });
 
     expect(traffic.available).toBe(true);
@@ -160,6 +203,13 @@ describe("Shopify traffic analytics", () => {
       averageSessionDuration: 75.5,
     });
     expect(traffic.hourly[0]).toMatchObject({ sessions: 3, visitors: 2 });
+    expect(traffic.last24Hours.sessions).toBe(12);
+    expect(traffic.rangeData["24h"].sources[0]?.label).toBe("Direct");
+    expect(traffic.rangeData["7d"].details[0]).toMatchObject({
+      source: "Email",
+      sessions: 20,
+    });
+    expect(traffic.rangeData["30d"].metrics.sessions).toBe(300);
     expect(traffic.sources[1]?.label).toBe("Direct / unknown");
     expect(traffic.trafficTypes[0]?.label).toBe("Organic");
     expect(traffic.landingPages[0]?.label).toBe("/products/tee");
@@ -177,18 +227,50 @@ describe("Shopify traffic analytics", () => {
     expect(traffic.detailLimitReached).toBe(false);
   });
 
-  it("surfaces ShopifyQL parse errors instead of treating them as empty data", () => {
+  it("keeps valid overview data when individual ShopifyQL aliases fail", () => {
+    const traffic = parseShopifyTrafficResponse({
+      today: result([{ sessions: "9", online_store_visitors: "7" }]),
+      last24Hours: null,
+      last7Days: result([{ sessions: "40" }]),
+      last30Days: result([{ sessions: "120" }]),
+      hourly: { tableData: null, parseErrors: ["Timeseries unavailable"] },
+      daily: null,
+      sources: { tableData: null, parseErrors: ["Column not found"] },
+      countries: result([]),
+      devices: result([]),
+    });
+
+    expect(traffic.available).toBe(true);
+    expect(traffic.today.sessions).toBe(9);
+    expect(traffic.last24Hours.sessions).toBe(9);
+    expect(traffic.last7Days.sessions).toBe(40);
+    expect(traffic.hourly).toEqual([]);
+    expect(traffic.sources).toEqual([]);
+  });
+
+  it("marks traffic unavailable only when every summary alias is unusable", () => {
+    const traffic = parseShopifyTrafficResponse({
+      today: { tableData: null, parseErrors: ["Column not found"] },
+      last24Hours: null,
+      last7Days: undefined,
+      last30Days: { tableData: null, parseErrors: ["Access denied"] },
+    });
+
+    expect(traffic.available).toBe(false);
+    expect(traffic.availableStores).toBe(0);
+  });
+
+  it("surfaces detail parse errors without invalidating overview parsing", () => {
     expect(() =>
-      parseShopifyTrafficResponse({
-        today: { tableData: null, parseErrors: ["Column not found"] },
-        last7Days: result([]),
-        last30Days: result([]),
-        hourly: result([]),
-        daily: result([]),
-        sources: result([]),
-        countries: result([]),
-        devices: result([]),
-      }),
-    ).toThrow(/Column not found/);
+      parseShopifyTrafficDetailsResponse(
+        {
+          details: {
+            tableData: null,
+            parseErrors: ["Response is too large"],
+          },
+        },
+        "24h",
+      ),
+    ).toThrow(/Response is too large/);
   });
 });

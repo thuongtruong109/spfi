@@ -7,11 +7,13 @@ import {
   Megaphone,
   MonitorSmartphone,
 } from "@lucide/vue";
-import type { DashboardTrafficSummary } from "~~/types/dashboard";
+import type { DashboardTrafficRangeData } from "~~/types/dashboard";
 import type { DashboardTrafficDimensionOption } from "~~/utils/dashboard-traffic-dimensions";
 
 const props = defineProps<{
-  traffic: DashboardTrafficSummary;
+  data: DashboardTrafficRangeData;
+  rangeLabel: string;
+  loading?: boolean;
 }>();
 
 const { locale, t } = useLocalization();
@@ -59,22 +61,22 @@ const funnelStages = computed(() => [
   {
     key: "sessions",
     label: t("dashboard.trafficFunnelSessions"),
-    value: props.traffic.last30Days.sessions,
+    value: props.data.metrics.sessions,
   },
   {
     key: "cart",
     label: t("dashboard.trafficFunnelCart"),
-    value: props.traffic.last30Days.cartAdditions,
+    value: props.data.metrics.cartAdditions,
   },
   {
     key: "checkout",
     label: t("dashboard.trafficFunnelCheckout"),
-    value: props.traffic.last30Days.reachedCheckouts,
+    value: props.data.metrics.reachedCheckouts,
   },
   {
     key: "purchase",
     label: t("dashboard.trafficFunnelPurchase"),
-    value: props.traffic.last30Days.completedCheckouts,
+    value: props.data.metrics.completedCheckouts,
   },
 ]);
 
@@ -93,9 +95,7 @@ function formatPercent(value: number) {
 }
 
 function sessionShare(value: number) {
-  return props.traffic.last30Days.sessions
-    ? value / props.traffic.last30Days.sessions
-    : 0;
+  return props.data.metrics.sessions ? value / props.data.metrics.sessions : 0;
 }
 
 function width(value: number) {
@@ -110,22 +110,26 @@ function width(value: number) {
         <h3><BarChart3 />{{ t("dashboard.trafficAnalysisTitle") }}</h3>
         <p>{{ t("dashboard.trafficAnalysisSubtitle") }}</p>
       </div>
-      <span v-if="traffic.detailLimitReached">
+      <span v-if="data.detailLimitReached">
         {{
           t("dashboard.trafficDetailLimited", {
-            count: traffic.details.length,
+            count: data.details.length,
           })
         }}
       </span>
     </header>
 
-    <article class="traffic-funnel-card">
+    <div v-if="loading" class="traffic-insights-loading" aria-live="polite">
+      {{ t("dashboard.trafficInsightsLoading") }}
+    </div>
+
+    <article v-else class="traffic-funnel-card">
       <header>
         <div>
           <h3><Funnel />{{ t("dashboard.trafficFunnelTitle") }}</h3>
           <p>{{ t("dashboard.trafficFunnelSubtitle") }}</p>
         </div>
-        <span>{{ t("dashboard.trafficThirtyDays") }}</span>
+        <span>{{ rangeLabel }}</span>
       </header>
 
       <div class="traffic-funnel-steps">
@@ -146,34 +150,38 @@ function width(value: number) {
       </div>
     </article>
 
-    <div class="traffic-analysis-grid">
+    <div v-if="!loading" class="traffic-analysis-grid">
       <DashboardTrafficDimensionCard
         :icon="Megaphone"
         :title="t('dashboard.trafficAcquisitionTitle')"
         :subtitle="t('dashboard.trafficAcquisitionIntegratedSubtitle')"
-        :rows="traffic.details"
+        :rows="data.details"
         :options="acquisitionOptions"
+        :range-label="rangeLabel"
       />
       <DashboardTrafficDimensionCard
         :icon="MapPin"
         :title="t('dashboard.trafficAudienceTitle')"
         :subtitle="t('dashboard.trafficAudienceSubtitle')"
-        :rows="traffic.details"
+        :rows="data.details"
         :options="audienceOptions"
+        :range-label="rangeLabel"
       />
       <DashboardTrafficDimensionCard
         :icon="MonitorSmartphone"
         :title="t('dashboard.trafficTechnologyTitle')"
         :subtitle="t('dashboard.trafficTechnologySubtitle')"
-        :rows="traffic.details"
+        :rows="data.details"
         :options="technologyOptions"
+        :range-label="rangeLabel"
       />
       <DashboardTrafficDimensionCard
         :icon="FileText"
         :title="t('dashboard.trafficContentTitle')"
         :subtitle="t('dashboard.trafficContentSubtitle')"
-        :rows="traffic.details"
+        :rows="data.details"
         :options="contentOptions"
+        :range-label="rangeLabel"
       />
     </div>
   </section>
@@ -236,6 +244,17 @@ function width(value: number) {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
+}
+
+.traffic-insights-loading {
+  display: grid;
+  min-height: 160px;
+  place-items: center;
+  border: 1px dashed var(--border);
+  border-radius: 13px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .traffic-funnel-card {

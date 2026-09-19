@@ -182,10 +182,28 @@ export interface DashboardTrafficDetailRow {
   conversionRate: number;
 }
 
+export type DashboardTrafficRange = "24h" | "7d" | "30d";
+
+export interface DashboardTrafficRangeData {
+  metrics: DashboardTrafficMetrics;
+  sources: DashboardTrafficBreakdown[];
+  countries: DashboardTrafficBreakdown[];
+  devices: DashboardTrafficBreakdown[];
+  details: DashboardTrafficDetailRow[];
+  detailLimitReached: boolean;
+}
+
+export interface DashboardTrafficDetailRangeResponse {
+  range: DashboardTrafficRange;
+  details: DashboardTrafficDetailRow[];
+  detailLimitReached: boolean;
+}
+
 export interface DashboardTrafficSummary {
   available: boolean;
   availableStores: number;
   today: DashboardTrafficMetrics;
+  last24Hours: DashboardTrafficMetrics;
   last7Days: DashboardTrafficMetrics;
   last30Days: DashboardTrafficMetrics;
   hourly: DashboardTrafficPoint[];
@@ -201,6 +219,7 @@ export interface DashboardTrafficSummary {
   aiReferrals: DashboardTrafficBreakdown[];
   details: DashboardTrafficDetailRow[];
   detailLimitReached: boolean;
+  rangeData: Record<DashboardTrafficRange, DashboardTrafficRangeData>;
 }
 
 export interface DashboardWarning {

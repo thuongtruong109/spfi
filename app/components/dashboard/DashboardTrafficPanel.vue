@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import {
-  CalendarDays,
-  CalendarRange,
   ChartLine,
   ChartNoAxesCombined,
   ChartPie,
+  Clock3,
   Eye,
   MousePointerClick,
   ShoppingCart,
@@ -12,25 +11,26 @@ import {
 } from "@lucide/vue";
 import type {
   DashboardTrafficBreakdown,
+  DashboardTrafficRange,
   DashboardTrafficSummary,
 } from "~~/types/dashboard";
+import { resolveDashboardTrafficRangeData } from "~~/utils/dashboard-traffic";
 
 const props = defineProps<{
   traffic: DashboardTrafficSummary;
   loading?: boolean;
+  insightsLoading?: boolean;
   storeCount: number;
   showInsights?: boolean;
 }>();
 
-const { locale, t } = useLocalization();
-const range = ref<"24h" | "7d" | "30d">("24h");
-const breakdown = ref<"sources" | "countries" | "devices">("sources");
+const emit = defineEmits<{
+  rangeChange: [range: DashboardTrafficRange];
+}>();
 
-const rangeOptions = [
-  { value: "24h" as const, label: "24H" },
-  { value: "7d" as const, label: "7D" },
-  { value: "30d" as const, label: "30D" },
-];
+const { locale, t } = useLocalization();
+const range = ref<DashboardTrafficRange>("24h");
+const breakdown = ref<"sources" | "countries" | "devices">("sources");
 
 const breakdownOptions = computed(() => [
   { value: "sources" as const, label: t("dashboard.trafficSources") },
@@ -38,13 +38,22 @@ const breakdownOptions = computed(() => [
   { value: "devices" as const, label: t("dashboard.trafficDevices") },
 ]);
 
+const rangeLabel = computed(() => {
+  if (range.value === "24h") return t("dashboard.trafficRange24h");
+  if (range.value === "7d") return t("dashboard.trafficRange7d");
+  return t("dashboard.trafficRange30d");
+});
+const selectedRangeData = computed(() =>
+  resolveDashboardTrafficRangeData(props.traffic, range.value),
+);
+
 const points = computed(() => {
   if (range.value === "24h") return props.traffic.hourly;
   return range.value === "7d" ? props.traffic.daily.slice(-7) : props.traffic.daily;
 });
 const granularity = computed(() => (range.value === "24h" ? "hour" : "day"));
 const breakdownRows = computed<DashboardTrafficBreakdown[]>(
-  () => props.traffic[breakdown.value],
+  () => selectedRangeData.value[breakdown.value],
 );
 const breakdownSegments = computed(() => {
   const leadingRows = breakdownRows.value
@@ -52,7 +61,7 @@ const breakdownSegments = computed(() => {
     .slice(0, 3)
     .map((row) => ({ label: row.label, value: row.sessions }));
   const leadingTotal = leadingRows.reduce((total, row) => total + row.value, 0);
-  const knownTotal = props.traffic.last30Days.sessions || leadingTotal;
+  const knownTotal = selectedRangeData.value.metrics.sessions || leadingTotal;
   const remainder = Math.max(0, knownTotal - leadingTotal);
 
   if (remainder > 0) {
@@ -64,6 +73,8 @@ const breakdownSegments = computed(() => {
 
   return leadingRows;
 });
+
+watch(range, (value) => emit("rangeChange", value));
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat(locale.value, {
@@ -99,87 +110,75 @@ function formatDuration(value: number) {
       <span>{{ t("dashboard.trafficPermissionHint") }}</span>
     </div>
     <template v-else>
-      <section class="traffic-metric-grid">
-        <div>
-          <span><MousePointerClick />{{ t("dashboard.trafficTodaySessions") }}</span>
-          <strong>{{ formatNumber(traffic.today.sessions) }}</strong>
-          <small>
-            {{
-              t("dashboard.trafficBounceRate", {
-                value: formatPercent(traffic.today.bounceRate),
-              })
-            }}
-          </small>
-        </div>
-        <div>
-          <span><UsersRound />{{ t("dashboard.trafficTodayVisitors") }}</span>
-          <strong>{{ formatNumber(traffic.today.visitors) }}</strong>
-          <small>{{ t("dashboard.trafficUniqueShopify") }}</small>
-        </div>
-        <div>
-          <span><Eye />{{ t("dashboard.trafficTodayPageviews") }}</span>
-          <strong>{{ formatNumber(traffic.today.pageviews) }}</strong>
-          <small>
-            {{
-              t("dashboard.trafficViewsPerSession", {
-                value: traffic.today.pageviewsPerSession.toFixed(1),
-              })
-            }}
-          </small>
-        </div>
-        <div>
-          <span><CalendarDays />{{ t("dashboard.trafficSevenDaySessions") }}</span>
-          <strong>{{ formatNumber(traffic.last7Days.sessions) }}</strong>
-          <small>
-            {{
-              t("dashboard.trafficVisitorsDetail", {
-                count: formatNumber(traffic.last7Days.visitors),
-              })
-            }}
-          </small>
-        </div>
-        <div>
-          <span><CalendarRange />{{ t("dashboard.trafficThirtyDaySessions") }}</span>
-          <strong>{{ formatNumber(traffic.last30Days.sessions) }}</strong>
-          <small>
-            {{
-              t("dashboard.trafficVisitorsDetail", {
-                count: formatNumber(traffic.last30Days.visitors),
-              })
-            }}
-          </small>
-        </div>
-        <div>
-          <span><ShoppingCart />{{ t("dashboard.trafficConversion") }}</span>
-          <strong>{{ formatPercent(traffic.last30Days.conversionRate) }}</strong>
-          <small>
-            {{
-              t("dashboard.trafficAverageDuration", {
-                value: formatDuration(traffic.last30Days.averageSessionDuration),
-              })
-            }}
-          </small>
-        </div>
-      </section>
+      <div class="traffic-overview-row">
+        <section class="traffic-metric-grid">
+          <div>
+            <span><MousePointerClick />{{ t("dashboard.trafficMetricSessions") }}</span>
+            <strong>{{ formatNumber(selectedRangeData.metrics.sessions) }}</strong>
+            <small>{{ rangeLabel }}</small>
+          </div>
+          <div>
+            <span><UsersRound />{{ t("dashboard.trafficMetricVisitors") }}</span>
+            <strong>{{ formatNumber(selectedRangeData.metrics.visitors) }}</strong>
+            <small>{{ t("dashboard.trafficUniqueShopify") }}</small>
+          </div>
+          <div>
+            <span><Eye />{{ t("dashboard.trafficMetricPageviews") }}</span>
+            <strong>{{ formatNumber(selectedRangeData.metrics.pageviews) }}</strong>
+            <small>
+              {{
+                t("dashboard.trafficViewsPerSession", {
+                  value: selectedRangeData.metrics.pageviewsPerSession.toFixed(1),
+                })
+              }}
+            </small>
+          </div>
+          <div>
+            <span><ChartNoAxesCombined />{{ t("dashboard.trafficMetricBounce") }}</span>
+            <strong>{{ formatPercent(selectedRangeData.metrics.bounceRate) }}</strong>
+            <small>
+              {{
+                t("dashboard.trafficBouncesDetail", {
+                  count: formatNumber(selectedRangeData.metrics.bounces),
+                })
+              }}
+            </small>
+          </div>
+          <div>
+            <span><ShoppingCart />{{ t("dashboard.trafficMetricConversion") }}</span>
+            <strong>{{
+              formatPercent(selectedRangeData.metrics.conversionRate)
+            }}</strong>
+            <small>
+              {{
+                t("dashboard.trafficConversionsDetail", {
+                  count: formatNumber(selectedRangeData.metrics.completedCheckouts),
+                })
+              }}
+            </small>
+          </div>
+          <div>
+            <span><Clock3 />{{ t("dashboard.trafficMetricDuration") }}</span>
+            <strong>
+              {{ formatDuration(selectedRangeData.metrics.averageSessionDuration) }}
+            </strong>
+            <small>{{ rangeLabel }}</small>
+          </div>
+        </section>
+
+        <DashboardTrafficControls
+          v-model="range"
+          :data="selectedRangeData"
+          :points="points"
+          :range-label="rangeLabel"
+        />
+      </div>
 
       <section class="traffic-content-grid">
         <div class="traffic-chart-card">
           <div class="traffic-section-heading">
             <strong><ChartNoAxesCombined />{{ t("dashboard.trafficTrend") }}</strong>
-            <div
-              class="dashboard-segmented-control"
-              :aria-label="t('dashboard.trafficRange')"
-            >
-              <button
-                v-for="option in rangeOptions"
-                :key="option.value"
-                type="button"
-                :class="{ active: range === option.value }"
-                @click="range = option.value"
-              >
-                {{ option.label }}
-              </button>
-            </div>
+            <span class="traffic-active-range">{{ rangeLabel }}</span>
           </div>
           <DashboardTrafficChart :points="points" :granularity="granularity" />
         </div>
@@ -206,7 +205,7 @@ function formatDuration(value: number) {
             <DashboardDonutChart
               :segments="breakdownSegments"
               :center-label="t('dashboard.trafficSessions')"
-              :center-value="formatNumber(traffic.last30Days.sessions)"
+              :center-value="formatNumber(selectedRangeData.metrics.sessions)"
               :ariaLabel="t('dashboard.trafficBreakdownChartLabel')"
               :size="154"
             />
@@ -217,7 +216,12 @@ function formatDuration(value: number) {
         </div>
       </section>
 
-      <DashboardTrafficInsights v-if="showInsights" :traffic="traffic" />
+      <DashboardTrafficInsights
+        v-if="showInsights"
+        :data="selectedRangeData"
+        :range-label="rangeLabel"
+        :loading="insightsLoading"
+      />
     </template>
   </article>
 </template>
@@ -273,11 +277,18 @@ function formatDuration(value: number) {
   max-width: 560px;
 }
 
+.traffic-overview-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .traffic-metric-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 12px;
+  min-width: 0;
 }
 
 .traffic-metric-grid > div {
@@ -358,6 +369,13 @@ function formatDuration(value: number) {
   width: 14px;
   height: 14px;
   color: var(--green);
+}
+
+.traffic-active-range {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .dashboard-segmented-control {
@@ -442,6 +460,10 @@ function formatDuration(value: number) {
 }
 
 @media (max-width: 1120px) {
+  .traffic-overview-row {
+    grid-template-columns: 1fr;
+  }
+
   .traffic-metric-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }

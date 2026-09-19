@@ -137,11 +137,11 @@ function syncShopFromRoute(shouldFetch = false) {
   }
 
   const didChangeShop = formStore.storeId !== queryShop;
-  formStore.setActiveStore(queryShop);
-
   if (didChangeShop) {
+    // Prepare every scoped cache before synchronous store-id watchers can fetch.
     hydrateStoreData(queryShop);
   }
+  formStore.setActiveStore(queryShop);
 
   if (!getRouteShop()) {
     void router.replace({ query: { ...route.query, shop: queryShop } });
@@ -161,13 +161,12 @@ function onSelectStore(id: string) {
     return;
   }
 
+  // Prepare scoped caches before synchronous store-id watchers can fetch.
+  hydrateStoreData(id);
   formStore.setActiveStore(id);
 
   // Sync URL query param
   router.replace({ query: { ...route.query, shop: id } });
-
-  // Hydrate cached data for quick switch, fallback to reset
-  hydrateStoreData(id);
 }
 
 // ── Resolve valid token for current storeId ──────────────────────────────────

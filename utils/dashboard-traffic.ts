@@ -2,6 +2,8 @@ import type {
   DashboardTrafficBreakdown,
   DashboardTrafficMetrics,
   DashboardTrafficPoint,
+  DashboardTrafficRange,
+  DashboardTrafficRangeData,
   DashboardTrafficSummary,
 } from "~~/types/dashboard";
 
@@ -12,6 +14,7 @@ export function emptyDashboardTraffic(): DashboardTrafficSummary {
     available: false,
     availableStores: 0,
     today: emptyTrafficMetrics(),
+    last24Hours: emptyTrafficMetrics(),
     last7Days: emptyTrafficMetrics(),
     last30Days: emptyTrafficMetrics(),
     hourly: [],
@@ -27,15 +30,27 @@ export function emptyDashboardTraffic(): DashboardTrafficSummary {
     aiReferrals: [],
     details: [],
     detailLimitReached: false,
+    rangeData: {
+      "24h": emptyTrafficRangeData(),
+      "7d": emptyTrafficRangeData(),
+      "30d": emptyTrafficRangeData(),
+    },
   };
 }
 
 export function cloneDashboardTraffic(
   traffic: DashboardTrafficSummary,
 ): DashboardTrafficSummary {
+  const range24Hours = resolveDashboardTrafficRangeData(traffic, "24h");
+  const range7Days = resolveDashboardTrafficRangeData(traffic, "7d");
+  const range30Days = resolveDashboardTrafficRangeData(traffic, "30d");
+  const available = isDashboardTrafficAvailable(traffic);
   return {
     ...traffic,
+    available,
+    availableStores: available ? Math.max(1, traffic.availableStores || 0) : 0,
     today: { ...traffic.today },
+    last24Hours: { ...(traffic.last24Hours || traffic.today) },
     last7Days: { ...traffic.last7Days },
     last30Days: { ...traffic.last30Days },
     hourly: traffic.hourly.map((point) => ({ ...point })),
@@ -50,6 +65,34 @@ export function cloneDashboardTraffic(
     campaigns: traffic.campaigns.map((row) => ({ ...row })),
     aiReferrals: traffic.aiReferrals.map((row) => ({ ...row })),
     details: traffic.details.map((row) => ({ ...row })),
+    rangeData: {
+      "24h": cloneTrafficRangeData(range24Hours),
+      "7d": cloneTrafficRangeData(range7Days),
+      "30d": cloneTrafficRangeData(range30Days),
+    },
+  };
+}
+
+export function resolveDashboardTrafficRangeData(
+  traffic: DashboardTrafficSummary,
+  range: DashboardTrafficRange,
+): DashboardTrafficRangeData {
+  const existing = traffic.rangeData?.[range];
+  if (existing) return existing;
+
+  const metrics =
+    range === "24h"
+      ? traffic.last24Hours || traffic.today
+      : range === "7d"
+        ? traffic.last7Days
+        : traffic.last30Days;
+  return {
+    metrics,
+    sources: traffic.sources || [],
+    countries: traffic.countries || [],
+    devices: traffic.devices || [],
+    details: traffic.details || [],
+    detailLimitReached: Boolean(traffic.detailLimitReached),
   };
 }
 
@@ -83,7 +126,7 @@ export function createTrafficMetrics(
 export function aggregateDashboardTraffic(
   traffic: DashboardTrafficSummary[],
 ): DashboardTrafficSummary {
-  const available = traffic.filter((item) => item.available);
+  const available = traffic.filter(isDashboardTrafficAvailable);
   if (!available.length) return emptyDashboardTraffic();
 
   return {
@@ -93,6 +136,9 @@ export function aggregateDashboardTraffic(
       0,
     ),
     today: aggregateMetrics(available.map((item) => item.today)),
+    last24Hours: aggregateMetrics(
+      available.map((item) => item.last24Hours || item.today),
+    ),
     last7Days: aggregateMetrics(available.map((item) => item.last7Days)),
     last30Days: aggregateMetrics(available.map((item) => item.last30Days)),
     hourly: aggregatePoints(available.flatMap((item) => item.hourly)),
@@ -108,6 +154,87 @@ export function aggregateDashboardTraffic(
     aiReferrals: aggregateBreakdowns(available.flatMap((item) => item.aiReferrals)),
     details: [],
     detailLimitReached: false,
+    rangeData: {
+      "24h": aggregateTrafficRangeData(
+        available.map((item) => resolveDashboardTrafficRangeData(item, "24h")),
+      ),
+      "7d": aggregateTrafficRangeData(
+        available.map((item) => resolveDashboardTrafficRangeData(item, "7d")),
+      ),
+      "30d": aggregateTrafficRangeData(
+        available.map((item) => resolveDashboardTrafficRangeData(item, "30d")),
+      ),
+    },
+  };
+}
+
+export function isDashboardTrafficAvailable(traffic: DashboardTrafficSummary) {
+  if (traffic.available) return true;
+
+  const metricGroups = [
+    traffic.today,
+    traffic.last24Hours,
+    traffic.last7Days,
+    traffic.last30Days,
+  ];
+  return (
+    metricGroups.some((metrics) =>
+      [
+        metrics?.sessions,
+        metrics?.visitors,
+        metrics?.pageviews,
+        metrics?.bounces,
+        metrics?.cartAdditions,
+        metrics?.reachedCheckouts,
+        metrics?.completedCheckouts,
+        metrics?.averageSessionDuration,
+      ].some((value) => finiteNonNegative(value) > 0),
+    ) ||
+    [
+      traffic.hourly,
+      traffic.daily,
+      traffic.sources,
+      traffic.countries,
+      traffic.devices,
+      traffic.details,
+    ].some((rows) => Array.isArray(rows) && rows.length > 0)
+  );
+}
+
+function emptyTrafficRangeData(): DashboardTrafficRangeData {
+  return {
+    metrics: emptyTrafficMetrics(),
+    sources: [],
+    countries: [],
+    devices: [],
+    details: [],
+    detailLimitReached: false,
+  };
+}
+
+function cloneTrafficRangeData(
+  range: DashboardTrafficRangeData,
+): DashboardTrafficRangeData {
+  return {
+    metrics: { ...range.metrics },
+    sources: range.sources.map((row) => ({ ...row })),
+    countries: range.countries.map((row) => ({ ...row })),
+    devices: range.devices.map((row) => ({ ...row })),
+    details: range.details.map((row) => ({ ...row })),
+    detailLimitReached: range.detailLimitReached,
+  };
+}
+
+function aggregateTrafficRangeData(
+  ranges: DashboardTrafficRangeData[],
+): DashboardTrafficRangeData {
+  return {
+    metrics: aggregateMetrics(ranges.map((range) => range.metrics)),
+    sources: aggregateBreakdowns(ranges.flatMap((range) => range.sources)),
+    countries: aggregateBreakdowns(ranges.flatMap((range) => range.countries)),
+    devices: aggregateBreakdowns(ranges.flatMap((range) => range.devices)),
+    details: [],
+    detailLimitReached: ranges.some((range) => range.detailLimitReached),
   };
 }
 

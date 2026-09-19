@@ -16,7 +16,6 @@ export default defineEventHandler(async (event) => {
     event,
     storeId,
     token,
-    includeInsights: true,
   });
   setResponseHeader(event, "x-spf-field-convention", "app-camel-case");
   return traffic;

@@ -1,7 +1,10 @@
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useTrafficStore } from "~/stores/traffic";
-import type { DashboardTrafficSummary } from "~~/types/dashboard";
+import type {
+  DashboardTrafficDetailRow,
+  DashboardTrafficSummary,
+} from "~~/types/dashboard";
 import {
   createTrafficMetrics,
   emptyDashboardTraffic,
@@ -56,5 +59,46 @@ describe("traffic store", () => {
 
     await store.fetchTraffic("shop-a", "token-a", true);
     expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  it("loads range details independently without invalidating the overview", async () => {
+    const detail = { source: "Email", sessions: 7 } as DashboardTrafficDetailRow;
+    const request = vi.fn((url: string) => {
+      if (url === "/api/traffic/details") {
+        return Promise.resolve({
+          range: "7d",
+          details: [detail],
+          detailLimitReached: false,
+        });
+      }
+      return Promise.resolve(trafficFixture(12));
+    });
+    vi.stubGlobal("$fetch", request);
+    const store = useTrafficStore();
+
+    expect(await store.fetchTraffic("shop-a", "token-a")).toBe(true);
+    expect(await store.fetchTrafficRange("shop-a", "token-a", "7d")).toBe(true);
+
+    expect(store.traffic.available).toBe(true);
+    expect(store.traffic.rangeData["7d"].details[0]?.source).toBe("Email");
+    expect(store.loadedInsightRanges).toContain("7d");
+    expect(store.error).toBeNull();
+  });
+
+  it("keeps overview data available when a detail request fails", async () => {
+    const request = vi.fn((url: string) =>
+      url === "/api/traffic/details"
+        ? Promise.reject(new Error("Detail query exceeded its response budget."))
+        : Promise.resolve(trafficFixture(12)),
+    );
+    vi.stubGlobal("$fetch", request);
+    const store = useTrafficStore();
+
+    expect(await store.fetchTraffic("shop-a", "token-a")).toBe(true);
+    expect(await store.fetchTrafficRange("shop-a", "token-a", "24h")).toBe(false);
+
+    expect(store.traffic.available).toBe(true);
+    expect(store.error).toBeNull();
+    expect(store.insightError).toContain("Detail query exceeded");
   });
 });
