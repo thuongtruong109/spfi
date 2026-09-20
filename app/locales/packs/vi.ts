@@ -741,6 +741,14 @@ const messages: Record<MessageKey, string> = {
     "Shopify không thể tải tập dữ liệu traffic này trong khoảng đã chọn.",
   "dashboard.trafficQueryPartial":
     "Một số store không tải được tập dữ liệu này; các giá trị đang hiển thị chưa đầy đủ.",
+  "dashboard.trafficMetricsQueryFailed": "Không thể tải chỉ số traffic cho {range}.",
+  "dashboard.trafficTrendQueryFailed": "Không thể tải xu hướng traffic cho {range}.",
+  "dashboard.trafficBreakdownQueryFailed":
+    "Không thể tải breakdown {dimension} cho {range}.",
+  "dashboard.trafficTimezoneStore":
+    "Các mốc thời gian dùng múi giờ của store: {timeZone}.",
+  "dashboard.trafficTimezonePerStore":
+    "Mỗi store dùng múi giờ riêng; dữ liệu tổng hợp được ghép theo cùng giờ địa phương.",
   "dashboard.trafficOther": "Khác",
   "dashboard.trafficBreakdownChartLabel":
     "Phân bổ session theo chiều traffic đang chọn",

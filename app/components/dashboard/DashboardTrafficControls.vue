@@ -12,7 +12,7 @@ import type {
 
 const props = defineProps<{
   data: DashboardTrafficRangeData;
-  points: DashboardTrafficPoint[];
+  points: DashboardTrafficPoint[] | null;
   rangeLabel: string;
 }>();
 

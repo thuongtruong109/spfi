@@ -20,7 +20,7 @@ function result(rows: Array<Record<string, unknown>>) {
 
 describe("Shopify traffic analytics", () => {
   it("builds bounded human-traffic overview queries", () => {
-    const queries = buildTrafficQueryVariables();
+    const queries = buildTrafficQueryVariables("Asia/Ho_Chi_Minh");
 
     expect(queries.today).toContain("DURING today");
     expect(queries.last24Hours).toContain("SINCE -24h UNTIL now");
@@ -36,17 +36,36 @@ describe("Shopify traffic analytics", () => {
         query.includes("human_or_bot_session = 'human'"),
       ),
     ).toBe(true);
+    expect(
+      Object.values(queries).every((query) =>
+        query.includes("TIMEZONE 'Asia/Ho_Chi_Minh'"),
+      ),
+    ).toBe(true);
+    expect(Object.values(queries).every((query) => countWithClauses(query) === 1)).toBe(
+      true,
+    );
+    expect(queries.today.indexOf("WHERE ")).toBeLessThan(
+      queries.today.indexOf("WITH TIMEZONE"),
+    );
     expect(DASHBOARD_TRAFFIC_QUERY).not.toContain("$dimension");
   });
 
   it("builds one whitelisted dimension query with totals and an overflow row", () => {
-    const source = buildTrafficDimensionQueryVariables("30d", "source").dimension;
+    const source = buildTrafficDimensionQueryVariables(
+      "30d",
+      "source",
+      "America/New_York",
+    ).dimension;
     const browser = buildTrafficDimensionQueryVariables(
       "7d",
       "browserVersion",
+      "America/New_York",
     ).dimension;
 
-    expect(source).toContain("GROUP BY referrer_source WITH TOTALS");
+    expect(source).toContain(
+      "GROUP BY referrer_source WITH TOTALS, TIMEZONE 'America/New_York'",
+    );
+    expect(countWithClauses(source)).toBe(1);
     expect(source).not.toContain("session_country");
     expect(source).toContain("sessions_with_cart_additions");
     expect(source).toContain("ORDER BY sessions DESC, referrer_source ASC");
@@ -59,6 +78,12 @@ describe("Shopify traffic analytics", () => {
     expect(TRAFFIC_DIMENSION_QUERY).not.toContain("$daily");
     expect(isDashboardTrafficDimensionKey("campaign")).toBe(true);
     expect(isDashboardTrafficDimensionKey("source, session_country")).toBe(false);
+  });
+
+  it("rejects an invalid timezone before interpolating ShopifyQL", () => {
+    expect(() => buildTrafficQueryVariables("Etc/UTC' LIMIT 1")).toThrow(
+      /valid IANA timezone/,
+    );
   });
 
   it("maps ShopifyQL overview rows and derives rates safely", () => {
@@ -80,7 +105,7 @@ describe("Shopify traffic analytics", () => {
       last30Days: result([{ sessions: 300, online_store_visitors: 180 }]),
       hourly: result([
         {
-          hour: "2026-09-16T10:00:00Z",
+          hour: "2026-09-16T10",
           sessions: "3",
           online_store_visitors: "2",
           pageviews: "5",
@@ -137,6 +162,8 @@ describe("Shopify traffic analytics", () => {
     });
 
     expect(traffic.available).toBe(true);
+    expect(traffic.timeZone).toBe("Etc/UTC");
+    expect(traffic.timeZoneMode).toBe("store");
     expect(traffic.today).toMatchObject({
       sessions: 10,
       visitors: 8,
@@ -146,14 +173,18 @@ describe("Shopify traffic analytics", () => {
       conversionRate: 0.2,
       averageSessionDuration: 75.5,
     });
-    expect(traffic.hourly[0]).toMatchObject({ sessions: 3, visitors: 2 });
-    expect(traffic.last24Hours.sessions).toBe(12);
-    expect(traffic.rangeData["24h"].sources[0]?.label).toBe("Direct");
-    expect(traffic.rangeData["30d"].metrics.sessions).toBe(300);
+    expect(traffic.hourly?.[0]).toMatchObject({
+      period: "2026-09-16T10",
+      sessions: 3,
+      visitors: 2,
+    });
+    expect(traffic.last24Hours?.sessions).toBe(12);
+    expect(traffic.rangeData["24h"].sources?.[0]?.label).toBe("Direct");
+    expect(traffic.rangeData["30d"].metrics?.sessions).toBe(300);
     expect(traffic.rangeData["30d"].dimensions).toEqual({});
     expect(traffic.availability.daily).toBe("available");
     expect(traffic.rangeData["7d"].availability.sources).toBe("available");
-    expect(traffic.sources[1]?.label).toBe("Direct / unknown");
+    expect(traffic.sources?.[1]?.label).toBe("Direct / unknown");
     expect(traffic.trafficTypes[0]?.label).toBe("Organic");
     expect(traffic.campaigns).toHaveLength(1);
     expect(traffic.aiReferrals).toEqual([]);
@@ -211,11 +242,13 @@ describe("Shopify traffic analytics", () => {
     });
 
     expect(traffic.available).toBe(true);
-    expect(traffic.today.sessions).toBe(9);
-    expect(traffic.last24Hours.sessions).toBe(0);
-    expect(traffic.last7Days.sessions).toBe(40);
-    expect(traffic.hourly).toEqual([]);
-    expect(traffic.sources).toEqual([]);
+    expect(traffic.today?.sessions).toBe(9);
+    expect(traffic.last24Hours).toBeNull();
+    expect(traffic.rangeData["24h"].metrics).toBeNull();
+    expect(traffic.last7Days?.sessions).toBe(40);
+    expect(traffic.hourly).toBeNull();
+    expect(traffic.sources).toBeNull();
+    expect(traffic.countries).toEqual([]);
     expect(traffic.availability.today).toBe("available");
     expect(traffic.availability.last24Hours).toBe("failed");
     expect(traffic.availability.hourly).toBe("failed");
@@ -243,8 +276,8 @@ describe("Shopify traffic analytics", () => {
     });
 
     expect(traffic.available).toBe(true);
-    expect(traffic.today.sessions).toBe(9);
-    expect(traffic.rangeData["7d"].sources).toEqual([]);
+    expect(traffic.today?.sessions).toBe(9);
+    expect(traffic.rangeData["7d"].sources).toBeNull();
     expect(traffic.availability.today).toBe("available");
     expect(traffic.availability.sources7Days).toBe("failed");
     expect(traffic.rangeData["7d"].availability.sources).toBe("failed");
@@ -265,14 +298,35 @@ describe("Shopify traffic analytics", () => {
   it("distinguishes a valid empty alias from a failed query", () => {
     const traffic = parseShopifyTrafficResponse({
       today: { tableData: null, parseErrors: ["Column not found"] },
+      last24Hours: result([]),
       daily: result([]),
     });
 
     expect(traffic.available).toBe(true);
     expect(traffic.availableStores).toBe(1);
     expect(traffic.daily).toEqual([]);
+    expect(traffic.last24Hours?.sessions).toBe(0);
+    expect(traffic.rangeData["24h"].metrics?.sessions).toBe(0);
     expect(traffic.availability.today).toBe("failed");
+    expect(traffic.availability.last24Hours).toBe("available");
     expect(traffic.availability.daily).toBe("available");
+  });
+
+  it("never substitutes data from a different traffic range", () => {
+    const traffic = parseShopifyTrafficResponse({
+      today: result([{ sessions: 99 }]),
+      last24Hours: null,
+      sources: result([{ referrer_source: "Search", sessions: 30 }]),
+      sources7Days: null,
+    });
+
+    expect(traffic.today?.sessions).toBe(99);
+    expect(traffic.rangeData["24h"].metrics).toBeNull();
+    expect(traffic.rangeData["7d"].sources).toBeNull();
+    expect(traffic.rangeData["30d"].sources?.[0]).toMatchObject({
+      label: "Search",
+      sessions: 30,
+    });
   });
 
   it("surfaces dimension parse errors and missing totals", () => {
@@ -298,3 +352,7 @@ describe("Shopify traffic analytics", () => {
     ).toThrow(/sessions__totals/);
   });
 });
+
+function countWithClauses(query: string) {
+  return query.match(/\bWITH\b/g)?.length || 0;
+}

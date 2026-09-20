@@ -20,7 +20,7 @@ export function useTrafficExport() {
   async function exportTraffic(
     format: TrafficExportFormat,
     data: DashboardTrafficRangeData,
-    points: DashboardTrafficPoint[],
+    points: DashboardTrafficPoint[] | null,
     rangeLabel: string,
   ) {
     const exportedAt = new Date();
@@ -125,12 +125,21 @@ function drawMetricCards(
 ) {
   const { metrics } = input.data;
   const values = [
-    [input.labels.sessions, formatNumber(metrics.sessions, locale)],
-    [input.labels.visitors, formatNumber(metrics.visitors, locale)],
-    [input.labels.pageviews, formatNumber(metrics.pageviews, locale)],
-    [input.labels.bounceRate, formatPercent(metrics.bounceRate, locale)],
-    [input.labels.conversionRate, formatPercent(metrics.conversionRate, locale)],
-    [input.labels.averageDuration, formatDuration(metrics.averageSessionDuration)],
+    [input.labels.sessions, metrics ? formatNumber(metrics.sessions, locale) : "—"],
+    [input.labels.visitors, metrics ? formatNumber(metrics.visitors, locale) : "—"],
+    [input.labels.pageviews, metrics ? formatNumber(metrics.pageviews, locale) : "—"],
+    [
+      input.labels.bounceRate,
+      metrics ? formatPercent(metrics.bounceRate, locale) : "—",
+    ],
+    [
+      input.labels.conversionRate,
+      metrics ? formatPercent(metrics.conversionRate, locale) : "—",
+    ],
+    [
+      input.labels.averageDuration,
+      metrics ? formatDuration(metrics.averageSessionDuration) : "—",
+    ],
   ];
   const gap = 14;
   const cardWidth = (1504 - gap * 5) / 6;
@@ -165,7 +174,7 @@ function drawTrend(
   context.fillText(input.rangeLabel, x + width - 170, y + 38, 146);
 
   const chart = { x: x + 58, y: y + 76, width: width - 92, height: height - 118 };
-  const values = input.points.map((point) => point.sessions);
+  const values = (input.points || []).map((point) => point.sessions);
   const maximum = Math.max(1, ...values);
   context.strokeStyle = "#e5ece8";
   context.lineWidth = 1;
@@ -203,8 +212,8 @@ function drawTrend(
     context.stroke();
   }
 
-  const firstPeriod = input.points[0]?.period || "—";
-  const lastPeriod = input.points.at(-1)?.period || "—";
+  const firstPeriod = input.points?.[0]?.period || "—";
+  const lastPeriod = input.points?.at(-1)?.period || "—";
   context.fillStyle = "#718078";
   context.font = "12px Arial, sans-serif";
   context.fillText(firstPeriod, chart.x, y + height - 18, 260);
@@ -233,6 +242,12 @@ function drawBreakdowns(
     context.fillStyle = "#16221b";
     context.font = "700 18px Arial, sans-serif";
     context.fillText(title, x + 22, y + 38, width - 44);
+    if (!rows) {
+      context.fillStyle = "#607068";
+      context.font = "16px Arial, sans-serif";
+      context.fillText("—", x + 22, y + 82);
+      return;
+    }
     rows.slice(0, 7).forEach((row, rowIndex) => {
       const rowY = y + 78 + rowIndex * 36;
       context.fillStyle = "#405047";

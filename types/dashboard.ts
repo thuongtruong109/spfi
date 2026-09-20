@@ -177,6 +177,7 @@ export type DashboardTrafficAvailability = Record<
 
 export interface DashboardTrafficRangeAvailability {
   metrics: DashboardTrafficAvailabilityState;
+  trend: DashboardTrafficAvailabilityState;
   sources: DashboardTrafficAvailabilityState;
   countries: DashboardTrafficAvailabilityState;
   devices: DashboardTrafficAvailabilityState;
@@ -221,6 +222,7 @@ export interface DashboardTrafficDimensionRow {
 }
 
 export type DashboardTrafficRange = "24h" | "7d" | "30d";
+export type DashboardTrafficTimeZoneMode = "store" | "per-store" | "unknown";
 
 export interface DashboardTrafficDimensionResult {
   rows: DashboardTrafficDimensionRow[];
@@ -233,10 +235,10 @@ export type DashboardTrafficDimensions = Partial<
 >;
 
 export interface DashboardTrafficRangeData {
-  metrics: DashboardTrafficMetrics;
-  sources: DashboardTrafficBreakdown[];
-  countries: DashboardTrafficBreakdown[];
-  devices: DashboardTrafficBreakdown[];
+  metrics: DashboardTrafficMetrics | null;
+  sources: DashboardTrafficBreakdown[] | null;
+  countries: DashboardTrafficBreakdown[] | null;
+  devices: DashboardTrafficBreakdown[] | null;
   dimensions: DashboardTrafficDimensions;
   availability: DashboardTrafficRangeAvailability;
 }
@@ -249,16 +251,18 @@ export interface DashboardTrafficDimensionResponse extends DashboardTrafficDimen
 export interface DashboardTrafficSummary {
   available: boolean;
   availableStores: number;
+  timeZone: string | null;
+  timeZoneMode: DashboardTrafficTimeZoneMode;
   availability: DashboardTrafficAvailability;
-  today: DashboardTrafficMetrics;
-  last24Hours: DashboardTrafficMetrics;
-  last7Days: DashboardTrafficMetrics;
-  last30Days: DashboardTrafficMetrics;
-  hourly: DashboardTrafficPoint[];
-  daily: DashboardTrafficPoint[];
-  sources: DashboardTrafficBreakdown[];
-  countries: DashboardTrafficBreakdown[];
-  devices: DashboardTrafficBreakdown[];
+  today: DashboardTrafficMetrics | null;
+  last24Hours: DashboardTrafficMetrics | null;
+  last7Days: DashboardTrafficMetrics | null;
+  last30Days: DashboardTrafficMetrics | null;
+  hourly: DashboardTrafficPoint[] | null;
+  daily: DashboardTrafficPoint[] | null;
+  sources: DashboardTrafficBreakdown[] | null;
+  countries: DashboardTrafficBreakdown[] | null;
+  devices: DashboardTrafficBreakdown[] | null;
   trafficTypes: DashboardTrafficBreakdown[];
   platforms: DashboardTrafficBreakdown[];
   browsers: DashboardTrafficBreakdown[];

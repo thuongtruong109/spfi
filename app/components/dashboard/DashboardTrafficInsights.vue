@@ -26,6 +26,7 @@ const emit = defineEmits<{
 }>();
 
 const { locale, t } = useLocalization();
+const metrics = computed(() => props.data.metrics);
 
 const acquisitionOptions = computed<DashboardTrafficDimensionOption[]>(() => [
   { key: "source", label: t("dashboard.trafficDetailSource") },
@@ -66,28 +67,31 @@ const contentOptions = computed<DashboardTrafficDimensionOption[]>(() => [
   },
 ]);
 
-const funnelStages = computed(() => [
-  {
-    key: "sessions",
-    label: t("dashboard.trafficFunnelSessions"),
-    value: props.data.metrics.sessions,
-  },
-  {
-    key: "cart",
-    label: t("dashboard.trafficFunnelCart"),
-    value: props.data.metrics.cartAdditions,
-  },
-  {
-    key: "checkout",
-    label: t("dashboard.trafficFunnelCheckout"),
-    value: props.data.metrics.reachedCheckouts,
-  },
-  {
-    key: "purchase",
-    label: t("dashboard.trafficFunnelPurchase"),
-    value: props.data.metrics.completedCheckouts,
-  },
-]);
+const funnelStages = computed(() => {
+  if (!metrics.value) return [];
+  return [
+    {
+      key: "sessions",
+      label: t("dashboard.trafficFunnelSessions"),
+      value: metrics.value.sessions,
+    },
+    {
+      key: "cart",
+      label: t("dashboard.trafficFunnelCart"),
+      value: metrics.value.cartAdditions,
+    },
+    {
+      key: "checkout",
+      label: t("dashboard.trafficFunnelCheckout"),
+      value: metrics.value.reachedCheckouts,
+    },
+    {
+      key: "purchase",
+      label: t("dashboard.trafficFunnelPurchase"),
+      value: metrics.value.completedCheckouts,
+    },
+  ];
+});
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat(locale.value, {
@@ -104,7 +108,7 @@ function formatPercent(value: number) {
 }
 
 function sessionShare(value: number) {
-  return props.data.metrics.sessions ? value / props.data.metrics.sessions : 0;
+  return metrics.value?.sessions ? value / metrics.value.sessions : 0;
 }
 
 function width(value: number) {
@@ -121,7 +125,10 @@ function width(value: number) {
       </div>
     </header>
 
-    <article v-if="data.availability.metrics !== 'failed'" class="traffic-funnel-card">
+    <article
+      v-if="data.availability.metrics !== 'failed' && data.metrics"
+      class="traffic-funnel-card"
+    >
       <header>
         <div>
           <h3><Funnel />{{ t("dashboard.trafficFunnelTitle") }}</h3>
@@ -151,7 +158,7 @@ function width(value: number) {
       </p>
     </article>
     <div v-else class="traffic-funnel-card traffic-funnel-unavailable">
-      {{ t("dashboard.trafficQueryFailed") }}
+      {{ t("dashboard.trafficMetricsQueryFailed", { range: rangeLabel }) }}
     </div>
 
     <div class="traffic-analysis-grid">

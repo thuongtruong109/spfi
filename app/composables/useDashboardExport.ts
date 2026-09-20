@@ -86,13 +86,13 @@ function buildStoreRows(dashboard: DashboardAggregate) {
     month_transactions: store.payments.transactions.count,
     pending_payouts: store.payments.payouts.pendingCount,
     users: store.users.length,
-    sessions_today: store.traffic.today.sessions,
-    visitors_today: store.traffic.today.visitors,
-    pageviews_today: store.traffic.today.pageviews,
-    sessions_7_days: store.traffic.last7Days.sessions,
-    visitors_7_days: store.traffic.last7Days.visitors,
-    sessions_30_days: store.traffic.last30Days.sessions,
-    visitors_30_days: store.traffic.last30Days.visitors,
+    sessions_today: store.traffic.today?.sessions ?? null,
+    visitors_today: store.traffic.today?.visitors ?? null,
+    pageviews_today: store.traffic.today?.pageviews ?? null,
+    sessions_7_days: store.traffic.last7Days?.sessions ?? null,
+    visitors_7_days: store.traffic.last7Days?.visitors ?? null,
+    sessions_30_days: store.traffic.last30Days?.sessions ?? null,
+    visitors_30_days: store.traffic.last30Days?.visitors ?? null,
     warnings: store.warnings.map((warning) => warning.message).join(" | "),
     generated_at: store.generatedAt,
   }));
@@ -143,7 +143,7 @@ function buildHtmlReport(
     <div class="metric"><span>Revenue today</span><strong>${escapeHtml(moneyText(dashboard.revenue.today))}</strong></div>
     <div class="metric"><span>Revenue month</span><strong>${escapeHtml(moneyText(dashboard.revenue.month))}</strong></div>
     <div class="metric"><span>Pending fulfillment</span><strong>${dashboard.pendingFulfillmentCount}</strong></div>
-    <div class="metric"><span>Sessions today</span><strong>${dashboard.traffic.today.sessions}</strong></div>
+    <div class="metric"><span>Sessions today</span><strong>${dashboard.traffic.today?.sessions ?? "—"}</strong></div>
   </section>
   <table><thead><tr><th>Store</th><th>Today</th><th>Month</th><th>Orders</th><th>Pending</th><th>Customers</th><th>Sessions</th><th>Visitors</th><th>Balance</th><th>Users</th></tr></thead><tbody>${tableRows}</tbody></table>
 </main></body></html>`;

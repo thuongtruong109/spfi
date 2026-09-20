@@ -29,7 +29,7 @@ describe("dashboard traffic availability", () => {
 
     expect(aggregate.available).toBe(true);
     expect(aggregate.availableStores).toBe(1);
-    expect(aggregate.last30Days.sessions).toBe(30);
+    expect(aggregate.last30Days?.sessions).toBe(30);
   });
 
   it("does not treat a genuinely empty fallback as available", () => {
@@ -55,7 +55,7 @@ describe("dashboard traffic availability", () => {
 
     expect(aggregate.availability.sources).toBe("partial");
     expect(aggregate.rangeData["30d"].availability.sources).toBe("partial");
-    expect(aggregate.sources[0]?.sessions).toBe(10);
+    expect(aggregate.sources?.[0]?.sessions).toBe(10);
   });
 
   it("keeps failures from stores with no usable traffic rows in aggregate availability", () => {
@@ -85,5 +85,60 @@ describe("dashboard traffic availability", () => {
     expect(aggregate.available).toBe(false);
     expect(aggregate.availability.last24Hours).toBe("failed");
     expect(aggregate.rangeData["24h"].availability.metrics).toBe("failed");
+  });
+
+  it("does not revive a failed 24-hour block from today's metrics", () => {
+    const traffic = emptyDashboardTraffic();
+    traffic.available = true;
+    traffic.today = createTrafficMetrics({ sessions: 15 });
+    traffic.availability.today = "available";
+    traffic.availability.last24Hours = "failed";
+    traffic.rangeData["24h"].availability.metrics = "failed";
+
+    const cloned = cloneDashboardTraffic(traffic);
+    const aggregate = aggregateDashboardTraffic([traffic]);
+
+    expect(cloned.last24Hours).toBeNull();
+    expect(cloned.rangeData["24h"].metrics).toBeNull();
+    expect(aggregate.last24Hours).toBeNull();
+    expect(aggregate.rangeData["24h"].metrics).toBeNull();
+  });
+
+  it("does not reuse a 30-day breakdown for a failed 7-day block", () => {
+    const traffic = emptyDashboardTraffic();
+    traffic.available = true;
+    traffic.sources = [{ label: "Search", sessions: 30, visitors: 20 }];
+    traffic.availability.sources = "available";
+    traffic.availability.sources7Days = "failed";
+    traffic.rangeData["30d"].sources = traffic.sources;
+    traffic.rangeData["30d"].availability.sources = "available";
+    traffic.rangeData["7d"].availability.sources = "failed";
+
+    const aggregate = aggregateDashboardTraffic([traffic]);
+
+    expect(aggregate.rangeData["30d"].sources?.[0]?.sessions).toBe(30);
+    expect(aggregate.rangeData["7d"].sources).toBeNull();
+  });
+
+  it("marks cross-store traffic as local-clock data when store timezones differ", () => {
+    const vietnam = emptyDashboardTraffic();
+    vietnam.available = true;
+    vietnam.availableStores = 1;
+    vietnam.timeZone = "Asia/Ho_Chi_Minh";
+    vietnam.timeZoneMode = "store";
+    vietnam.today = createTrafficMetrics({ sessions: 10 });
+
+    const newYork = emptyDashboardTraffic();
+    newYork.available = true;
+    newYork.availableStores = 1;
+    newYork.timeZone = "America/New_York";
+    newYork.timeZoneMode = "store";
+    newYork.today = createTrafficMetrics({ sessions: 20 });
+
+    const aggregate = aggregateDashboardTraffic([vietnam, newYork]);
+
+    expect(aggregate.timeZone).toBeNull();
+    expect(aggregate.timeZoneMode).toBe("per-store");
+    expect(aggregate.today?.sessions).toBe(30);
   });
 });

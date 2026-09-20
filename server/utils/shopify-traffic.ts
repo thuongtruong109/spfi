@@ -21,6 +21,11 @@ import {
   callShopifyGraphql,
   type ShopifyGraphqlPartialResponse,
 } from "./callShopifyGraphql";
+import {
+  requireIanaTimeZone,
+  resolveShopifyTrafficTimeZone,
+  shopifyqlTimeZoneModifier,
+} from "./shopify-traffic-timezone";
 
 interface ShopifyqlColumn {
   name?: string;
@@ -164,7 +169,9 @@ export async function fetchShopifyTraffic(input: {
   event: H3Event;
   storeId: string;
   token: string;
+  timeZone?: string;
 }): Promise<DashboardTrafficSummary> {
+  const timeZone = await resolveShopifyTrafficTimeZone(input);
   const response = await callShopifyGraphql<
     TrafficQueryResponse,
     TrafficQueryVariables
@@ -172,12 +179,12 @@ export async function fetchShopifyTraffic(input: {
     ...input,
     query: DASHBOARD_TRAFFIC_QUERY,
     operationName: "DashboardTraffic",
-    variables: buildTrafficQueryVariables(),
+    variables: buildTrafficQueryVariables(timeZone),
     timeoutMs: 30_000,
     allowPartialData: true,
   });
 
-  return parseShopifyTrafficResponse(response);
+  return parseShopifyTrafficResponse(response, timeZone);
 }
 
 export async function fetchShopifyTrafficDimension(input: {
@@ -187,6 +194,7 @@ export async function fetchShopifyTrafficDimension(input: {
   range: DashboardTrafficRange;
   dimension: DashboardTrafficDimensionKey;
 }): Promise<DashboardTrafficDimensionResponse> {
+  const timeZone = await resolveShopifyTrafficTimeZone(input);
   const response = await callShopifyGraphql<
     { dimension?: OptionalShopifyqlResult },
     { dimension: string }
@@ -194,7 +202,11 @@ export async function fetchShopifyTrafficDimension(input: {
     ...input,
     query: TRAFFIC_DIMENSION_QUERY,
     operationName: "StoreTrafficDimension",
-    variables: buildTrafficDimensionQueryVariables(input.range, input.dimension),
+    variables: buildTrafficDimensionQueryVariables(
+      input.range,
+      input.dimension,
+      timeZone,
+    ),
     timeoutMs: 30_000,
   });
   return parseShopifyTrafficDimensionResponse(response, input.range, input.dimension);
@@ -228,11 +240,13 @@ export function parseShopifyTrafficDimensionResponse(
 export function buildTrafficDimensionQueryVariables(
   range: DashboardTrafficRange,
   dimension: DashboardTrafficDimensionKey,
+  timeZone: string,
 ) {
   return {
     dimension: dimensionQuery(
       TRAFFIC_DIMENSION_FIELDS[dimension],
       TRAFFIC_PERIODS[range],
+      timeZone,
     ),
   };
 }
@@ -243,53 +257,62 @@ export function isDashboardTrafficDimensionKey(
   return Object.hasOwn(TRAFFIC_DIMENSION_FIELDS, value);
 }
 
-export function buildTrafficQueryVariables(): TrafficQueryVariables {
+export function buildTrafficQueryVariables(timeZone: string): TrafficQueryVariables {
   return {
-    today: summaryQuery("DURING today"),
-    last24Hours: summaryQuery(TRAFFIC_PERIODS["24h"]),
-    last7Days: summaryQuery(TRAFFIC_PERIODS["7d"]),
-    last30Days: summaryQuery(TRAFFIC_PERIODS["30d"]),
-    hourly: seriesQuery("hour", TRAFFIC_PERIODS["24h"]),
-    daily: seriesQuery("day", TRAFFIC_PERIODS["30d"]),
-    sources: breakdownQuery("referrer_source", TRAFFIC_PERIODS["30d"]),
-    sources24Hours: breakdownQuery("referrer_source", TRAFFIC_PERIODS["24h"]),
-    sources7Days: breakdownQuery("referrer_source", TRAFFIC_PERIODS["7d"]),
-    countries: breakdownQuery("session_country", TRAFFIC_PERIODS["30d"]),
-    countries24Hours: breakdownQuery("session_country", TRAFFIC_PERIODS["24h"]),
-    countries7Days: breakdownQuery("session_country", TRAFFIC_PERIODS["7d"]),
-    devices: breakdownQuery("session_device_type", TRAFFIC_PERIODS["30d"]),
-    devices24Hours: breakdownQuery("session_device_type", TRAFFIC_PERIODS["24h"]),
-    devices7Days: breakdownQuery("session_device_type", TRAFFIC_PERIODS["7d"]),
+    today: summaryQuery("DURING today", timeZone),
+    last24Hours: summaryQuery(TRAFFIC_PERIODS["24h"], timeZone),
+    last7Days: summaryQuery(TRAFFIC_PERIODS["7d"], timeZone),
+    last30Days: summaryQuery(TRAFFIC_PERIODS["30d"], timeZone),
+    hourly: seriesQuery("hour", TRAFFIC_PERIODS["24h"], timeZone),
+    daily: seriesQuery("day", TRAFFIC_PERIODS["30d"], timeZone),
+    sources: breakdownQuery("referrer_source", TRAFFIC_PERIODS["30d"], timeZone),
+    sources24Hours: breakdownQuery("referrer_source", TRAFFIC_PERIODS["24h"], timeZone),
+    sources7Days: breakdownQuery("referrer_source", TRAFFIC_PERIODS["7d"], timeZone),
+    countries: breakdownQuery("session_country", TRAFFIC_PERIODS["30d"], timeZone),
+    countries24Hours: breakdownQuery(
+      "session_country",
+      TRAFFIC_PERIODS["24h"],
+      timeZone,
+    ),
+    countries7Days: breakdownQuery("session_country", TRAFFIC_PERIODS["7d"], timeZone),
+    devices: breakdownQuery("session_device_type", TRAFFIC_PERIODS["30d"], timeZone),
+    devices24Hours: breakdownQuery(
+      "session_device_type",
+      TRAFFIC_PERIODS["24h"],
+      timeZone,
+    ),
+    devices7Days: breakdownQuery(
+      "session_device_type",
+      TRAFFIC_PERIODS["7d"],
+      timeZone,
+    ),
   };
 }
 
 export function parseShopifyTrafficResponse(
   input: TrafficQueryResponse | ShopifyGraphqlPartialResponse<TrafficQueryResponse>,
+  timeZone = "Etc/UTC",
 ): DashboardTrafficSummary {
+  const normalizedTimeZone = requireIanaTimeZone(timeZone);
   const { response, graphqlAvailability } = unwrapTrafficResponse(input);
   const availability = resolveTrafficAvailability(response, graphqlAvailability);
   const todayResult = parseOptionalMetrics(response.today);
   const last24HoursResult = parseOptionalMetrics(response.last24Hours);
   const last7DaysResult = parseOptionalMetrics(response.last7Days);
   const last30DaysResult = parseOptionalMetrics(response.last30Days);
-  const emptyMetrics = createTrafficMetrics({});
-  const today = todayResult || emptyMetrics;
-  const last24Hours = last24HoursResult || emptyMetrics;
-  const last7Days = last7DaysResult || emptyMetrics;
-  const last30Days = last30DaysResult || emptyMetrics;
-  const sources = parseOptionalBreakdown(
+  const sources = parseBreakdownIfAvailable(
     response.sources,
     "referrer_source",
     false,
     "Direct / unknown",
   );
-  const countries = parseOptionalBreakdown(
+  const countries = parseBreakdownIfAvailable(
     response.countries,
     "session_country",
     false,
     "Direct / unknown",
   );
-  const devices = parseOptionalBreakdown(
+  const devices = parseBreakdownIfAvailable(
     response.devices,
     "session_device_type",
     false,
@@ -323,11 +346,13 @@ export function parseShopifyTrafficResponse(
   return {
     available,
     availableStores: available ? 1 : 0,
+    timeZone: normalizedTimeZone,
+    timeZoneMode: "store",
     availability,
-    today,
-    last24Hours,
-    last7Days,
-    last30Days,
+    today: todayResult,
+    last24Hours: last24HoursResult,
+    last7Days: last7DaysResult,
+    last30Days: last30DaysResult,
     hourly: parseOptionalPoints(response.hourly, "hour"),
     daily: parseOptionalPoints(response.daily, "day"),
     sources,
@@ -349,39 +374,42 @@ export function parseShopifyTrafficResponse(
     ),
     rangeData: {
       "24h": {
-        metrics: last24Hours,
+        metrics: last24HoursResult,
         sources: sources24Hours,
         countries: countries24Hours,
         devices: devices24Hours,
         dimensions: {},
         availability: {
           metrics: availability.last24Hours,
+          trend: availability.hourly,
           sources: availability.sources24Hours,
           countries: availability.countries24Hours,
           devices: availability.devices24Hours,
         },
       },
       "7d": {
-        metrics: last7Days,
+        metrics: last7DaysResult,
         sources: sources7Days,
         countries: countries7Days,
         devices: devices7Days,
         dimensions: {},
         availability: {
           metrics: availability.last7Days,
+          trend: availability.daily,
           sources: availability.sources7Days,
           countries: availability.countries7Days,
           devices: availability.devices7Days,
         },
       },
       "30d": {
-        metrics: last30Days,
+        metrics: last30DaysResult,
         sources,
         countries,
         devices,
         dimensions: {},
         availability: {
           metrics: availability.last30Days,
+          trend: availability.daily,
           sources: availability.sources,
           countries: availability.countries,
           devices: availability.devices,
@@ -428,20 +456,20 @@ function resolveTrafficAliasAvailability(
   return readOptionalRows(result) ? "available" : "failed";
 }
 
-function summaryQuery(period: string) {
-  return `FROM sessions\nSHOW ${SUMMARY_METRICS}\n${HUMAN_FILTER}\n${period}`;
+function summaryQuery(period: string, timeZone: string) {
+  return `FROM sessions\nSHOW ${SUMMARY_METRICS}\n${HUMAN_FILTER}\nWITH ${shopifyqlTimeZoneModifier(timeZone)}\n${period}`;
 }
 
-function seriesQuery(dimension: "hour" | "day", period: string) {
-  return `FROM sessions\nSHOW sessions, online_store_visitors, pageviews\n${HUMAN_FILTER}\nTIMESERIES ${dimension}\n${period}\nORDER BY ${dimension} ASC`;
+function seriesQuery(dimension: "hour" | "day", period: string, timeZone: string) {
+  return `FROM sessions\nSHOW sessions, online_store_visitors, pageviews\n${HUMAN_FILTER}\nTIMESERIES ${dimension} WITH ${shopifyqlTimeZoneModifier(timeZone)}\n${period}\nORDER BY ${dimension} ASC`;
 }
 
-function breakdownQuery(dimension: string, period = "SINCE -29d UNTIL now") {
-  return `FROM sessions\nSHOW sessions, online_store_visitors\n${HUMAN_FILTER}\nGROUP BY ${dimension}\n${period}\nORDER BY sessions DESC\nLIMIT 8`;
+function breakdownQuery(dimension: string, period: string, timeZone: string) {
+  return `FROM sessions\nSHOW sessions, online_store_visitors\n${HUMAN_FILTER}\nGROUP BY ${dimension} WITH ${shopifyqlTimeZoneModifier(timeZone)}\n${period}\nORDER BY sessions DESC\nLIMIT 8`;
 }
 
-function dimensionQuery(dimension: string, period: string) {
-  return `FROM sessions\nSHOW ${SUMMARY_METRICS}\n${HUMAN_FILTER}\nGROUP BY ${dimension} WITH TOTALS\n${period}\nORDER BY sessions DESC, ${dimension} ASC\nLIMIT ${DIMENSION_ROW_LIMIT + 1}`;
+function dimensionQuery(dimension: string, period: string, timeZone: string) {
+  return `FROM sessions\nSHOW ${SUMMARY_METRICS}\n${HUMAN_FILTER}\nGROUP BY ${dimension} WITH TOTALS, ${shopifyqlTimeZoneModifier(timeZone)}\n${period}\nORDER BY sessions DESC, ${dimension} ASC\nLIMIT ${DIMENSION_ROW_LIMIT + 1}`;
 }
 
 function parseOptionalMetrics(
@@ -465,8 +493,10 @@ function parseOptionalMetrics(
 function parseOptionalPoints(
   result: OptionalShopifyqlResult,
   dimension: "hour" | "day",
-): DashboardTrafficPoint[] {
-  return (readOptionalRows(result) || []).flatMap((row) => {
+): DashboardTrafficPoint[] | null {
+  const rows = readOptionalRows(result);
+  if (!rows) return null;
+  return rows.flatMap((row) => {
     const period = stringValue(row[dimension]);
     return period
       ? [
@@ -485,8 +515,7 @@ function parseOptionalRangeBreakdown(
   result: OptionalShopifyqlResult,
   dimension: string,
 ) {
-  const rows = parseBreakdownIfAvailable(result, dimension, false, "Direct / unknown");
-  return rows || [];
+  return parseBreakdownIfAvailable(result, dimension, false, "Direct / unknown");
 }
 
 function parseOptionalBreakdown(

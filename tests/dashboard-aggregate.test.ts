@@ -8,6 +8,7 @@ import {
 import {
   createDashboardTrafficAvailability,
   createTrafficMetrics,
+  emptyDashboardTraffic,
 } from "../utils/dashboard-traffic.ts";
 
 test("all-store aggregation sums matching currencies without mixing them", () => {
@@ -160,8 +161,11 @@ function snapshot(
       },
     },
     traffic: {
+      ...emptyDashboardTraffic(),
       available: true,
       availableStores: 1,
+      timeZone: "Etc/UTC",
+      timeZoneMode: "store",
       availability: createDashboardTrafficAvailability("available"),
       today: createTrafficMetrics({
         sessions: revenueAmount,
@@ -183,7 +187,7 @@ function snapshot(
       }),
       hourly: [
         {
-          period: "2026-08-10T00:00:00Z",
+          period: "2026-08-10T00",
           sessions: revenueAmount,
           visitors: revenueAmount,
           pageviews: revenueAmount * 2,

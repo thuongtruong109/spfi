@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DashboardTrafficPoint } from "~~/types/dashboard";
+import { parseShopifyqlPeriod } from "~~/utils/shopifyql-period";
 
 const props = defineProps<{
   points: DashboardTrafficPoint[];
@@ -179,19 +180,14 @@ function clearPointer() {
 }
 
 function formatPeriod(value: string, short = false) {
-  const date = parsePeriod(value);
+  const date = parseShopifyqlPeriod(value);
   if (!date) return value;
   return new Intl.DateTimeFormat(locale.value, {
+    timeZone: "UTC",
     ...(props.granularity === "hour"
       ? { hour: "2-digit", minute: "2-digit" }
       : { month: short ? "short" : "long", day: "numeric" }),
   }).format(date);
-}
-
-function parsePeriod(value: string) {
-  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value;
-  const date = new Date(normalized);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function formatNumber(value: number) {

@@ -198,7 +198,11 @@ export async function fetchStoreDashboard({
     ),
     loadDashboardService(
       enabledServices.has("traffic"),
-      () => fetchShopifyTraffic(common),
+      () =>
+        fetchShopifyTraffic({
+          ...common,
+          timeZone: profile?.iana_timezone,
+        }),
       emptyDashboardTraffic(),
     ),
   ]);

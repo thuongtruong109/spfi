@@ -17,7 +17,7 @@ function trafficFixture(sessions: number): DashboardTrafficSummary {
     last30Days: createTrafficMetrics({ sessions: sessions * 30 }),
     hourly: [
       {
-        period: "2026-09-16T10:00:00Z",
+        period: "2026-09-16T10",
         sessions,
         visitors: sessions - 1,
         pageviews: sessions * 2,

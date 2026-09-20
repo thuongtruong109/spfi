@@ -524,6 +524,13 @@ const messages = {
     "Shopify could not load this traffic dataset for the selected period.",
   "dashboard.trafficQueryPartial":
     "Some stores could not load this dataset; the values shown are partial.",
+  "dashboard.trafficMetricsQueryFailed": "Could not load traffic metrics for {range}.",
+  "dashboard.trafficTrendQueryFailed": "Could not load the traffic trend for {range}.",
+  "dashboard.trafficBreakdownQueryFailed":
+    "Could not load the {dimension} breakdown for {range}.",
+  "dashboard.trafficTimezoneStore": "Time buckets use the store timezone: {timeZone}.",
+  "dashboard.trafficTimezonePerStore":
+    "Each store uses its own timezone; combined points align by local clock time.",
   "dashboard.trafficOther": "Other",
   "dashboard.trafficBreakdownChartLabel":
     "Session distribution for the selected traffic dimension",

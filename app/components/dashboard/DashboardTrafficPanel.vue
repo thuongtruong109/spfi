@@ -53,31 +53,59 @@ const selectedRangeData = computed(() =>
   resolveDashboardTrafficRangeData(props.traffic, range.value),
 );
 
+const trendPoints = computed(() =>
+  range.value === "24h" ? props.traffic.hourly : props.traffic.daily,
+);
 const points = computed(() => {
-  if (range.value === "24h") return props.traffic.hourly;
-  return range.value === "7d" ? props.traffic.daily.slice(-7) : props.traffic.daily;
+  const rows = trendPoints.value;
+  if (!rows) return null;
+  if (range.value === "24h") return rows;
+  const daily = rows;
+  return range.value === "7d" ? daily.slice(-7) : daily;
 });
 const granularity = computed(() => (range.value === "24h" ? "hour" : "day"));
+const selectedBreakdownData = computed(() => selectedRangeData.value[breakdown.value]);
 const breakdownRows = computed<DashboardTrafficBreakdown[]>(
-  () => selectedRangeData.value[breakdown.value],
+  () => selectedBreakdownData.value || [],
 );
+const selectedMetrics = computed(() => selectedRangeData.value.metrics);
 const metricsAvailability = computed(
   () => selectedRangeData.value.availability.metrics,
 );
-const trendAvailability = computed(() =>
-  range.value === "24h"
-    ? props.traffic.availability?.hourly || "unknown"
-    : props.traffic.availability?.daily || "unknown",
+const trendAvailability = computed(() => selectedRangeData.value.availability.trend);
+const trendUnavailable = computed(
+  () => trendAvailability.value === "failed" || !trendPoints.value,
 );
 const breakdownAvailability = computed(
   () => selectedRangeData.value.availability[breakdown.value],
 );
-const metricsFailed = computed(() => metricsAvailability.value === "failed");
+const metricsFailed = computed(
+  () => metricsAvailability.value === "failed" || !selectedMetrics.value,
+);
+const breakdownUnavailable = computed(
+  () => breakdownAvailability.value === "failed" || !selectedBreakdownData.value,
+);
+const selectedBreakdownLabel = computed(
+  () =>
+    breakdownOptions.value.find((option) => option.value === breakdown.value)?.label ||
+    breakdown.value,
+);
 const trafficHasQueryFailure = computed(() =>
   Object.values(props.traffic.availability || {}).some(
     (state) => state === "failed" || state === "partial",
   ),
 );
+const trafficTimeZoneNote = computed(() => {
+  if (props.traffic.timeZoneMode === "per-store") {
+    return t("dashboard.trafficTimezonePerStore");
+  }
+  if (props.traffic.timeZone) {
+    return t("dashboard.trafficTimezoneStore", {
+      timeZone: props.traffic.timeZone,
+    });
+  }
+  return "";
+});
 const breakdownKnownTotal = computed(() => {
   const breakdownTotal = breakdownRows.value.reduce(
     (total, row) => total + Math.max(0, row.sessions),
@@ -85,7 +113,7 @@ const breakdownKnownTotal = computed(() => {
   );
   return breakdownAvailability.value === "partial"
     ? breakdownTotal
-    : selectedRangeData.value.metrics.sessions || breakdownTotal;
+    : selectedMetrics.value?.sessions || breakdownTotal;
 });
 const breakdownSegments = computed(() => {
   const leadingRows = breakdownRows.value
@@ -148,15 +176,16 @@ function formatDuration(value: number) {
     </div>
     <template v-else>
       <div
-        v-if="metricsAvailability === 'failed' || metricsAvailability === 'partial'"
+        v-if="metricsFailed || metricsAvailability === 'partial'"
         class="traffic-query-warning"
         role="status"
       >
         {{
           t(
-            metricsAvailability === "failed"
-              ? "dashboard.trafficQueryFailed"
-              : "dashboard.trafficQueryPartial",
+            metricsAvailability === "partial" && !metricsFailed
+              ? "dashboard.trafficQueryPartial"
+              : "dashboard.trafficMetricsQueryFailed",
+            { range: rangeLabel },
           )
         }}
       </div>
@@ -165,26 +194,26 @@ function formatDuration(value: number) {
           <div>
             <span><MousePointerClick />{{ t("dashboard.trafficMetricSessions") }}</span>
             <strong>{{
-              metricsFailed ? "—" : formatNumber(selectedRangeData.metrics.sessions)
+              metricsFailed ? "—" : formatNumber(selectedMetrics?.sessions || 0)
             }}</strong>
             <small>{{ rangeLabel }}</small>
           </div>
           <div>
             <span><UsersRound />{{ t("dashboard.trafficMetricVisitors") }}</span>
             <strong>{{
-              metricsFailed ? "—" : formatNumber(selectedRangeData.metrics.visitors)
+              metricsFailed ? "—" : formatNumber(selectedMetrics?.visitors || 0)
             }}</strong>
             <small>{{ t("dashboard.trafficUniqueShopify") }}</small>
           </div>
           <div>
             <span><Eye />{{ t("dashboard.trafficMetricPageviews") }}</span>
             <strong>{{
-              metricsFailed ? "—" : formatNumber(selectedRangeData.metrics.pageviews)
+              metricsFailed ? "—" : formatNumber(selectedMetrics?.pageviews || 0)
             }}</strong>
             <small v-if="!metricsFailed">
               {{
                 t("dashboard.trafficViewsPerSession", {
-                  value: selectedRangeData.metrics.pageviewsPerSession.toFixed(1),
+                  value: (selectedMetrics?.pageviewsPerSession || 0).toFixed(1),
                 })
               }}
             </small>
@@ -192,12 +221,12 @@ function formatDuration(value: number) {
           <div>
             <span><ChartNoAxesCombined />{{ t("dashboard.trafficMetricBounce") }}</span>
             <strong>{{
-              metricsFailed ? "—" : formatPercent(selectedRangeData.metrics.bounceRate)
+              metricsFailed ? "—" : formatPercent(selectedMetrics?.bounceRate || 0)
             }}</strong>
             <small v-if="!metricsFailed">
               {{
                 t("dashboard.trafficBouncesDetail", {
-                  count: formatNumber(selectedRangeData.metrics.bounces),
+                  count: formatNumber(selectedMetrics?.bounces || 0),
                 })
               }}
             </small>
@@ -205,14 +234,12 @@ function formatDuration(value: number) {
           <div>
             <span><ShoppingCart />{{ t("dashboard.trafficMetricConversion") }}</span>
             <strong>{{
-              metricsFailed
-                ? "—"
-                : formatPercent(selectedRangeData.metrics.conversionRate)
+              metricsFailed ? "—" : formatPercent(selectedMetrics?.conversionRate || 0)
             }}</strong>
             <small v-if="!metricsFailed">
               {{
                 t("dashboard.trafficConversionsDetail", {
-                  count: formatNumber(selectedRangeData.metrics.completedCheckouts),
+                  count: formatNumber(selectedMetrics?.completedCheckouts || 0),
                 })
               }}
             </small>
@@ -223,7 +250,7 @@ function formatDuration(value: number) {
               {{
                 metricsFailed
                   ? "—"
-                  : formatDuration(selectedRangeData.metrics.averageSessionDuration)
+                  : formatDuration(selectedMetrics?.averageSessionDuration || 0)
               }}
             </strong>
             <small>{{ rangeLabel }}</small>
@@ -244,11 +271,14 @@ function formatDuration(value: number) {
             <strong><ChartNoAxesCombined />{{ t("dashboard.trafficTrend") }}</strong>
             <span class="traffic-active-range">{{ rangeLabel }}</span>
           </div>
-          <div v-if="trendAvailability === 'failed'" class="traffic-query-error">
-            {{ t("dashboard.trafficQueryFailed") }}
+          <div v-if="trendUnavailable" class="traffic-query-error">
+            {{ t("dashboard.trafficTrendQueryFailed", { range: rangeLabel }) }}
           </div>
           <template v-else>
-            <DashboardTrafficChart :points="points" :granularity="granularity" />
+            <p v-if="trafficTimeZoneNote" class="traffic-timezone-note">
+              {{ trafficTimeZoneNote }}
+            </p>
+            <DashboardTrafficChart :points="points || []" :granularity="granularity" />
             <p v-if="trendAvailability === 'partial'" class="traffic-query-note">
               {{ t("dashboard.trafficQueryPartial") }}
             </p>
@@ -274,10 +304,15 @@ function formatDuration(value: number) {
             </div>
           </div>
           <div
-            v-if="breakdownAvailability === 'failed'"
+            v-if="breakdownUnavailable"
             class="traffic-breakdown-empty traffic-query-error"
           >
-            {{ t("dashboard.trafficQueryFailed") }}
+            {{
+              t("dashboard.trafficBreakdownQueryFailed", {
+                dimension: selectedBreakdownLabel,
+                range: rangeLabel,
+              })
+            }}
           </div>
           <div v-else-if="breakdownSegments.length" class="traffic-breakdown-chart">
             <DashboardDonutChart
@@ -383,6 +418,13 @@ function formatDuration(value: number) {
 .traffic-query-note {
   margin-top: 6px;
   color: var(--amber);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.traffic-timezone-note {
+  margin: 0 0 4px;
+  color: var(--muted);
   font-size: 9px;
   line-height: 1.4;
 }

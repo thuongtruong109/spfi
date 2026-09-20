@@ -23,7 +23,7 @@ export interface TrafficExportLabels {
 
 export interface TrafficExportInput {
   data: DashboardTrafficRangeData;
-  points: DashboardTrafficPoint[];
+  points: DashboardTrafficPoint[] | null;
   rangeLabel: string;
   exportedAt: Date;
   labels: TrafficExportLabels;
@@ -47,13 +47,17 @@ export function buildTrafficExportPayload(input: TrafficExportInput) {
 
 export function buildTrafficHtmlReport(input: TrafficExportInput) {
   const { data, labels } = input;
+  const metrics = data.metrics;
   const metricCards = [
-    [labels.sessions, formatNumber(data.metrics.sessions)],
-    [labels.visitors, formatNumber(data.metrics.visitors)],
-    [labels.pageviews, formatNumber(data.metrics.pageviews)],
-    [labels.bounceRate, formatPercent(data.metrics.bounceRate)],
-    [labels.conversionRate, formatPercent(data.metrics.conversionRate)],
-    [labels.averageDuration, formatDuration(data.metrics.averageSessionDuration)],
+    [labels.sessions, metrics ? formatNumber(metrics.sessions) : "—"],
+    [labels.visitors, metrics ? formatNumber(metrics.visitors) : "—"],
+    [labels.pageviews, metrics ? formatNumber(metrics.pageviews) : "—"],
+    [labels.bounceRate, metrics ? formatPercent(metrics.bounceRate) : "—"],
+    [labels.conversionRate, metrics ? formatPercent(metrics.conversionRate) : "—"],
+    [
+      labels.averageDuration,
+      metrics ? formatDuration(metrics.averageSessionDuration) : "—",
+    ],
   ]
     .map(
       ([label, value]) =>
@@ -62,11 +66,13 @@ export function buildTrafficHtmlReport(input: TrafficExportInput) {
     .join("");
 
   const trendRows = input.points
-    .map(
-      (point) =>
-        `<tr><td>${escapeHtml(point.period)}</td><td>${formatNumber(point.sessions)}</td><td>${formatNumber(point.visitors)}</td><td>${formatNumber(point.pageviews)}</td></tr>`,
-    )
-    .join("");
+    ? input.points
+        .map(
+          (point) =>
+            `<tr><td>${escapeHtml(point.period)}</td><td>${formatNumber(point.sessions)}</td><td>${formatNumber(point.visitors)}</td><td>${formatNumber(point.pageviews)}</td></tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="4">—</td></tr>';
   const breakdowns = [
     [labels.sources, data.sources],
     [labels.countries, data.countries],
@@ -120,6 +126,7 @@ function buildBreakdownTable(
   rows: DashboardTrafficRangeData["sources"],
   labels: TrafficExportLabels,
 ) {
+  if (!rows) return "<p>—</p>";
   const body = rows
     .map(
       (row) =>

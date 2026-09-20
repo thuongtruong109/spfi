@@ -3,6 +3,7 @@ import type {
   DashboardTrafficAvailabilityState,
   DashboardTrafficBreakdown,
   DashboardTrafficMetrics,
+  DashboardTrafficOverviewAlias,
   DashboardTrafficPoint,
   DashboardTrafficRange,
   DashboardTrafficRangeAvailability,
@@ -17,16 +18,18 @@ export function emptyDashboardTraffic(): DashboardTrafficSummary {
   return {
     available: false,
     availableStores: 0,
+    timeZone: null,
+    timeZoneMode: "unknown",
     availability: createDashboardTrafficAvailability(),
-    today: emptyTrafficMetrics(),
-    last24Hours: emptyTrafficMetrics(),
-    last7Days: emptyTrafficMetrics(),
-    last30Days: emptyTrafficMetrics(),
-    hourly: [],
-    daily: [],
-    sources: [],
-    countries: [],
-    devices: [],
+    today: null,
+    last24Hours: null,
+    last7Days: null,
+    last30Days: null,
+    hourly: null,
+    daily: null,
+    sources: null,
+    countries: null,
+    devices: null,
     trafficTypes: [],
     platforms: [],
     browsers: [],
@@ -48,26 +51,38 @@ export function cloneDashboardTraffic(
   const range7Days = resolveDashboardTrafficRangeData(traffic, "7d");
   const range30Days = resolveDashboardTrafficRangeData(traffic, "30d");
   const available = isDashboardTrafficAvailable(traffic);
+  const timeZone =
+    typeof traffic.timeZone === "string" && traffic.timeZone.trim()
+      ? traffic.timeZone.trim()
+      : null;
   return {
     ...traffic,
     available,
     availableStores: available ? Math.max(1, traffic.availableStores || 0) : 0,
+    timeZone,
+    timeZoneMode: traffic.timeZoneMode || (timeZone ? "store" : "unknown"),
     availability: createDashboardTrafficAvailability("unknown", traffic.availability),
-    today: { ...traffic.today },
-    last24Hours: { ...(traffic.last24Hours || traffic.today) },
-    last7Days: { ...traffic.last7Days },
-    last30Days: { ...traffic.last30Days },
-    hourly: traffic.hourly.map((point) => ({ ...point })),
-    daily: traffic.daily.map((point) => ({ ...point })),
-    sources: traffic.sources.map((row) => ({ ...row })),
-    countries: traffic.countries.map((row) => ({ ...row })),
-    devices: traffic.devices.map((row) => ({ ...row })),
-    trafficTypes: traffic.trafficTypes.map((row) => ({ ...row })),
-    platforms: traffic.platforms.map((row) => ({ ...row })),
-    browsers: traffic.browsers.map((row) => ({ ...row })),
-    landingPages: traffic.landingPages.map((row) => ({ ...row })),
-    campaigns: traffic.campaigns.map((row) => ({ ...row })),
-    aiReferrals: traffic.aiReferrals.map((row) => ({ ...row })),
+    today: cloneMetricsIfUsable(traffic.today, traffic.availability?.today),
+    last24Hours: cloneMetricsIfUsable(
+      traffic.last24Hours,
+      traffic.availability?.last24Hours,
+    ),
+    last7Days: cloneMetricsIfUsable(traffic.last7Days, traffic.availability?.last7Days),
+    last30Days: cloneMetricsIfUsable(
+      traffic.last30Days,
+      traffic.availability?.last30Days,
+    ),
+    hourly: cloneRowsIfUsable(traffic.hourly, traffic.availability?.hourly),
+    daily: cloneRowsIfUsable(traffic.daily, traffic.availability?.daily),
+    sources: cloneRowsIfUsable(traffic.sources, traffic.availability?.sources),
+    countries: cloneRowsIfUsable(traffic.countries, traffic.availability?.countries),
+    devices: cloneRowsIfUsable(traffic.devices, traffic.availability?.devices),
+    trafficTypes: (traffic.trafficTypes || []).map((row) => ({ ...row })),
+    platforms: (traffic.platforms || []).map((row) => ({ ...row })),
+    browsers: (traffic.browsers || []).map((row) => ({ ...row })),
+    landingPages: (traffic.landingPages || []).map((row) => ({ ...row })),
+    campaigns: (traffic.campaigns || []).map((row) => ({ ...row })),
+    aiReferrals: (traffic.aiReferrals || []).map((row) => ({ ...row })),
     rangeData: {
       "24h": cloneTrafficRangeData(range24Hours),
       "7d": cloneTrafficRangeData(range7Days),
@@ -86,26 +101,34 @@ export function resolveDashboardTrafficRangeData(
     range,
   );
   if (existing) {
+    const availability = normalizeRangeAvailability(
+      existing.availability,
+      fallbackAvailability,
+    );
     return {
       ...existing,
-      availability: normalizeRangeAvailability(
-        existing.availability,
-        fallbackAvailability,
-      ),
+      metrics: cloneMetricsIfUsable(existing.metrics, availability.metrics),
+      sources: cloneRowsIfUsable(existing.sources, availability.sources),
+      countries: cloneRowsIfUsable(existing.countries, availability.countries),
+      devices: cloneRowsIfUsable(existing.devices, availability.devices),
+      availability,
     };
   }
 
   const metrics =
     range === "24h"
-      ? traffic.last24Hours || traffic.today
+      ? traffic.last24Hours
       : range === "7d"
         ? traffic.last7Days
         : traffic.last30Days;
+  const sources = range === "30d" ? traffic.sources : null;
+  const countries = range === "30d" ? traffic.countries : null;
+  const devices = range === "30d" ? traffic.devices : null;
   return {
-    metrics,
-    sources: traffic.sources || [],
-    countries: traffic.countries || [],
-    devices: traffic.devices || [],
+    metrics: cloneMetricsIfUsable(metrics, fallbackAvailability.metrics),
+    sources: cloneRowsIfUsable(sources, fallbackAvailability.sources),
+    countries: cloneRowsIfUsable(countries, fallbackAvailability.countries),
+    devices: cloneRowsIfUsable(devices, fallbackAvailability.devices),
     dimensions: {},
     availability: fallbackAvailability,
   };
@@ -173,28 +196,51 @@ export function aggregateDashboardTraffic(
       (total, item) => total + Math.max(1, item.availableStores),
       0,
     ),
+    ...aggregateTimeZoneContext(available),
     availability: aggregateTrafficAvailability(
       traffic.map((item) =>
         createDashboardTrafficAvailability("unknown", item.availability),
       ),
     ),
-    today: aggregateMetrics(available.map((item) => item.today)),
-    last24Hours: aggregateMetrics(
-      available.map((item) => item.last24Hours || item.today),
+    today: aggregateNullableMetrics(
+      collectAliasValues(traffic, "today", (item) => item.today),
     ),
-    last7Days: aggregateMetrics(available.map((item) => item.last7Days)),
-    last30Days: aggregateMetrics(available.map((item) => item.last30Days)),
-    hourly: aggregatePoints(available.flatMap((item) => item.hourly)),
-    daily: aggregatePoints(available.flatMap((item) => item.daily)),
-    sources: aggregateBreakdowns(available.flatMap((item) => item.sources)),
-    countries: aggregateBreakdowns(available.flatMap((item) => item.countries)),
-    devices: aggregateBreakdowns(available.flatMap((item) => item.devices)),
-    trafficTypes: aggregateBreakdowns(available.flatMap((item) => item.trafficTypes)),
-    platforms: aggregateBreakdowns(available.flatMap((item) => item.platforms)),
-    browsers: aggregateBreakdowns(available.flatMap((item) => item.browsers)),
-    landingPages: aggregateBreakdowns(available.flatMap((item) => item.landingPages)),
-    campaigns: aggregateBreakdowns(available.flatMap((item) => item.campaigns)),
-    aiReferrals: aggregateBreakdowns(available.flatMap((item) => item.aiReferrals)),
+    last24Hours: aggregateNullableMetrics(
+      collectAliasValues(traffic, "last24Hours", (item) => item.last24Hours),
+    ),
+    last7Days: aggregateNullableMetrics(
+      collectAliasValues(traffic, "last7Days", (item) => item.last7Days),
+    ),
+    last30Days: aggregateNullableMetrics(
+      collectAliasValues(traffic, "last30Days", (item) => item.last30Days),
+    ),
+    hourly: aggregateNullablePoints(
+      collectAliasValues(traffic, "hourly", (item) => item.hourly),
+    ),
+    daily: aggregateNullablePoints(
+      collectAliasValues(traffic, "daily", (item) => item.daily),
+    ),
+    sources: aggregateNullableBreakdowns(
+      collectAliasValues(traffic, "sources", (item) => item.sources),
+    ),
+    countries: aggregateNullableBreakdowns(
+      collectAliasValues(traffic, "countries", (item) => item.countries),
+    ),
+    devices: aggregateNullableBreakdowns(
+      collectAliasValues(traffic, "devices", (item) => item.devices),
+    ),
+    trafficTypes: aggregateBreakdowns(
+      available.flatMap((item) => item.trafficTypes || []),
+    ),
+    platforms: aggregateBreakdowns(available.flatMap((item) => item.platforms || [])),
+    browsers: aggregateBreakdowns(available.flatMap((item) => item.browsers || [])),
+    landingPages: aggregateBreakdowns(
+      available.flatMap((item) => item.landingPages || []),
+    ),
+    campaigns: aggregateBreakdowns(available.flatMap((item) => item.campaigns || [])),
+    aiReferrals: aggregateBreakdowns(
+      available.flatMap((item) => item.aiReferrals || []),
+    ),
     rangeData: {
       "24h": aggregateTrafficRangeData(
         available.map((item) => resolveDashboardTrafficRangeData(item, "24h")),
@@ -246,13 +292,14 @@ export function isDashboardTrafficAvailable(traffic: DashboardTrafficSummary) {
 
 function emptyTrafficRangeData(): DashboardTrafficRangeData {
   return {
-    metrics: emptyTrafficMetrics(),
-    sources: [],
-    countries: [],
-    devices: [],
+    metrics: null,
+    sources: null,
+    countries: null,
+    devices: null,
     dimensions: {},
     availability: {
       metrics: "unknown",
+      trend: "unknown",
       sources: "unknown",
       countries: "unknown",
       devices: "unknown",
@@ -264,10 +311,10 @@ function cloneTrafficRangeData(
   range: DashboardTrafficRangeData,
 ): DashboardTrafficRangeData {
   return {
-    metrics: { ...range.metrics },
-    sources: range.sources.map((row) => ({ ...row })),
-    countries: range.countries.map((row) => ({ ...row })),
-    devices: range.devices.map((row) => ({ ...row })),
+    metrics: range.metrics ? { ...range.metrics } : null,
+    sources: range.sources?.map((row) => ({ ...row })) || null,
+    countries: range.countries?.map((row) => ({ ...row })) || null,
+    devices: range.devices?.map((row) => ({ ...row })) || null,
     dimensions: Object.fromEntries(
       Object.entries(range.dimensions || {}).map(([dimension, result]) => [
         dimension,
@@ -287,16 +334,27 @@ function aggregateTrafficRangeData(
   ranges: DashboardTrafficRangeData[],
   availabilityRanges: DashboardTrafficRangeData[] = ranges,
 ): DashboardTrafficRangeData {
+  const metrics = ranges.flatMap((range) => (range.metrics ? [range.metrics] : []));
+  const sources = ranges.flatMap((range) => (range.sources ? [range.sources] : []));
+  const countries = ranges.flatMap((range) =>
+    range.countries ? [range.countries] : [],
+  );
+  const devices = ranges.flatMap((range) => (range.devices ? [range.devices] : []));
   return {
-    metrics: aggregateMetrics(ranges.map((range) => range.metrics)),
-    sources: aggregateBreakdowns(ranges.flatMap((range) => range.sources)),
-    countries: aggregateBreakdowns(ranges.flatMap((range) => range.countries)),
-    devices: aggregateBreakdowns(ranges.flatMap((range) => range.devices)),
+    metrics: aggregateNullableMetrics(metrics),
+    sources: aggregateNullableBreakdowns(sources),
+    countries: aggregateNullableBreakdowns(countries),
+    devices: aggregateNullableBreakdowns(devices),
     dimensions: {},
     availability: {
       metrics: aggregateAvailabilityState(
         availabilityRanges.map(
           (range) => normalizeRangeAvailability(range.availability).metrics,
+        ),
+      ),
+      trend: aggregateAvailabilityState(
+        availabilityRanges.map(
+          (range) => normalizeRangeAvailability(range.availability).trend,
         ),
       ),
       sources: aggregateAvailabilityState(
@@ -360,6 +418,7 @@ function rangeAvailability(
   if (range === "24h") {
     return {
       metrics: availability.last24Hours,
+      trend: availability.hourly,
       sources: availability.sources24Hours,
       countries: availability.countries24Hours,
       devices: availability.devices24Hours,
@@ -368,6 +427,7 @@ function rangeAvailability(
   if (range === "7d") {
     return {
       metrics: availability.last7Days,
+      trend: availability.daily,
       sources: availability.sources7Days,
       countries: availability.countries7Days,
       devices: availability.devices7Days,
@@ -375,6 +435,7 @@ function rangeAvailability(
   }
   return {
     metrics: availability.last30Days,
+    trend: availability.daily,
     sources: availability.sources,
     countries: availability.countries,
     devices: availability.devices,
@@ -385,6 +446,7 @@ function normalizeRangeAvailability(
   availability?: Partial<DashboardTrafficRangeAvailability>,
   fallback: DashboardTrafficRangeAvailability = {
     metrics: "unknown",
+    trend: "unknown",
     sources: "unknown",
     countries: "unknown",
     devices: "unknown",
@@ -392,14 +454,76 @@ function normalizeRangeAvailability(
 ): DashboardTrafficRangeAvailability {
   return {
     metrics: availability?.metrics || fallback.metrics,
+    trend: availability?.trend || fallback.trend,
     sources: availability?.sources || fallback.sources,
     countries: availability?.countries || fallback.countries,
     devices: availability?.devices || fallback.devices,
   };
 }
 
-function emptyTrafficMetrics(): DashboardTrafficMetrics {
-  return createTrafficMetrics({});
+function cloneMetricsIfUsable(
+  metrics: DashboardTrafficMetrics | null | undefined,
+  availability?: DashboardTrafficAvailabilityState,
+): DashboardTrafficMetrics | null {
+  return availability === "failed" || !metrics ? null : { ...metrics };
+}
+
+function cloneRowsIfUsable<T extends object>(
+  rows: T[] | null | undefined,
+  availability?: DashboardTrafficAvailabilityState,
+): T[] | null {
+  return availability === "failed" || !Array.isArray(rows)
+    ? null
+    : rows.map((row) => ({ ...row }));
+}
+
+function collectAliasValues<T>(
+  traffic: DashboardTrafficSummary[],
+  alias: DashboardTrafficOverviewAlias,
+  select: (item: DashboardTrafficSummary) => T | null | undefined,
+): T[] {
+  return traffic.flatMap((item) => {
+    if (item.availability?.[alias] === "failed") return [];
+    const value = select(item);
+    return value === null || value === undefined ? [] : [value];
+  });
+}
+
+function aggregateNullableMetrics(
+  rows: DashboardTrafficMetrics[],
+): DashboardTrafficMetrics | null {
+  return rows.length ? aggregateMetrics(rows) : null;
+}
+
+function aggregateNullablePoints(
+  rows: DashboardTrafficPoint[][],
+): DashboardTrafficPoint[] | null {
+  return rows.length ? aggregatePoints(rows.flat()) : null;
+}
+
+function aggregateNullableBreakdowns(
+  rows: DashboardTrafficBreakdown[][],
+): DashboardTrafficBreakdown[] | null {
+  return rows.length ? aggregateBreakdowns(rows.flat()) : null;
+}
+
+function aggregateTimeZoneContext(
+  traffic: DashboardTrafficSummary[],
+): Pick<DashboardTrafficSummary, "timeZone" | "timeZoneMode"> {
+  const timeZones = traffic.map((item) => item.timeZone?.trim() || null);
+  if (!timeZones.length || timeZones.some((timeZone) => !timeZone)) {
+    return { timeZone: null, timeZoneMode: "unknown" };
+  }
+
+  const distinctTimeZones = Array.from(new Set(timeZones as string[]));
+  if (
+    distinctTimeZones.length > 1 ||
+    traffic.some((item) => item.timeZoneMode === "per-store")
+  ) {
+    return { timeZone: null, timeZoneMode: "per-store" };
+  }
+
+  return { timeZone: distinctTimeZones[0] || null, timeZoneMode: "store" };
 }
 
 function aggregateMetrics(rows: DashboardTrafficMetrics[]) {

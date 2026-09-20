@@ -45,8 +45,21 @@ describe("DashboardTrafficPanel", () => {
 
     const wrapper = mountPanel(traffic);
 
-    expect(wrapper.text()).toContain("dashboard.trafficQueryFailed");
+    expect(wrapper.text()).toContain("dashboard.trafficMetricsQueryFailed");
     expect(wrapper.find(".traffic-metric-grid strong").text()).toBe("—");
+  });
+
+  it("identifies the failed breakdown and selected range", () => {
+    installNuxtImports();
+    const traffic = emptyDashboardTraffic();
+    traffic.available = true;
+    traffic.rangeData["24h"].metrics = createTrafficMetrics({ sessions: 5 });
+    traffic.rangeData["24h"].availability.metrics = "available";
+    traffic.rangeData["24h"].availability.sources = "failed";
+
+    const wrapper = mountPanel(traffic);
+
+    expect(wrapper.text()).toContain("dashboard.trafficBreakdownQueryFailed");
   });
 
   it("distinguishes a fully failed query from genuinely unavailable traffic", () => {

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { emptyDashboardTraffic } from "~~/utils/dashboard-traffic";
+import {
+  createTrafficMetrics,
+  emptyDashboardTraffic,
+} from "~~/utils/dashboard-traffic";
 import {
   buildTrafficExportPayload,
   buildTrafficHtmlReport,
@@ -8,7 +11,7 @@ import {
 
 function input(): TrafficExportInput {
   const data = emptyDashboardTraffic().rangeData["7d"];
-  data.metrics.sessions = 42;
+  data.metrics = createTrafficMetrics({ sessions: 42 });
   data.sources = [{ label: "Search & Social", sessions: 30, visitors: 24 }];
   data.dimensions.source = {
     rows: [
@@ -59,9 +62,9 @@ describe("traffic export", () => {
   it("builds a complete range-scoped JSON payload", () => {
     const payload = buildTrafficExportPayload(input());
     expect(payload.range).toBe("Last 7 days");
-    expect(payload.metrics.sessions).toBe(42);
+    expect(payload.metrics?.sessions).toBe(42);
     expect(payload.availability.metrics).toBe("unknown");
-    expect(payload.breakdowns.sources[0]?.label).toBe("Search & Social");
+    expect(payload.breakdowns.sources?.[0]?.label).toBe("Search & Social");
     expect(payload.dimensions.source?.totalSessions).toBe(42);
     expect(payload.dimensions.source?.hasMore).toBe(true);
     expect(payload.trend).toHaveLength(1);
@@ -72,5 +75,23 @@ describe("traffic export", () => {
     expect(html).toContain("Traffic report");
     expect(html).toContain("Search &amp; Social");
     expect(html).not.toContain("Search & Social</td>");
+  });
+
+  it("preserves unavailable blocks as null instead of exporting zeros", () => {
+    const unavailable = input();
+    unavailable.data.metrics = null;
+    unavailable.data.sources = null;
+    unavailable.points = null;
+    unavailable.data.availability.metrics = "failed";
+    unavailable.data.availability.trend = "failed";
+    unavailable.data.availability.sources = "failed";
+
+    const payload = buildTrafficExportPayload(unavailable);
+    const html = buildTrafficHtmlReport(unavailable);
+
+    expect(payload.metrics).toBeNull();
+    expect(payload.breakdowns.sources).toBeNull();
+    expect(payload.trend).toBeNull();
+    expect(html).toContain("—");
   });
 });
