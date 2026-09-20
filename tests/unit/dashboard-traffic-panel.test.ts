@@ -2,6 +2,7 @@ import { shallowMount } from "@vue/test-utils";
 import { computed, ref, watch } from "vue";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import DashboardTrafficPanel from "~/components/dashboard/DashboardTrafficPanel.vue";
+import DashboardTrafficReportingStatus from "~/components/dashboard/DashboardTrafficReportingStatus.vue";
 import {
   createTrafficMetrics,
   emptyDashboardTraffic,
@@ -72,6 +73,80 @@ describe("DashboardTrafficPanel", () => {
     expect(wrapper.text()).toContain("dashboard.trafficQueryFailed");
     expect(wrapper.text()).not.toContain("dashboard.trafficPermissionHint");
   });
+
+  it("shows store reporting, freshness, failures, and selected-range coverage", () => {
+    installNuxtImports();
+    const traffic = emptyDashboardTraffic();
+    traffic.available = true;
+    traffic.availableStores = 7;
+    traffic.last24Hours = createTrafficMetrics({ sessions: 70 });
+    traffic.rangeData["24h"].metrics = traffic.last24Hours;
+    traffic.rangeData["24h"].sources = [];
+    traffic.rangeData["24h"].countries = [];
+    traffic.rangeData["24h"].devices = [];
+    traffic.reporting = {
+      totalStores: 10,
+      reportingStores: 7,
+      lastSuccessfulAt: "2026-09-20T09:00:00.000Z",
+      stores: [
+        {
+          storeId: "partial",
+          label: "Partial Store",
+          status: "partial",
+          lastSuccessfulAt: "2026-09-20T09:00:00.000Z",
+          issues: [{ range: "24h", block: "sources", state: "failed" }],
+          message: null,
+        },
+        {
+          storeId: "failed",
+          label: "Failed Store",
+          status: "failed",
+          lastSuccessfulAt: null,
+          issues: [],
+          message: "Missing read_reports.",
+        },
+      ],
+      coverage: {
+        "24h": coverage(10, {
+          metrics: 7,
+          trend: 7,
+          sources: 6,
+          countries: 7,
+          devices: 5,
+        }),
+        "7d": coverage(10),
+        "30d": coverage(10),
+      },
+    };
+
+    const statusProps = {
+      traffic,
+      storeCount: 10,
+      range: "24h" as const,
+      rangeLabel: "dashboard.trafficRange24h",
+    };
+    const status = shallowMount(DashboardTrafficReportingStatus, {
+      props: { ...statusProps, loading: true },
+    });
+    const wrapper = mountPanel(traffic, { storeCount: 10, loading: true });
+
+    expect(status.text()).toContain(
+      'dashboard.trafficStoresReporting:{"available":7,"total":10}',
+    );
+    expect(status.text()).toContain("dashboard.trafficDataStale");
+    expect(status.text()).toContain("dashboard.trafficLastSuccessfulAt");
+    expect(status.text()).toContain("dashboard.trafficStoreIssues");
+    expect(status.text()).toContain("Partial Store");
+    expect(status.text()).toContain("Failed Store");
+    expect(status.text()).toContain("dashboard.trafficPartialBlocks");
+    expect(wrapper.findAll(".traffic-breakdown-coverage span")).toHaveLength(3);
+
+    const freshStatus = shallowMount(DashboardTrafficReportingStatus, {
+      props: { ...statusProps, loading: false },
+    });
+    expect(freshStatus.text()).toContain("dashboard.trafficDataFresh");
+    expect(freshStatus.text()).not.toContain("dashboard.trafficDataStale");
+  });
 });
 
 function installNuxtImports() {
@@ -80,20 +155,44 @@ function installNuxtImports() {
   vi.stubGlobal("watch", watch);
   vi.stubGlobal("useLocalization", () => ({
     locale: ref("en-US"),
-    t: (key: string) => key,
+    t: (key: string, params?: Record<string, unknown>) =>
+      params ? `${key}:${JSON.stringify(params)}` : key,
   }));
 }
 
-function mountPanel(traffic: ReturnType<typeof emptyDashboardTraffic>) {
+function mountPanel(
+  traffic: ReturnType<typeof emptyDashboardTraffic>,
+  props: { storeCount?: number; loading?: boolean } = {},
+) {
   return shallowMount(DashboardTrafficPanel, {
-    props: { traffic, storeCount: 1 },
+    props: {
+      traffic,
+      storeCount: props.storeCount || 1,
+      loading: props.loading,
+    },
     global: {
       stubs: {
         DashboardTrafficControls: true,
         DashboardTrafficChart: true,
         DashboardDonutChart: true,
         DashboardTrafficInsights: true,
+        DashboardTrafficReportingStatus: true,
       },
     },
   });
+}
+
+function coverage(
+  totalStores: number,
+  reporting: Partial<
+    Record<"metrics" | "trend" | "sources" | "countries" | "devices", number>
+  > = {},
+) {
+  return {
+    metrics: { reportingStores: reporting.metrics || 0, totalStores },
+    trend: { reportingStores: reporting.trend || 0, totalStores },
+    sources: { reportingStores: reporting.sources || 0, totalStores },
+    countries: { reportingStores: reporting.countries || 0, totalStores },
+    devices: { reportingStores: reporting.devices || 0, totalStores },
+  };
 }

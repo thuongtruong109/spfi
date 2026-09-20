@@ -90,4 +90,27 @@ describe("dashboard service selection", () => {
     expect(mocks.fetchPaymentTransactions).toHaveBeenCalledTimes(1);
     expect(mocks.fetchTraffic).not.toHaveBeenCalled();
   });
+
+  it("marks every traffic block failed when the store traffic request rejects", async () => {
+    mocks.fetchTraffic.mockRejectedValueOnce(new Error("read_reports denied"));
+
+    const snapshot = await fetchStoreDashboard({
+      event: {} as never,
+      storeId: "shop-a",
+      token: "token",
+      services: ["traffic"],
+    });
+
+    expect(snapshot.traffic.available).toBe(false);
+    expect(Object.values(snapshot.traffic.availability)).toEqual(
+      expect.arrayContaining(["failed"]),
+    );
+    expect(
+      Object.values(snapshot.traffic.availability).every((state) => state === "failed"),
+    ).toBe(true);
+    expect(snapshot.traffic.reporting.reportingStores).toBe(0);
+    expect(snapshot.warnings).toEqual([
+      expect.objectContaining({ resource: "traffic" }),
+    ]);
+  });
 });

@@ -1,4 +1,5 @@
 import type {
+  DashboardStoreFailure,
   DashboardTrafficAvailability,
   DashboardTrafficAvailabilityState,
   DashboardTrafficBreakdown,
@@ -6,18 +7,34 @@ import type {
   DashboardTrafficOverviewAlias,
   DashboardTrafficPoint,
   DashboardTrafficRange,
+  DashboardTrafficReporting,
   DashboardTrafficRangeAvailability,
   DashboardTrafficRangeData,
+  DashboardTrafficStoreReport,
   DashboardTrafficSummary,
 } from "../types/dashboard.ts";
-import { DASHBOARD_TRAFFIC_OVERVIEW_ALIASES } from "../types/dashboard.ts";
+import {
+  DASHBOARD_TRAFFIC_BLOCKS,
+  DASHBOARD_TRAFFIC_OVERVIEW_ALIASES,
+} from "../types/dashboard.ts";
 
 const BREAKDOWN_LIMIT = 8;
+
+export interface DashboardTrafficAggregationContext {
+  stores: Array<{
+    storeId: string;
+    label: string;
+    traffic: DashboardTrafficSummary;
+    message?: string | null;
+  }>;
+  failures: DashboardStoreFailure[];
+}
 
 export function emptyDashboardTraffic(): DashboardTrafficSummary {
   return {
     available: false,
     availableStores: 0,
+    reporting: emptyDashboardTrafficReporting(),
     timeZone: null,
     timeZoneMode: "unknown",
     availability: createDashboardTrafficAvailability(),
@@ -44,6 +61,37 @@ export function emptyDashboardTraffic(): DashboardTrafficSummary {
   };
 }
 
+export function failedDashboardTraffic(): DashboardTrafficSummary {
+  const traffic = emptyDashboardTraffic();
+  traffic.availability = createDashboardTrafficAvailability("failed");
+  traffic.rangeData = {
+    "24h": emptyTrafficRangeData(trafficRangeAvailability("failed")),
+    "7d": emptyTrafficRangeData(trafficRangeAvailability("failed")),
+    "30d": emptyTrafficRangeData(trafficRangeAvailability("failed")),
+  };
+  traffic.reporting = createSingleStoreTrafficReporting(traffic.rangeData, false, null);
+  return traffic;
+}
+
+export function createSingleStoreTrafficReporting(
+  rangeData: Record<DashboardTrafficRange, DashboardTrafficRangeData>,
+  available: boolean,
+  lastSuccessfulAt: string | null,
+): DashboardTrafficReporting {
+  return {
+    totalStores: 1,
+    reportingStores: available ? 1 : 0,
+    lastSuccessfulAt: available ? normalizeIsoTimestamp(lastSuccessfulAt) : null,
+    stores: [],
+    coverage: createTrafficRangeCoverage(
+      Object.fromEntries(
+        trafficRanges().map((range) => [range, [rangeData[range]]]),
+      ) as Record<DashboardTrafficRange, DashboardTrafficRangeData[]>,
+      1,
+    ),
+  };
+}
+
 export function cloneDashboardTraffic(
   traffic: DashboardTrafficSummary,
 ): DashboardTrafficSummary {
@@ -59,6 +107,7 @@ export function cloneDashboardTraffic(
     ...traffic,
     available,
     availableStores: available ? Math.max(1, traffic.availableStores || 0) : 0,
+    reporting: cloneDashboardTrafficReporting(traffic.reporting, traffic, available),
     timeZone,
     timeZoneMode: traffic.timeZoneMode || (timeZone ? "store" : "unknown"),
     availability: createDashboardTrafficAvailability("unknown", traffic.availability),
@@ -163,28 +212,48 @@ export function createTrafficMetrics(
 
 export function aggregateDashboardTraffic(
   traffic: DashboardTrafficSummary[],
+  context?: DashboardTrafficAggregationContext,
 ): DashboardTrafficSummary {
   const available = traffic.filter(isDashboardTrafficAvailable);
+  const reporting = aggregateDashboardTrafficReporting(traffic, context);
+  const failedStoreCount = context?.failures.length || 0;
+  const availabilityRows = [
+    ...traffic.map((item) =>
+      createDashboardTrafficAvailability("unknown", item.availability),
+    ),
+    ...Array.from({ length: failedStoreCount }, () =>
+      createDashboardTrafficAvailability("failed"),
+    ),
+  ];
+  const failedRanges = Array.from({ length: failedStoreCount }, () =>
+    trafficRangeAvailability("failed"),
+  );
   if (!available.length) {
     const empty = emptyDashboardTraffic();
-    if (!traffic.length) return empty;
-    empty.availability = aggregateTrafficAvailability(
-      traffic.map((item) =>
-        createDashboardTrafficAvailability("unknown", item.availability),
-      ),
-    );
+    empty.reporting = reporting;
+    if (!availabilityRows.length) return empty;
+    empty.availability = aggregateTrafficAvailability(availabilityRows);
     empty.rangeData = {
       "24h": aggregateTrafficRangeData(
         [],
-        traffic.map((item) => resolveDashboardTrafficRangeData(item, "24h")),
+        [
+          ...traffic.map((item) => resolveDashboardTrafficRangeData(item, "24h")),
+          ...failedRanges.map((availability) => emptyTrafficRangeData(availability)),
+        ],
       ),
       "7d": aggregateTrafficRangeData(
         [],
-        traffic.map((item) => resolveDashboardTrafficRangeData(item, "7d")),
+        [
+          ...traffic.map((item) => resolveDashboardTrafficRangeData(item, "7d")),
+          ...failedRanges.map((availability) => emptyTrafficRangeData(availability)),
+        ],
       ),
       "30d": aggregateTrafficRangeData(
         [],
-        traffic.map((item) => resolveDashboardTrafficRangeData(item, "30d")),
+        [
+          ...traffic.map((item) => resolveDashboardTrafficRangeData(item, "30d")),
+          ...failedRanges.map((availability) => emptyTrafficRangeData(availability)),
+        ],
       ),
     };
     return empty;
@@ -192,16 +261,10 @@ export function aggregateDashboardTraffic(
 
   return {
     available: true,
-    availableStores: available.reduce(
-      (total, item) => total + Math.max(1, item.availableStores),
-      0,
-    ),
+    availableStores: reporting.reportingStores,
+    reporting,
     ...aggregateTimeZoneContext(available),
-    availability: aggregateTrafficAvailability(
-      traffic.map((item) =>
-        createDashboardTrafficAvailability("unknown", item.availability),
-      ),
-    ),
+    availability: aggregateTrafficAvailability(availabilityRows),
     today: aggregateNullableMetrics(
       collectAliasValues(traffic, "today", (item) => item.today),
     ),
@@ -244,15 +307,24 @@ export function aggregateDashboardTraffic(
     rangeData: {
       "24h": aggregateTrafficRangeData(
         available.map((item) => resolveDashboardTrafficRangeData(item, "24h")),
-        traffic.map((item) => resolveDashboardTrafficRangeData(item, "24h")),
+        [
+          ...traffic.map((item) => resolveDashboardTrafficRangeData(item, "24h")),
+          ...failedRanges.map((availability) => emptyTrafficRangeData(availability)),
+        ],
       ),
       "7d": aggregateTrafficRangeData(
         available.map((item) => resolveDashboardTrafficRangeData(item, "7d")),
-        traffic.map((item) => resolveDashboardTrafficRangeData(item, "7d")),
+        [
+          ...traffic.map((item) => resolveDashboardTrafficRangeData(item, "7d")),
+          ...failedRanges.map((availability) => emptyTrafficRangeData(availability)),
+        ],
       ),
       "30d": aggregateTrafficRangeData(
         available.map((item) => resolveDashboardTrafficRangeData(item, "30d")),
-        traffic.map((item) => resolveDashboardTrafficRangeData(item, "30d")),
+        [
+          ...traffic.map((item) => resolveDashboardTrafficRangeData(item, "30d")),
+          ...failedRanges.map((availability) => emptyTrafficRangeData(availability)),
+        ],
       ),
     },
   };
@@ -290,20 +362,16 @@ export function isDashboardTrafficAvailable(traffic: DashboardTrafficSummary) {
   );
 }
 
-function emptyTrafficRangeData(): DashboardTrafficRangeData {
+function emptyTrafficRangeData(
+  availability = trafficRangeAvailability("unknown"),
+): DashboardTrafficRangeData {
   return {
     metrics: null,
     sources: null,
     countries: null,
     devices: null,
     dimensions: {},
-    availability: {
-      metrics: "unknown",
-      trend: "unknown",
-      sources: "unknown",
-      countries: "unknown",
-      devices: "unknown",
-    },
+    availability,
   };
 }
 
@@ -505,6 +573,227 @@ function aggregateNullableBreakdowns(
   rows: DashboardTrafficBreakdown[][],
 ): DashboardTrafficBreakdown[] | null {
   return rows.length ? aggregateBreakdowns(rows.flat()) : null;
+}
+
+function emptyDashboardTrafficReporting(totalStores = 0): DashboardTrafficReporting {
+  return {
+    totalStores,
+    reportingStores: 0,
+    lastSuccessfulAt: null,
+    stores: [],
+    coverage: createTrafficRangeCoverage(
+      { "24h": [], "7d": [], "30d": [] },
+      totalStores,
+    ),
+  };
+}
+
+function cloneDashboardTrafficReporting(
+  reporting: DashboardTrafficReporting | undefined,
+  traffic: DashboardTrafficSummary,
+  available: boolean,
+): DashboardTrafficReporting {
+  if (!reporting) {
+    const totalStores = available ? Math.max(1, traffic.availableStores || 0) : 0;
+    const ranges = {
+      "24h": resolveDashboardTrafficRangeData(traffic, "24h"),
+      "7d": resolveDashboardTrafficRangeData(traffic, "7d"),
+      "30d": resolveDashboardTrafficRangeData(traffic, "30d"),
+    };
+    return {
+      totalStores,
+      reportingStores: available ? totalStores : 0,
+      lastSuccessfulAt: null,
+      stores: [],
+      coverage: Object.fromEntries(
+        trafficRanges().map((range) => [
+          range,
+          Object.fromEntries(
+            DASHBOARD_TRAFFIC_BLOCKS.map((block) => [
+              block,
+              {
+                reportingStores: isReportingState(
+                  normalizeRangeAvailability(ranges[range].availability)[block],
+                )
+                  ? totalStores
+                  : 0,
+                totalStores,
+              },
+            ]),
+          ),
+        ]),
+      ) as DashboardTrafficReporting["coverage"],
+    };
+  }
+
+  return {
+    totalStores: nonNegativeInteger(reporting.totalStores),
+    reportingStores: nonNegativeInteger(reporting.reportingStores),
+    lastSuccessfulAt: normalizeIsoTimestamp(reporting.lastSuccessfulAt),
+    stores: (reporting.stores || []).map((store) => ({
+      ...store,
+      issues: (store.issues || []).map((issue) => ({ ...issue })),
+    })),
+    coverage: Object.fromEntries(
+      trafficRanges().map((range) => [
+        range,
+        Object.fromEntries(
+          DASHBOARD_TRAFFIC_BLOCKS.map((block) => {
+            const row = reporting.coverage?.[range]?.[block];
+            return [
+              block,
+              {
+                reportingStores: nonNegativeInteger(row?.reportingStores),
+                totalStores: nonNegativeInteger(
+                  row?.totalStores ?? reporting.totalStores,
+                ),
+              },
+            ];
+          }),
+        ),
+      ]),
+    ) as DashboardTrafficReporting["coverage"],
+  };
+}
+
+function aggregateDashboardTrafficReporting(
+  traffic: DashboardTrafficSummary[],
+  context?: DashboardTrafficAggregationContext,
+): DashboardTrafficReporting {
+  const totalStores = context
+    ? context.stores.length + context.failures.length
+    : traffic.length;
+  const reportingStores = context
+    ? context.stores.filter((store) => isDashboardTrafficAvailable(store.traffic))
+        .length
+    : traffic.filter(isDashboardTrafficAvailable).length;
+  const rangeRows = Object.fromEntries(
+    trafficRanges().map((range) => [
+      range,
+      traffic.map((item) => resolveDashboardTrafficRangeData(item, range)),
+    ]),
+  ) as Record<DashboardTrafficRange, DashboardTrafficRangeData[]>;
+
+  return {
+    totalStores,
+    reportingStores,
+    lastSuccessfulAt: latestSuccessfulTimestamp(
+      traffic.map((item) => item.reporting?.lastSuccessfulAt),
+    ),
+    stores: context ? createTrafficStoreReports(context) : [],
+    coverage: createTrafficRangeCoverage(rangeRows, totalStores),
+  };
+}
+
+function createTrafficRangeCoverage(
+  ranges: Record<DashboardTrafficRange, DashboardTrafficRangeData[]>,
+  totalStores: number,
+): DashboardTrafficReporting["coverage"] {
+  return Object.fromEntries(
+    trafficRanges().map((range) => [
+      range,
+      Object.fromEntries(
+        DASHBOARD_TRAFFIC_BLOCKS.map((block) => [
+          block,
+          {
+            reportingStores: ranges[range].filter((row) =>
+              isReportingState(normalizeRangeAvailability(row.availability)[block]),
+            ).length,
+            totalStores,
+          },
+        ]),
+      ),
+    ]),
+  ) as DashboardTrafficReporting["coverage"];
+}
+
+function createTrafficStoreReports(
+  context: DashboardTrafficAggregationContext,
+): DashboardTrafficStoreReport[] {
+  const reports = context.stores.map((store): DashboardTrafficStoreReport => {
+    const issues = trafficRanges().flatMap((range) => {
+      const availability = normalizeRangeAvailability(
+        resolveDashboardTrafficRangeData(store.traffic, range).availability,
+      );
+      return DASHBOARD_TRAFFIC_BLOCKS.flatMap((block) => {
+        const state = availability[block];
+        return state === "available" ? [] : [{ range, block, state }];
+      });
+    });
+    const available = isDashboardTrafficAvailable(store.traffic);
+    return {
+      storeId: store.storeId,
+      label: store.label,
+      status: !available ? "failed" : issues.length ? "partial" : "reporting",
+      lastSuccessfulAt: normalizeIsoTimestamp(
+        store.traffic.reporting?.lastSuccessfulAt,
+      ),
+      issues,
+      message: store.message?.trim() || null,
+    };
+  });
+
+  reports.push(
+    ...context.failures.map((failure): DashboardTrafficStoreReport => ({
+      storeId: failure.storeId,
+      label: failure.label,
+      status: "failed",
+      lastSuccessfulAt: null,
+      issues: [],
+      message: failure.message,
+    })),
+  );
+
+  return reports.sort(
+    (a, b) =>
+      trafficReportStatusRank(a.status) - trafficReportStatusRank(b.status) ||
+      a.label.localeCompare(b.label),
+  );
+}
+
+function trafficReportStatusRank(status: DashboardTrafficStoreReport["status"]) {
+  if (status === "failed") return 0;
+  if (status === "partial") return 1;
+  return 2;
+}
+
+function latestSuccessfulTimestamp(values: Array<string | null | undefined>) {
+  const timestamps = values.flatMap((value) => {
+    const normalized = normalizeIsoTimestamp(value);
+    return normalized ? [{ value: normalized, time: Date.parse(normalized) }] : [];
+  });
+  return timestamps.sort((a, b) => b.time - a.time)[0]?.value || null;
+}
+
+function normalizeIsoTimestamp(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
+function isReportingState(state: DashboardTrafficAvailabilityState) {
+  return state === "available" || state === "partial";
+}
+
+function trafficRanges(): DashboardTrafficRange[] {
+  return ["24h", "7d", "30d"];
+}
+
+function trafficRangeAvailability(
+  state: DashboardTrafficAvailabilityState,
+): DashboardTrafficRangeAvailability {
+  return {
+    metrics: state,
+    trend: state,
+    sources: state,
+    countries: state,
+    devices: state,
+  };
+}
+
+function nonNegativeInteger(value: unknown) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : 0;
 }
 
 function aggregateTimeZoneContext(

@@ -531,6 +531,16 @@ const messages = {
   "dashboard.trafficTimezoneStore": "Time buckets use the store timezone: {timeZone}.",
   "dashboard.trafficTimezonePerStore":
     "Each store uses its own timezone; combined points align by local clock time.",
+  "dashboard.trafficDataFresh": "Fresh",
+  "dashboard.trafficDataStale": "Refreshing · showing stale data",
+  "dashboard.trafficDataNeverLoaded": "No successful load",
+  "dashboard.trafficLastSuccessfulAt": "Last successful load: {time}",
+  "dashboard.trafficStoreIssues": "{count} stores need attention",
+  "dashboard.trafficStoreIssueFallback": "Traffic data could not be loaded.",
+  "dashboard.trafficMoreIssues": "+{count} more",
+  "dashboard.trafficPartialBlocks": "Partial coverage for {range}",
+  "dashboard.trafficCoverageValue": "{reporting}/{total} stores ({percent}%)",
+  "dashboard.trafficBlockMetrics": "Metrics",
   "dashboard.trafficOther": "Other",
   "dashboard.trafficBreakdownChartLabel":
     "Session distribution for the selected traffic dimension",

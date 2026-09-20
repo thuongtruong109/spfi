@@ -60,6 +60,42 @@ test("currency filtering recalculates counts, rankings, and money series", () =>
   assert.strictEqual(filterDashboardAggregateCurrency(aggregate, " ALL "), aggregate);
 });
 
+test("traffic reporting denominator includes dashboard request failures", () => {
+  const reportingStore = snapshot("alpha", "USD", 10);
+  for (const range of ["24h", "7d", "30d"] as const) {
+    reportingStore.traffic.rangeData[range].availability = {
+      metrics: "available",
+      trend: "available",
+      sources: "available",
+      countries: "available",
+      devices: "available",
+    };
+  }
+
+  const result = aggregateDashboardSnapshots(
+    [reportingStore],
+    [
+      {
+        storeId: "beta",
+        label: "beta.myshopify.com",
+        reason: "request-failed",
+        message: "Dashboard request failed.",
+      },
+    ],
+  );
+
+  assert.equal(result.traffic.availableStores, 1);
+  assert.equal(result.traffic.reporting.reportingStores, 1);
+  assert.equal(result.traffic.reporting.totalStores, 2);
+  assert.deepEqual(result.traffic.reporting.coverage["24h"].sources, {
+    reportingStores: 1,
+    totalStores: 2,
+  });
+  assert.equal(result.traffic.availability.sources24Hours, "partial");
+  assert.equal(result.traffic.reporting.stores[0]?.storeId, "beta");
+  assert.equal(result.traffic.reporting.stores[0]?.status, "failed");
+});
+
 function snapshot(
   storeId: string,
   currency: string,

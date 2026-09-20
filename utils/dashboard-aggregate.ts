@@ -220,7 +220,20 @@ export function aggregateDashboardSnapshots(
         recent: [],
       },
     },
-    traffic: aggregateDashboardTraffic(stores.map((store) => store.traffic)),
+    traffic: aggregateDashboardTraffic(
+      stores.map((store) => store.traffic),
+      {
+        stores: stores.map((store) => ({
+          storeId: store.storeId,
+          label: store.storeName || store.domain || store.storeId,
+          traffic: store.traffic,
+          message:
+            store.warnings.find((warning) => warning.resource === "traffic")?.message ||
+            null,
+        })),
+        failures,
+      },
+    ),
   };
 }
 

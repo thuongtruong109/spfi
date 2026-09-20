@@ -14,6 +14,7 @@ import type {
 } from "~~/types/dashboard";
 import {
   createDashboardTrafficAvailability,
+  createSingleStoreTrafficReporting,
   createTrafficMetrics,
 } from "~~/utils/dashboard-traffic";
 import { createApiErrorFromMessage } from "./callShopifyApi";
@@ -292,6 +293,7 @@ export function buildTrafficQueryVariables(timeZone: string): TrafficQueryVariab
 export function parseShopifyTrafficResponse(
   input: TrafficQueryResponse | ShopifyGraphqlPartialResponse<TrafficQueryResponse>,
   timeZone = "Etc/UTC",
+  successfulAt = new Date().toISOString(),
 ): DashboardTrafficSummary {
   const normalizedTimeZone = requireIanaTimeZone(timeZone);
   const { response, graphqlAvailability } = unwrapTrafficResponse(input);
@@ -343,9 +345,54 @@ export function parseShopifyTrafficResponse(
     "session_device_type",
   );
   const available = Object.values(availability).some((state) => state === "available");
+  const rangeData: DashboardTrafficSummary["rangeData"] = {
+    "24h": {
+      metrics: last24HoursResult,
+      sources: sources24Hours,
+      countries: countries24Hours,
+      devices: devices24Hours,
+      dimensions: {},
+      availability: {
+        metrics: availability.last24Hours,
+        trend: availability.hourly,
+        sources: availability.sources24Hours,
+        countries: availability.countries24Hours,
+        devices: availability.devices24Hours,
+      },
+    },
+    "7d": {
+      metrics: last7DaysResult,
+      sources: sources7Days,
+      countries: countries7Days,
+      devices: devices7Days,
+      dimensions: {},
+      availability: {
+        metrics: availability.last7Days,
+        trend: availability.daily,
+        sources: availability.sources7Days,
+        countries: availability.countries7Days,
+        devices: availability.devices7Days,
+      },
+    },
+    "30d": {
+      metrics: last30DaysResult,
+      sources,
+      countries,
+      devices,
+      dimensions: {},
+      availability: {
+        metrics: availability.last30Days,
+        trend: availability.daily,
+        sources: availability.sources,
+        countries: availability.countries,
+        devices: availability.devices,
+      },
+    },
+  };
   return {
     available,
     availableStores: available ? 1 : 0,
+    reporting: createSingleStoreTrafficReporting(rangeData, available, successfulAt),
     timeZone: normalizedTimeZone,
     timeZoneMode: "store",
     availability,
@@ -372,50 +419,7 @@ export function parseShopifyTrafficResponse(
       "agentic_referring_channel",
       true,
     ),
-    rangeData: {
-      "24h": {
-        metrics: last24HoursResult,
-        sources: sources24Hours,
-        countries: countries24Hours,
-        devices: devices24Hours,
-        dimensions: {},
-        availability: {
-          metrics: availability.last24Hours,
-          trend: availability.hourly,
-          sources: availability.sources24Hours,
-          countries: availability.countries24Hours,
-          devices: availability.devices24Hours,
-        },
-      },
-      "7d": {
-        metrics: last7DaysResult,
-        sources: sources7Days,
-        countries: countries7Days,
-        devices: devices7Days,
-        dimensions: {},
-        availability: {
-          metrics: availability.last7Days,
-          trend: availability.daily,
-          sources: availability.sources7Days,
-          countries: availability.countries7Days,
-          devices: availability.devices7Days,
-        },
-      },
-      "30d": {
-        metrics: last30DaysResult,
-        sources,
-        countries,
-        devices,
-        dimensions: {},
-        availability: {
-          metrics: availability.last30Days,
-          trend: availability.daily,
-          sources: availability.sources,
-          countries: availability.countries,
-          devices: availability.devices,
-        },
-      },
-    },
+    rangeData,
   };
 }
 

@@ -10,6 +10,7 @@ import {
   UsersRound,
 } from "@lucide/vue";
 import type {
+  DashboardTrafficBlock,
   DashboardTrafficBreakdown,
   DashboardTrafficDimensionKey,
   DashboardTrafficRange,
@@ -106,6 +107,29 @@ const trafficTimeZoneNote = computed(() => {
   }
   return "";
 });
+const reportingTotalStores = computed(() =>
+  Math.max(0, props.storeCount, props.traffic.reporting?.totalStores || 0),
+);
+const hasReportingMetadata = computed(
+  () => (props.traffic.reporting?.totalStores || 0) > 0,
+);
+const reportingStores = computed(() =>
+  Math.min(
+    reportingTotalStores.value,
+    Math.max(
+      0,
+      hasReportingMetadata.value
+        ? props.traffic.reporting.reportingStores
+        : props.traffic.availableStores,
+    ),
+  ),
+);
+const breakdownCoverage = computed(() =>
+  breakdownOptions.value.map((option) => {
+    const coverage = resolveBlockCoverage(option.value);
+    return { ...option, ...coverage };
+  }),
+);
 const breakdownKnownTotal = computed(() => {
   const breakdownTotal = breakdownRows.value.reduce(
     (total, row) => total + Math.max(0, row.sessions),
@@ -154,10 +178,42 @@ function formatDuration(value: number) {
   const remainder = seconds % 60;
   return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }
+
+function resolveBlockCoverage(block: DashboardTrafficBlock) {
+  const reported = hasReportingMetadata.value
+    ? props.traffic.reporting?.coverage?.[range.value]?.[block]
+    : undefined;
+  const totalStores = Math.max(reportingTotalStores.value, reported?.totalStores || 0);
+  if (reported) {
+    return {
+      reportingStores: Math.min(totalStores, Math.max(0, reported.reportingStores)),
+      totalStores,
+    };
+  }
+
+  const state = selectedRangeData.value.availability[block];
+  return {
+    reportingStores:
+      state === "available" || state === "partial" ? reportingStores.value : 0,
+    totalStores,
+  };
+}
+
+function formatCoverage(reporting: number, total: number) {
+  const percent = total ? Math.round((reporting / total) * 100) : 0;
+  return t("dashboard.trafficCoverageValue", { reporting, total, percent });
+}
 </script>
 
 <template>
   <article class="dashboard-panel traffic-panel">
+    <DashboardTrafficReportingStatus
+      :traffic="traffic"
+      :loading="loading"
+      :store-count="storeCount"
+      :range="range"
+      :range-label="rangeLabel"
+    />
     <div v-if="loading && !traffic.available" class="traffic-state">
       {{ t("dashboard.trafficLoading") }}
     </div>
@@ -329,6 +385,16 @@ function formatDuration(value: number) {
           <p v-if="breakdownAvailability === 'partial'" class="traffic-query-note">
             {{ t("dashboard.trafficQueryPartial") }}
           </p>
+          <div class="traffic-breakdown-coverage">
+            <span
+              v-for="row in breakdownCoverage"
+              :key="row.value"
+              :class="{ 'is-partial': row.reportingStores < row.totalStores }"
+            >
+              {{ row.label }}
+              {{ formatCoverage(row.reportingStores, row.totalStores) }}
+            </span>
+          </div>
         </div>
       </section>
 
@@ -420,6 +486,19 @@ function formatDuration(value: number) {
   color: var(--amber);
   font-size: 9px;
   line-height: 1.4;
+}
+
+.traffic-breakdown-coverage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.traffic-breakdown-coverage .is-partial {
+  color: var(--amber);
 }
 
 .traffic-timezone-note {

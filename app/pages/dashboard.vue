@@ -101,6 +101,12 @@ const aggregate = computed(() =>
     selectedCurrency.value,
   ),
 );
+const trafficStoreCount = computed(() => {
+  const selectedCount = stores.value.length + failures.value.length;
+  return selectedStoreId.value === "all"
+    ? Math.max(selectedCount, totalStores.value)
+    : selectedCount;
+});
 const normalizedSearch = computed(() => debouncedSearch.value.trim().toLowerCase());
 const visibleStores = computed(() =>
   stores.value.filter((store) =>
@@ -569,7 +575,7 @@ onActivated(prepare);
         <DashboardTrafficPanel
           :traffic="aggregate.traffic"
           :loading="isLoading"
-          :store-count="stores.length || totalStores"
+          :store-count="trafficStoreCount"
         />
 
         <section class="dashboard-chart-grid">

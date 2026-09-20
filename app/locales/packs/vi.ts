@@ -749,6 +749,16 @@ const messages: Record<MessageKey, string> = {
     "Các mốc thời gian dùng múi giờ của store: {timeZone}.",
   "dashboard.trafficTimezonePerStore":
     "Mỗi store dùng múi giờ riêng; dữ liệu tổng hợp được ghép theo cùng giờ địa phương.",
+  "dashboard.trafficDataFresh": "Dữ liệu mới",
+  "dashboard.trafficDataStale": "Đang tải lại · dữ liệu hiện tại đã cũ",
+  "dashboard.trafficDataNeverLoaded": "Chưa có lần tải thành công",
+  "dashboard.trafficLastSuccessfulAt": "Lần tải thành công gần nhất: {time}",
+  "dashboard.trafficStoreIssues": "{count} store cần kiểm tra",
+  "dashboard.trafficStoreIssueFallback": "Không thể tải dữ liệu traffic.",
+  "dashboard.trafficMoreIssues": "+{count} mục khác",
+  "dashboard.trafficPartialBlocks": "Coverage chưa đầy đủ cho {range}",
+  "dashboard.trafficCoverageValue": "{reporting}/{total} store ({percent}%)",
+  "dashboard.trafficBlockMetrics": "Chỉ số",
   "dashboard.trafficOther": "Khác",
   "dashboard.trafficBreakdownChartLabel":
     "Phân bổ session theo chiều traffic đang chọn",

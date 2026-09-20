@@ -87,83 +87,102 @@ describe("Shopify traffic analytics", () => {
   });
 
   it("maps ShopifyQL overview rows and derives rates safely", () => {
-    const traffic = parseShopifyTrafficResponse({
-      today: result([
-        {
-          sessions: "10",
-          online_store_visitors: "8",
-          pageviews: "25",
-          bounces: "4",
-          sessions_with_cart_additions: "5",
-          sessions_that_reached_checkout: "3",
-          sessions_that_completed_checkout: "2",
-          average_session_duration: "75.5",
+    const traffic = parseShopifyTrafficResponse(
+      {
+        today: result([
+          {
+            sessions: "10",
+            online_store_visitors: "8",
+            pageviews: "25",
+            bounces: "4",
+            sessions_with_cart_additions: "5",
+            sessions_that_reached_checkout: "3",
+            sessions_that_completed_checkout: "2",
+            average_session_duration: "75.5",
+          },
+        ]),
+        last24Hours: result([
+          { sessions: 12, online_store_visitors: 9, pageviews: 30 },
+        ]),
+        last7Days: result([{ sessions: 70, online_store_visitors: 50 }]),
+        last30Days: result([{ sessions: 300, online_store_visitors: 180 }]),
+        hourly: result([
+          {
+            hour: "2026-09-16T10",
+            sessions: "3",
+            online_store_visitors: "2",
+            pageviews: "5",
+          },
+        ]),
+        daily: result([
+          {
+            day: "2026-09-16",
+            sessions: "10",
+            online_store_visitors: "8",
+            pageviews: "25",
+          },
+        ]),
+        sources: result([
+          { referrer_source: "Search", sessions: "7", online_store_visitors: "6" },
+          { referrer_source: null, sessions: "3", online_store_visitors: "2" },
+        ]),
+        sources24Hours: result([
+          { referrer_source: "Direct", sessions: "8", online_store_visitors: "7" },
+        ]),
+        sources7Days: result([
+          { referrer_source: "Email", sessions: "20", online_store_visitors: "16" },
+        ]),
+        countries: result([
+          { session_country: "Vietnam", sessions: "10", online_store_visitors: "8" },
+        ]),
+        countries24Hours: result([
+          { session_country: "Vietnam", sessions: "12", online_store_visitors: "9" },
+        ]),
+        countries7Days: result([
+          { session_country: "Vietnam", sessions: "70", online_store_visitors: "50" },
+        ]),
+        devices: result([
+          { session_device_type: "Mobile", sessions: "9", online_store_visitors: "7" },
+        ]),
+        devices24Hours: result([
+          { session_device_type: "Mobile", sessions: "11", online_store_visitors: "8" },
+        ]),
+        devices7Days: result([
+          {
+            session_device_type: "Mobile",
+            sessions: "60",
+            online_store_visitors: "45",
+          },
+        ]),
+        trafficTypes: result([
+          { traffic_type: "Organic", sessions: "6", online_store_visitors: "5" },
+        ]),
+        landingPages: result([{ landing_page_path: "/products/tee", sessions: "4" }]),
+        campaigns: result([
+          { utm_campaign: "spring", sessions: "3" },
+          { utm_campaign: null, sessions: "7" },
+        ]),
+        aiReferrals: {
+          tableData: null,
+          parseErrors: ["Dimension unavailable on this API version"],
         },
-      ]),
-      last24Hours: result([{ sessions: 12, online_store_visitors: 9, pageviews: 30 }]),
-      last7Days: result([{ sessions: 70, online_store_visitors: 50 }]),
-      last30Days: result([{ sessions: 300, online_store_visitors: 180 }]),
-      hourly: result([
-        {
-          hour: "2026-09-16T10",
-          sessions: "3",
-          online_store_visitors: "2",
-          pageviews: "5",
-        },
-      ]),
-      daily: result([
-        {
-          day: "2026-09-16",
-          sessions: "10",
-          online_store_visitors: "8",
-          pageviews: "25",
-        },
-      ]),
-      sources: result([
-        { referrer_source: "Search", sessions: "7", online_store_visitors: "6" },
-        { referrer_source: null, sessions: "3", online_store_visitors: "2" },
-      ]),
-      sources24Hours: result([
-        { referrer_source: "Direct", sessions: "8", online_store_visitors: "7" },
-      ]),
-      sources7Days: result([
-        { referrer_source: "Email", sessions: "20", online_store_visitors: "16" },
-      ]),
-      countries: result([
-        { session_country: "Vietnam", sessions: "10", online_store_visitors: "8" },
-      ]),
-      countries24Hours: result([
-        { session_country: "Vietnam", sessions: "12", online_store_visitors: "9" },
-      ]),
-      countries7Days: result([
-        { session_country: "Vietnam", sessions: "70", online_store_visitors: "50" },
-      ]),
-      devices: result([
-        { session_device_type: "Mobile", sessions: "9", online_store_visitors: "7" },
-      ]),
-      devices24Hours: result([
-        { session_device_type: "Mobile", sessions: "11", online_store_visitors: "8" },
-      ]),
-      devices7Days: result([
-        { session_device_type: "Mobile", sessions: "60", online_store_visitors: "45" },
-      ]),
-      trafficTypes: result([
-        { traffic_type: "Organic", sessions: "6", online_store_visitors: "5" },
-      ]),
-      landingPages: result([{ landing_page_path: "/products/tee", sessions: "4" }]),
-      campaigns: result([
-        { utm_campaign: "spring", sessions: "3" },
-        { utm_campaign: null, sessions: "7" },
-      ]),
-      aiReferrals: {
-        tableData: null,
-        parseErrors: ["Dimension unavailable on this API version"],
       },
-    });
+      "Etc/UTC",
+      "2026-09-20T09:00:00.000Z",
+    );
 
     expect(traffic.available).toBe(true);
     expect(traffic.timeZone).toBe("Etc/UTC");
     expect(traffic.timeZoneMode).toBe("store");
+    expect(traffic.reporting).toMatchObject({
+      totalStores: 1,
+      reportingStores: 1,
+      lastSuccessfulAt: "2026-09-20T09:00:00.000Z",
+    });
+    expect(traffic.reporting.coverage["24h"].sources).toEqual({
+      reportingStores: 1,
+      totalStores: 1,
+    });
     expect(traffic.today).toMatchObject({
       sessions: 10,
       visitors: 8,

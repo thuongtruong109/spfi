@@ -183,6 +183,16 @@ export interface DashboardTrafficRangeAvailability {
   devices: DashboardTrafficAvailabilityState;
 }
 
+export const DASHBOARD_TRAFFIC_BLOCKS = [
+  "metrics",
+  "trend",
+  "sources",
+  "countries",
+  "devices",
+] as const;
+
+export type DashboardTrafficBlock = (typeof DASHBOARD_TRAFFIC_BLOCKS)[number];
+
 export type DashboardTrafficDimensionKey =
   | "source"
   | "referrerDomain"
@@ -224,6 +234,39 @@ export interface DashboardTrafficDimensionRow {
 export type DashboardTrafficRange = "24h" | "7d" | "30d";
 export type DashboardTrafficTimeZoneMode = "store" | "per-store" | "unknown";
 
+export interface DashboardTrafficBlockCoverage {
+  reportingStores: number;
+  totalStores: number;
+}
+
+export type DashboardTrafficRangeCoverage = Record<
+  DashboardTrafficBlock,
+  DashboardTrafficBlockCoverage
+>;
+
+export interface DashboardTrafficStoreIssue {
+  range: DashboardTrafficRange;
+  block: DashboardTrafficBlock;
+  state: Exclude<DashboardTrafficAvailabilityState, "available">;
+}
+
+export interface DashboardTrafficStoreReport {
+  storeId: string;
+  label: string;
+  status: "reporting" | "partial" | "failed";
+  lastSuccessfulAt: string | null;
+  issues: DashboardTrafficStoreIssue[];
+  message: string | null;
+}
+
+export interface DashboardTrafficReporting {
+  totalStores: number;
+  reportingStores: number;
+  lastSuccessfulAt: string | null;
+  stores: DashboardTrafficStoreReport[];
+  coverage: Record<DashboardTrafficRange, DashboardTrafficRangeCoverage>;
+}
+
 export interface DashboardTrafficDimensionResult {
   rows: DashboardTrafficDimensionRow[];
   totalSessions: number;
@@ -251,6 +294,7 @@ export interface DashboardTrafficDimensionResponse extends DashboardTrafficDimen
 export interface DashboardTrafficSummary {
   available: boolean;
   availableStores: number;
+  reporting: DashboardTrafficReporting;
   timeZone: string | null;
   timeZoneMode: DashboardTrafficTimeZoneMode;
   availability: DashboardTrafficAvailability;

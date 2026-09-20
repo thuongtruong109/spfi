@@ -22,7 +22,10 @@ import {
 import { callShopifyPaginatedApi } from "./callShopifyPaginatedApi";
 import { fetchAllShopifyPaymentsBalanceTransactions } from "./shopify-payments-graphql";
 import { fetchShopifyTraffic } from "./shopify-traffic";
-import { emptyDashboardTraffic } from "~~/utils/dashboard-traffic";
+import {
+  emptyDashboardTraffic,
+  failedDashboardTraffic,
+} from "~~/utils/dashboard-traffic";
 import { normalizeDashboardServices } from "~~/utils/dashboard-load";
 import {
   aggregateOrderAnalytics,
@@ -279,7 +282,9 @@ export async function fetchStoreDashboard({
   const traffic =
     trafficResult.status === "fulfilled"
       ? trafficResult.value
-      : emptyDashboardTraffic();
+      : enabledServices.has("traffic")
+        ? failedDashboardTraffic()
+        : emptyDashboardTraffic();
   if (enabledServices.has("traffic") && trafficResult.status === "rejected") {
     addWarning(warnings, {
       resource: "traffic",

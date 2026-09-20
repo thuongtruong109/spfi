@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateDashboardTraffic,
   cloneDashboardTraffic,
+  createDashboardTrafficAvailability,
+  createSingleStoreTrafficReporting,
   createTrafficMetrics,
   emptyDashboardTraffic,
   isDashboardTrafficAvailable,
@@ -141,4 +143,88 @@ describe("dashboard traffic availability", () => {
     expect(aggregate.timeZoneMode).toBe("per-store");
     expect(aggregate.today?.sessions).toBe(30);
   });
+
+  it("tracks overall and per-block reporting coverage including failed stores", () => {
+    const complete = reportingTraffic("2026-09-20T08:00:00.000Z");
+    const partial = reportingTraffic("2026-09-20T09:00:00.000Z");
+    partial.availability.sources7Days = "failed";
+    partial.rangeData["7d"].availability.sources = "failed";
+    partial.rangeData["7d"].sources = null;
+    partial.reporting = createSingleStoreTrafficReporting(
+      partial.rangeData,
+      true,
+      "2026-09-20T09:00:00.000Z",
+    );
+
+    const aggregate = aggregateDashboardTraffic([complete, partial], {
+      stores: [
+        { storeId: "complete", label: "Complete", traffic: complete },
+        { storeId: "partial", label: "Partial", traffic: partial },
+      ],
+      failures: [
+        {
+          storeId: "failed",
+          label: "Failed",
+          reason: "request-failed",
+          message: "Shopify throttled this request.",
+        },
+      ],
+    });
+
+    expect(aggregate.availableStores).toBe(2);
+    expect(aggregate.reporting).toMatchObject({
+      totalStores: 3,
+      reportingStores: 2,
+      lastSuccessfulAt: "2026-09-20T09:00:00.000Z",
+    });
+    expect(aggregate.reporting.coverage["7d"].metrics).toEqual({
+      reportingStores: 2,
+      totalStores: 3,
+    });
+    expect(aggregate.reporting.coverage["7d"].sources).toEqual({
+      reportingStores: 1,
+      totalStores: 3,
+    });
+    expect(aggregate.availability.sources7Days).toBe("partial");
+    expect(
+      aggregate.reporting.stores.map(({ storeId, status }) => ({
+        storeId,
+        status,
+      })),
+    ).toEqual([
+      { storeId: "failed", status: "failed" },
+      { storeId: "partial", status: "partial" },
+      { storeId: "complete", status: "reporting" },
+    ]);
+  });
 });
+
+function reportingTraffic(successfulAt: string) {
+  const traffic = emptyDashboardTraffic();
+  traffic.available = true;
+  traffic.availableStores = 1;
+  traffic.availability = createDashboardTrafficAvailability("available");
+  traffic.today = createTrafficMetrics({ sessions: 1 });
+  traffic.last24Hours = traffic.today;
+  traffic.last7Days = traffic.today;
+  traffic.last30Days = traffic.today;
+  for (const range of ["24h", "7d", "30d"] as const) {
+    traffic.rangeData[range].metrics = traffic.today;
+    traffic.rangeData[range].sources = [];
+    traffic.rangeData[range].countries = [];
+    traffic.rangeData[range].devices = [];
+    traffic.rangeData[range].availability = {
+      metrics: "available",
+      trend: "available",
+      sources: "available",
+      countries: "available",
+      devices: "available",
+    };
+  }
+  traffic.reporting = createSingleStoreTrafficReporting(
+    traffic.rangeData,
+    true,
+    successfulAt,
+  );
+  return traffic;
+}
