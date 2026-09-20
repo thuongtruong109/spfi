@@ -146,6 +146,12 @@ describe("DashboardTrafficPanel", () => {
     });
     expect(freshStatus.text()).toContain("dashboard.trafficDataFresh");
     expect(freshStatus.text()).not.toContain("dashboard.trafficDataStale");
+
+    traffic.isStale = true;
+    const cachedStatus = shallowMount(DashboardTrafficReportingStatus, {
+      props: { ...statusProps, loading: false },
+    });
+    expect(cachedStatus.text()).toContain("dashboard.trafficDataStale");
   });
 });
 

@@ -56,6 +56,13 @@ describe("traffic store", () => {
 
     await store.fetchTraffic("shop-a", "token-a", true);
     expect(request).toHaveBeenCalledTimes(3);
+    expect(request).toHaveBeenLastCalledWith(
+      "/api/traffic",
+      expect.objectContaining({
+        body: expect.objectContaining({ refresh: true }),
+        signal: expect.any(AbortSignal),
+      }),
+    );
   });
 
   it("loads one dimension independently without invalidating the overview", async () => {
@@ -99,6 +106,25 @@ describe("traffic store", () => {
     );
     expect(store.loadedInsightDimensions).toContain("7d:source");
     expect(store.error).toBeNull();
+  });
+
+  it("deduplicates callers waiting for the same overview", async () => {
+    let resolveOverview!: (value: DashboardTrafficSummary) => void;
+    const request = vi.fn(
+      () =>
+        new Promise<DashboardTrafficSummary>((resolve) => {
+          resolveOverview = resolve;
+        }),
+    );
+    vi.stubGlobal("$fetch", request);
+    const store = useTrafficStore();
+
+    const first = store.fetchTraffic("shop-a", "token-a");
+    const second = store.fetchTraffic("shop-a", "token-a");
+    expect(request).toHaveBeenCalledOnce();
+
+    resolveOverview(trafficFixture(12));
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
   });
 
   it("keeps overview data available when a detail request fails", async () => {
@@ -159,5 +185,66 @@ describe("traffic store", () => {
     );
     expect(store.traffic.rangeData["24h"].dimensions.source).toBeDefined();
     expect(store.traffic.rangeData["24h"].dimensions.country).toBeDefined();
+  });
+
+  it("deduplicates callers waiting for the same dimension", async () => {
+    let resolveDetail!: (value: unknown) => void;
+    const detail = new Promise((resolve) => {
+      resolveDetail = resolve;
+    });
+    const request = vi.fn((url: string) =>
+      url === "/api/traffic/details" ? detail : Promise.resolve(trafficFixture(12)),
+    );
+    vi.stubGlobal("$fetch", request);
+    const store = useTrafficStore();
+
+    await store.fetchTraffic("shop-a", "token-a");
+    const first = store.fetchTrafficDimension("shop-a", "token-a", "7d", "source");
+    const second = store.fetchTrafficDimension("shop-a", "token-a", "7d", "source");
+
+    expect(
+      request.mock.calls.filter(([url]) => url === "/api/traffic/details"),
+    ).toHaveLength(1);
+    resolveDetail({
+      range: "7d",
+      dimension: "source",
+      rows: [],
+      totalSessions: 0,
+      hasMore: false,
+      generatedAt: "2026-09-20T10:00:00.000Z",
+      cacheAge: 0,
+      isStale: false,
+    });
+
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+  });
+
+  it("aborts the old request when the active shop changes", async () => {
+    let shopASignal!: AbortSignal;
+    const request = vi.fn(
+      (_url: string, options: { body: { storeId: string }; signal?: AbortSignal }) => {
+        if (options.body.storeId === "shop-b") {
+          return Promise.resolve(trafficFixture(24));
+        }
+
+        shopASignal = options.signal as AbortSignal;
+        return new Promise<DashboardTrafficSummary>((_resolve, reject) => {
+          shopASignal.addEventListener("abort", () => reject(shopASignal.reason), {
+            once: true,
+          });
+        });
+      },
+    );
+    vi.stubGlobal("$fetch", request);
+    const store = useTrafficStore();
+
+    const shopA = store.fetchTraffic("shop-a", "token-a");
+    const shopB = store.fetchTraffic("shop-b", "token-b");
+
+    expect(shopASignal.aborted).toBe(true);
+    await expect(shopA).resolves.toBe(false);
+    await expect(shopB).resolves.toBe(true);
+    expect(store.error).toBeNull();
+    expect(store.traffic.today?.sessions).toBe(24);
   });
 });

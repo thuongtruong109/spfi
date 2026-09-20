@@ -4,10 +4,10 @@ import { usePerStoreCache } from "~/composables/usePerStoreCache";
 import { useLocalizationStore } from "~/stores/localization";
 import type {
   DashboardTrafficDimensionKey,
-  DashboardTrafficDimensionResponse,
   DashboardTrafficRange,
-  DashboardTrafficSummary,
-} from "~~/types/dashboard";
+  TrafficDimensionResponse,
+  TrafficOverviewResponse,
+} from "~~/types/traffic";
 import {
   cloneDashboardTraffic,
   emptyDashboardTraffic,
@@ -16,14 +16,14 @@ import { trafficDimensionRequestKey } from "~~/utils/dashboard-traffic-dimension
 import { getAppErrorMessage } from "~~/utils/error";
 
 interface TrafficStoreCache {
-  traffic: DashboardTrafficSummary;
+  traffic: TrafficOverviewResponse;
   hasFetched: boolean;
   loadedInsightDimensions: string[];
 }
 
 export const useTrafficStore = defineStore("traffic", () => {
   const localizationStore = useLocalizationStore();
-  const traffic = ref<DashboardTrafficSummary>(emptyDashboardTraffic());
+  const traffic = ref<TrafficOverviewResponse>(emptyDashboardTraffic());
   const hasFetched = ref(false);
   const isLoading = ref(false);
   const loadingInsightDimensions = ref<string[]>([]);
@@ -33,7 +33,19 @@ export const useTrafficStore = defineStore("traffic", () => {
   let scopeVersion = 0;
   let requestSequence = 0;
   let insightRequestSequence = 0;
-  const activeInsightRequests = new Map<string, number>();
+  let activeOverviewRequest: {
+    storeId: string;
+    controller: AbortController;
+    promise: Promise<boolean>;
+  } | null = null;
+  const activeInsightRequests = new Map<
+    string,
+    {
+      id: number;
+      controller: AbortController;
+      promise: Promise<boolean>;
+    }
+  >();
 
   const cache = usePerStoreCache<TrafficStoreCache>({
     capture: () => ({
@@ -47,7 +59,7 @@ export const useTrafficStore = defineStore("traffic", () => {
       loadedInsightDimensions.value = [...(snapshot.loadedInsightDimensions || [])];
       isLoading.value = false;
       loadingInsightDimensions.value = [];
-      activeInsightRequests.clear();
+      abortInsightRequests();
       error.value = null;
       insightError.value = null;
     },
@@ -56,7 +68,7 @@ export const useTrafficStore = defineStore("traffic", () => {
       scopeVersion += 1;
       requestSequence += 1;
       insightRequestSequence += 1;
-      activeInsightRequests.clear();
+      abortAllRequests();
     },
   });
 
@@ -69,36 +81,54 @@ export const useTrafficStore = defineStore("traffic", () => {
     cache.activate(storeId);
     if (hasFetched.value && !force) return true;
 
+    if (activeOverviewRequest?.storeId === storeId) {
+      if (!force) return activeOverviewRequest.promise;
+      activeOverviewRequest.controller.abort();
+    }
+
+    abortInsightRequests();
+
     const requestVersion = scopeVersion;
     const requestId = ++requestSequence;
+    const controller = new AbortController();
     isLoading.value = true;
     error.value = null;
 
-    try {
-      const response = await $fetch<DashboardTrafficSummary>("/api/traffic", {
-        method: "POST",
-        body: { storeId, token },
-      });
-      if (!isActive(storeId, requestVersion, requestId)) return false;
+    const promise = (async () => {
+      try {
+        const response = await $fetch<TrafficOverviewResponse>("/api/traffic", {
+          method: "POST",
+          body: { storeId, token, refresh: force },
+          signal: controller.signal,
+        });
+        if (!isActive(storeId, requestVersion, requestId)) return false;
 
-      traffic.value = cloneDashboardTraffic(response);
-      hasFetched.value = true;
-      loadedInsightDimensions.value = [];
-      loadingInsightDimensions.value = [];
-      activeInsightRequests.clear();
-      cache.remember(storeId);
-      return true;
-    } catch (requestError) {
-      if (isActive(storeId, requestVersion, requestId)) {
-        error.value = getAppErrorMessage(
-          requestError,
-          localizationStore.t("traffic.errorFetch"),
-        );
+        traffic.value = cloneDashboardTraffic(response);
+        hasFetched.value = true;
+        loadedInsightDimensions.value = [];
+        loadingInsightDimensions.value = [];
+        cache.remember(storeId);
+        return true;
+      } catch (requestError) {
+        if (
+          !controller.signal.aborted &&
+          isActive(storeId, requestVersion, requestId)
+        ) {
+          error.value = getAppErrorMessage(
+            requestError,
+            localizationStore.t("traffic.errorFetch"),
+          );
+        }
+        return false;
+      } finally {
+        if (isActive(storeId, requestVersion, requestId)) isLoading.value = false;
+        if (activeOverviewRequest?.controller === controller) {
+          activeOverviewRequest = null;
+        }
       }
-      return false;
-    } finally {
-      if (isActive(storeId, requestVersion, requestId)) isLoading.value = false;
-    }
+    })();
+    activeOverviewRequest = { storeId, controller, promise };
+    return promise;
   }
 
   async function fetchTrafficDimension(
@@ -113,67 +143,79 @@ export const useTrafficStore = defineStore("traffic", () => {
     cache.activate(storeId);
     const requestKey = trafficDimensionRequestKey(range, dimension);
     if (loadedInsightDimensions.value.includes(requestKey) && !force) return true;
-    if (loadingInsightDimensions.value.includes(requestKey) && !force) return true;
+    const activeRequest = activeInsightRequests.get(requestKey);
+    if (activeRequest) {
+      if (!force) return activeRequest.promise;
+      activeRequest.controller.abort();
+    }
 
     const requestVersion = scopeVersion;
     const requestId = ++insightRequestSequence;
-    activeInsightRequests.set(requestKey, requestId);
+    const controller = new AbortController();
     loadingInsightDimensions.value = Array.from(
       new Set([...loadingInsightDimensions.value, requestKey]),
     );
     insightError.value = null;
 
-    try {
-      const response = await $fetch<DashboardTrafficDimensionResponse>(
-        "/api/traffic/details",
-        {
-          method: "POST",
-          body: { storeId, token, range, dimension },
-        },
-      );
-      if (!isInsightActive(storeId, requestVersion, requestKey, requestId)) {
-        return false;
-      }
+    const promise = (async () => {
+      try {
+        const response = await $fetch<TrafficDimensionResponse>(
+          "/api/traffic/details",
+          {
+            method: "POST",
+            body: { storeId, token, range, dimension, refresh: force },
+            signal: controller.signal,
+          },
+        );
+        if (!isInsightActive(storeId, requestVersion, requestKey, requestId)) {
+          return false;
+        }
 
-      const rangeData = traffic.value.rangeData[response.range];
-      traffic.value = {
-        ...traffic.value,
-        rangeData: {
-          ...traffic.value.rangeData,
-          [response.range]: {
-            ...rangeData,
-            dimensions: {
-              ...rangeData.dimensions,
-              [response.dimension]: {
-                rows: response.rows,
-                totalSessions: response.totalSessions,
-                hasMore: response.hasMore,
+        const rangeData = traffic.value.rangeData[response.range];
+        traffic.value = {
+          ...traffic.value,
+          rangeData: {
+            ...traffic.value.rangeData,
+            [response.range]: {
+              ...rangeData,
+              dimensions: {
+                ...rangeData.dimensions,
+                [response.dimension]: {
+                  rows: response.rows,
+                  totalSessions: response.totalSessions,
+                  hasMore: response.hasMore,
+                },
               },
             },
           },
-        },
-      };
-      loadedInsightDimensions.value = Array.from(
-        new Set([...loadedInsightDimensions.value, requestKey]),
-      );
-      cache.remember(storeId);
-      return true;
-    } catch (requestError) {
-      if (isInsightActive(storeId, requestVersion, requestKey, requestId)) {
-        insightError.value = getAppErrorMessage(
-          requestError,
-          localizationStore.t("traffic.errorInsights"),
+        };
+        loadedInsightDimensions.value = Array.from(
+          new Set([...loadedInsightDimensions.value, requestKey]),
         );
+        cache.remember(storeId);
+        return true;
+      } catch (requestError) {
+        if (
+          !controller.signal.aborted &&
+          isInsightActive(storeId, requestVersion, requestKey, requestId)
+        ) {
+          insightError.value = getAppErrorMessage(
+            requestError,
+            localizationStore.t("traffic.errorInsights"),
+          );
+        }
+        return false;
+      } finally {
+        if (isInsightActive(storeId, requestVersion, requestKey, requestId)) {
+          activeInsightRequests.delete(requestKey);
+          loadingInsightDimensions.value = loadingInsightDimensions.value.filter(
+            (key) => key !== requestKey,
+          );
+        }
       }
-      return false;
-    } finally {
-      if (isInsightActive(storeId, requestVersion, requestKey, requestId)) {
-        activeInsightRequests.delete(requestKey);
-        loadingInsightDimensions.value = loadingInsightDimensions.value.filter(
-          (key) => key !== requestKey,
-        );
-      }
-    }
+    })();
+    activeInsightRequests.set(requestKey, { id: requestId, controller, promise });
+    return promise;
   }
 
   function isActive(storeId: string, requestVersion: number, requestId: number) {
@@ -192,7 +234,7 @@ export const useTrafficStore = defineStore("traffic", () => {
   ) {
     return (
       scopeVersion === requestVersion &&
-      activeInsightRequests.get(requestKey) === requestId &&
+      activeInsightRequests.get(requestKey)?.id === requestId &&
       cache.isActive(storeId)
     );
   }
@@ -212,7 +254,22 @@ export const useTrafficStore = defineStore("traffic", () => {
     scopeVersion += 1;
     requestSequence += 1;
     insightRequestSequence += 1;
+    abortAllRequests();
     resetState();
+  }
+
+  function abortInsightRequests() {
+    for (const request of activeInsightRequests.values()) {
+      request.controller.abort();
+    }
+    activeInsightRequests.clear();
+    loadingInsightDimensions.value = [];
+  }
+
+  function abortAllRequests() {
+    activeOverviewRequest?.controller.abort();
+    activeOverviewRequest = null;
+    abortInsightRequests();
   }
 
   return {

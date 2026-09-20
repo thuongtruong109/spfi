@@ -13,6 +13,7 @@ interface DashboardBody {
   token?: string;
   timezoneOffsetMinutes?: number;
   services?: DashboardService[];
+  refresh?: boolean;
 }
 
 export default defineEventHandler(async (event) => {
@@ -38,6 +39,7 @@ export default defineEventHandler(async (event) => {
     token,
     timezoneOffsetMinutes,
     services: normalizeDashboardServices(body.services),
+    refresh: body.refresh === true,
   });
   setResponseHeader(event, "x-spf-field-convention", "app-camel-case");
   return dashboard;

@@ -39,7 +39,9 @@ const problemStores = computed(() =>
     (store) => store.status !== "reporting",
   ),
 );
-const isStale = computed(() => Boolean(props.loading && props.traffic.available));
+const isStale = computed(() =>
+  Boolean(props.traffic.isStale || (props.loading && props.traffic.available)),
+);
 const lastSuccessfulAt = computed(
   () => props.traffic.reporting?.lastSuccessfulAt || null,
 );

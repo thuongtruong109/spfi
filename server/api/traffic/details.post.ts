@@ -12,6 +12,7 @@ interface TrafficDetailsBody {
   token?: string;
   range?: string;
   dimension?: string;
+  refresh?: boolean;
 }
 
 const VALID_RANGES = new Set<DashboardTrafficRange>(["24h", "7d", "30d"]);
@@ -38,6 +39,7 @@ export default defineEventHandler(async (event) => {
     token,
     range,
     dimension,
+    refresh: body.refresh === true,
   });
   setResponseHeader(event, "x-spf-field-convention", "app-camel-case");
   return dimensionResult;

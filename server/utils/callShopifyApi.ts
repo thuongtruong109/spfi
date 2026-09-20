@@ -64,6 +64,7 @@ export interface CallShopifyApiOptions<TBody = unknown> {
   retryTransport?: boolean;
   preserveUnsafeIntegers?: boolean;
   forwardResponseHeaders?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface ShopifyApiResponse<TResponse> {
@@ -456,6 +457,7 @@ export async function callShopifyApiWithResponse<TResponse, TBody = unknown>({
   retryTransport,
   preserveUnsafeIntegers = true,
   forwardResponseHeaders = true,
+  signal,
 }: CallShopifyApiOptions<TBody>): Promise<ShopifyApiResponse<TResponse>> {
   setResponseHeader(event, "x-spf-field-convention", "shopify-rest");
   if (!storeId) {
@@ -479,13 +481,16 @@ export async function callShopifyApiWithResponse<TResponse, TBody = unknown>({
     ? resolveStoreAdminDomain(storeId, storeCookie?.domain)
     : resolveStoreDomain(storeId, storeCookie?.domain);
   const baseURL = `https://${domain}/${getShopifyAdminApiBase(event)}`;
+  signal?.throwIfAborted();
   const proxyVariants = await resolveShopifyProxyVariants(event, sock);
+  signal?.throwIfAborted();
   const throttleKey = buildShopifyThrottleKey("rest", domain, accessToken);
   const shouldRetryTransport = resolveShopifyRestTransportRetry(method, retryTransport);
 
   let lastError: unknown;
 
   for (const proxyUrl of proxyVariants) {
+    signal?.throwIfAborted();
     try {
       const agent = createProxyAgent(proxyUrl);
       const requestConfig: AxiosRequestConfig<string> = {
@@ -501,6 +506,7 @@ export async function callShopifyApiWithResponse<TResponse, TBody = unknown>({
         httpsAgent: agent,
         proxy: false,
         timeout: timeoutMs,
+        signal,
         transformRequest: [(data) => data],
         ...(preserveUnsafeIntegers
           ? { transformResponse: [parseJsonPreservingUnsafeIntegers] }
@@ -509,6 +515,7 @@ export async function callShopifyApiWithResponse<TResponse, TBody = unknown>({
       const response = await requestWithRateLimitRetry<TResponse, string>(
         requestConfig,
         throttleKey,
+        signal,
       );
       const proactiveDelayMs = getRestCallLimitDelayMs(
         getAxiosHeaderValue(response.headers, "x-shopify-shop-api-call-limit"),
@@ -526,6 +533,7 @@ export async function callShopifyApiWithResponse<TResponse, TBody = unknown>({
         status: response.status,
       };
     } catch (error) {
+      if (signal?.aborted) throw signal.reason || error;
       lastError = error;
       if (axios.isAxiosError(error) && error.response) {
         throwShopifyApiError(error);
@@ -542,15 +550,19 @@ export async function callShopifyApiWithResponse<TResponse, TBody = unknown>({
 async function requestWithRateLimitRetry<TResponse, TBody>(
   requestConfig: AxiosRequestConfig<TBody>,
   throttleKey: string,
+  signal?: AbortSignal,
 ): Promise<AxiosResponse<TResponse>> {
   for (let retryCount = 0; ; retryCount += 1) {
-    await waitForShopifyThrottle(throttleKey);
+    await waitForShopifyThrottle(throttleKey, signal);
 
     try {
       return await axios.request<TResponse, AxiosResponse<TResponse>, TBody>(
         requestConfig,
       );
     } catch (error) {
+      if (signal?.aborted) {
+        throw signal.reason || error;
+      }
       if (!axios.isAxiosError(error) || error.response?.status !== 429) {
         throw error;
       }

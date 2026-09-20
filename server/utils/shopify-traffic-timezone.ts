@@ -7,6 +7,7 @@ interface TrafficTimeZoneInput {
   storeId: string;
   token: string;
   timeZone?: string;
+  signal?: AbortSignal;
 }
 
 export function normalizeIanaTimeZone(value: unknown): string | null {
@@ -34,6 +35,7 @@ export function requireIanaTimeZone(value: unknown): string {
 export async function resolveShopifyTrafficTimeZone(
   input: TrafficTimeZoneInput,
 ): Promise<string> {
+  input.signal?.throwIfAborted();
   if (input.timeZone !== undefined) return requireIanaTimeZone(input.timeZone);
 
   const response = await callShopifyApi<{ shop?: Pick<ShopifyShop, "iana_timezone"> }>({
@@ -43,6 +45,7 @@ export async function resolveShopifyTrafficTimeZone(
     path: "/shop.json",
     params: { fields: "iana_timezone" },
     forwardResponseHeaders: false,
+    signal: input.signal,
   });
 
   return requireIanaTimeZone(response.shop?.iana_timezone);

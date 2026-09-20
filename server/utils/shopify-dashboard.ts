@@ -43,6 +43,7 @@ interface DashboardRequestContext {
   token: string;
   timezoneOffsetMinutes?: number;
   services?: DashboardService[];
+  refresh?: boolean;
 }
 
 interface BalanceResponse {
@@ -69,6 +70,7 @@ export async function fetchStoreDashboard({
   token,
   timezoneOffsetMinutes = 0,
   services,
+  refresh = false,
 }: DashboardRequestContext): Promise<StoreDashboardSnapshot> {
   const common = { event, storeId, token };
   const warnings: DashboardWarning[] = [];
@@ -205,6 +207,7 @@ export async function fetchStoreDashboard({
         fetchShopifyTraffic({
           ...common,
           timeZone: profile?.iana_timezone,
+          refresh,
         }),
       emptyDashboardTraffic(),
     ),

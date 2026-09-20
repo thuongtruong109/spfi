@@ -45,8 +45,9 @@ export function buildShopifyThrottleKey(
   return `${surface}:${domain.toLowerCase()}:${accessToken}`;
 }
 
-export async function waitForShopifyThrottle(key: string) {
+export async function waitForShopifyThrottle(key: string, signal?: AbortSignal) {
   while (true) {
+    signal?.throwIfAborted();
     const gate = throttleGates.get(key);
     if (!gate) return;
 
@@ -56,7 +57,7 @@ export async function waitForShopifyThrottle(key: string) {
       return;
     }
 
-    await wait(delayMs);
+    await wait(delayMs, signal);
   }
 }
 
@@ -207,6 +208,19 @@ function toFiniteNumber(value: unknown) {
   return Number.isFinite(numberValue) ? numberValue : null;
 }
 
-function wait(delayMs: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+function wait(delayMs: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(finish, delayMs);
+    const abort = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+      reject(signal?.reason || new DOMException("Aborted", "AbortError"));
+    };
+    function finish() {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }
+
+    signal?.addEventListener("abort", abort, { once: true });
+  });
 }

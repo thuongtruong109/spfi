@@ -1,17 +1,17 @@
 import type { H3Event } from "h3";
 import type {
-  DashboardTrafficAvailability,
   DashboardTrafficAvailabilityState,
   DashboardTrafficBreakdown,
   DashboardTrafficDimensionKey,
-  DashboardTrafficDimensionResponse,
   DashboardTrafficDimensionRow,
   DashboardTrafficMetrics,
   DashboardTrafficOverviewAlias,
   DashboardTrafficPoint,
   DashboardTrafficRange,
-  DashboardTrafficSummary,
-} from "~~/types/dashboard";
+  TrafficAvailability,
+  TrafficDimensionResponse,
+  TrafficOverviewResponse,
+} from "~~/types/traffic";
 import {
   createDashboardTrafficAvailability,
   createSingleStoreTrafficReporting,
@@ -27,6 +27,14 @@ import {
   resolveShopifyTrafficTimeZone,
   shopifyqlTimeZoneModifier,
 } from "./shopify-traffic-timezone";
+import { createRequestAbortSignal } from "./request-abort";
+import {
+  buildTrafficDimensionCacheKey,
+  buildTrafficOverviewCacheKey,
+  TRAFFIC_DIMENSION_CACHE_POLICIES,
+  TRAFFIC_OVERVIEW_CACHE_POLICY,
+  trafficQueryCache,
+} from "./traffic-query-cache";
 
 interface ShopifyqlColumn {
   name?: string;
@@ -44,7 +52,7 @@ interface ShopifyqlResult {
 
 type OptionalShopifyqlResult = ShopifyqlResult | null | undefined;
 
-interface TrafficQueryResponse {
+interface TrafficOverviewQueryResponse {
   today?: OptionalShopifyqlResult;
   last24Hours?: OptionalShopifyqlResult;
   last7Days?: OptionalShopifyqlResult;
@@ -60,12 +68,6 @@ interface TrafficQueryResponse {
   devices?: OptionalShopifyqlResult;
   devices24Hours?: OptionalShopifyqlResult;
   devices7Days?: OptionalShopifyqlResult;
-  trafficTypes?: OptionalShopifyqlResult;
-  platforms?: OptionalShopifyqlResult;
-  browsers?: OptionalShopifyqlResult;
-  landingPages?: OptionalShopifyqlResult;
-  campaigns?: OptionalShopifyqlResult;
-  aiReferrals?: OptionalShopifyqlResult;
 }
 
 type TrafficQueryVariables = Record<DashboardTrafficOverviewAlias, string>;
@@ -171,13 +173,66 @@ export async function fetchShopifyTraffic(input: {
   storeId: string;
   token: string;
   timeZone?: string;
-}): Promise<DashboardTrafficSummary> {
-  const timeZone = await resolveShopifyTrafficTimeZone(input);
+  refresh?: boolean;
+}): Promise<TrafficOverviewResponse> {
+  const requestAbort = createRequestAbortSignal(input.event);
+  try {
+    return await trafficQueryCache.resolve({
+      key: buildTrafficOverviewCacheKey(input.storeId, input.token),
+      policy: TRAFFIC_OVERVIEW_CACHE_POLICY,
+      signal: requestAbort.signal,
+      refresh: input.refresh,
+      load: (signal) => loadShopifyTraffic(input, signal),
+    });
+  } finally {
+    requestAbort.dispose();
+  }
+}
+
+export async function fetchShopifyTrafficDimension(input: {
+  event: H3Event;
+  storeId: string;
+  token: string;
+  range: DashboardTrafficRange;
+  dimension: DashboardTrafficDimensionKey;
+  refresh?: boolean;
+}): Promise<TrafficDimensionResponse> {
+  const requestAbort = createRequestAbortSignal(input.event);
+  try {
+    return await trafficQueryCache.resolve({
+      key: buildTrafficDimensionCacheKey(
+        input.storeId,
+        input.token,
+        input.range,
+        input.dimension,
+      ),
+      policy: TRAFFIC_DIMENSION_CACHE_POLICIES[input.range],
+      signal: requestAbort.signal,
+      refresh: input.refresh,
+      load: (signal) => loadShopifyTrafficDimension(input, signal),
+    });
+  } finally {
+    requestAbort.dispose();
+  }
+}
+
+async function loadShopifyTraffic(
+  input: {
+    event: H3Event;
+    storeId: string;
+    token: string;
+    timeZone?: string;
+    refresh?: boolean;
+  },
+  signal: AbortSignal,
+): Promise<TrafficOverviewResponse> {
+  const timeZone = await resolveShopifyTrafficTimeZone({ ...input, signal });
   const response = await callShopifyGraphql<
-    TrafficQueryResponse,
+    TrafficOverviewQueryResponse,
     TrafficQueryVariables
   >({
     ...input,
+    signal,
     query: DASHBOARD_TRAFFIC_QUERY,
     operationName: "DashboardTraffic",
     variables: buildTrafficQueryVariables(timeZone),
@@ -188,19 +243,24 @@ export async function fetchShopifyTraffic(input: {
   return parseShopifyTrafficResponse(response, timeZone);
 }
 
-export async function fetchShopifyTrafficDimension(input: {
-  event: H3Event;
-  storeId: string;
-  token: string;
-  range: DashboardTrafficRange;
-  dimension: DashboardTrafficDimensionKey;
-}): Promise<DashboardTrafficDimensionResponse> {
-  const timeZone = await resolveShopifyTrafficTimeZone(input);
+async function loadShopifyTrafficDimension(
+  input: {
+    event: H3Event;
+    storeId: string;
+    token: string;
+    range: DashboardTrafficRange;
+    dimension: DashboardTrafficDimensionKey;
+    refresh?: boolean;
+  },
+  signal: AbortSignal,
+): Promise<TrafficDimensionResponse> {
+  const timeZone = await resolveShopifyTrafficTimeZone({ ...input, signal });
   const response = await callShopifyGraphql<
     { dimension?: OptionalShopifyqlResult },
     { dimension: string }
   >({
     ...input,
+    signal,
     query: TRAFFIC_DIMENSION_QUERY,
     operationName: "StoreTrafficDimension",
     variables: buildTrafficDimensionQueryVariables(
@@ -217,7 +277,7 @@ export function parseShopifyTrafficDimensionResponse(
   response: { dimension?: OptionalShopifyqlResult },
   range: DashboardTrafficRange,
   dimension: DashboardTrafficDimensionKey,
-): DashboardTrafficDimensionResponse {
+): TrafficDimensionResponse {
   const field = TRAFFIC_DIMENSION_FIELDS[dimension];
   const resultRows = readRows(
     response.dimension,
@@ -235,6 +295,9 @@ export function parseShopifyTrafficDimensionResponse(
     rows,
     totalSessions,
     hasMore,
+    generatedAt: new Date().toISOString(),
+    cacheAge: 0,
+    isStale: false,
   };
 }
 
@@ -291,10 +354,12 @@ export function buildTrafficQueryVariables(timeZone: string): TrafficQueryVariab
 }
 
 export function parseShopifyTrafficResponse(
-  input: TrafficQueryResponse | ShopifyGraphqlPartialResponse<TrafficQueryResponse>,
+  input:
+    | TrafficOverviewQueryResponse
+    | ShopifyGraphqlPartialResponse<TrafficOverviewQueryResponse>,
   timeZone = "Etc/UTC",
   successfulAt = new Date().toISOString(),
-): DashboardTrafficSummary {
+): TrafficOverviewResponse {
   const normalizedTimeZone = requireIanaTimeZone(timeZone);
   const { response, graphqlAvailability } = unwrapTrafficResponse(input);
   const availability = resolveTrafficAvailability(response, graphqlAvailability);
@@ -345,7 +410,7 @@ export function parseShopifyTrafficResponse(
     "session_device_type",
   );
   const available = Object.values(availability).some((state) => state === "available");
-  const rangeData: DashboardTrafficSummary["rangeData"] = {
+  const rangeData: TrafficOverviewResponse["rangeData"] = {
     "24h": {
       metrics: last24HoursResult,
       sources: sources24Hours,
@@ -390,6 +455,9 @@ export function parseShopifyTrafficResponse(
     },
   };
   return {
+    generatedAt: successfulAt,
+    cacheAge: 0,
+    isStale: false,
     available,
     availableStores: available ? 1 : 0,
     reporting: createSingleStoreTrafficReporting(rangeData, available, successfulAt),
@@ -405,26 +473,14 @@ export function parseShopifyTrafficResponse(
     sources,
     countries,
     devices,
-    trafficTypes: parseOptionalBreakdown(response.trafficTypes, "traffic_type"),
-    platforms: parseOptionalBreakdown(response.platforms, "referring_platform"),
-    browsers: parseOptionalBreakdown(response.browsers, "session_device_browser"),
-    landingPages: parseOptionalBreakdown(
-      response.landingPages,
-      "landing_page_path",
-      false,
-    ),
-    campaigns: parseOptionalBreakdown(response.campaigns, "utm_campaign", true),
-    aiReferrals: parseOptionalBreakdown(
-      response.aiReferrals,
-      "agentic_referring_channel",
-      true,
-    ),
     rangeData,
   };
 }
 
 function unwrapTrafficResponse(
-  input: TrafficQueryResponse | ShopifyGraphqlPartialResponse<TrafficQueryResponse>,
+  input:
+    | TrafficOverviewQueryResponse
+    | ShopifyGraphqlPartialResponse<TrafficOverviewQueryResponse>,
 ) {
   if ("data" in input && "errors" in input && "availability" in input) {
     return {
@@ -439,9 +495,9 @@ function unwrapTrafficResponse(
 }
 
 function resolveTrafficAvailability(
-  response: TrafficQueryResponse,
+  response: TrafficOverviewQueryResponse,
   graphqlAvailability?: Record<string, "available" | "failed">,
-): DashboardTrafficAvailability {
+): TrafficAvailability {
   const availability = createDashboardTrafficAvailability("failed");
   for (const alias of Object.keys(availability) as DashboardTrafficOverviewAlias[]) {
     availability[alias] = resolveTrafficAliasAvailability(
@@ -520,15 +576,6 @@ function parseOptionalRangeBreakdown(
   dimension: string,
 ) {
   return parseBreakdownIfAvailable(result, dimension, false, "Direct / unknown");
-}
-
-function parseOptionalBreakdown(
-  result: OptionalShopifyqlResult,
-  dimension: string,
-  omitEmpty = false,
-  emptyLabel = "Unknown / unattributed",
-): DashboardTrafficBreakdown[] {
-  return parseBreakdownIfAvailable(result, dimension, omitEmpty, emptyLabel) || [];
 }
 
 function parseBreakdownIfAvailable(

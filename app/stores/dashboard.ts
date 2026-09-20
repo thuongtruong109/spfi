@@ -64,7 +64,7 @@ export const useDashboardStore = defineStore("dashboard", () => {
     if (!force && cacheIsAlive) return;
     if (activeRequest) return activeRequest;
 
-    activeRequest = fetchDashboard(fingerprint, resolvedOptions).finally(() => {
+    activeRequest = fetchDashboard(fingerprint, resolvedOptions, force).finally(() => {
       activeRequest = null;
     });
     return activeRequest;
@@ -73,6 +73,7 @@ export const useDashboardStore = defineStore("dashboard", () => {
   async function fetchDashboard(
     fingerprint: string,
     options: Required<DashboardLoadOptions>,
+    refresh: boolean,
   ) {
     const sequence = ++refreshSequence;
     isLoading.value = true;
@@ -116,6 +117,7 @@ export const useDashboardStore = defineStore("dashboard", () => {
               token,
               timezoneOffsetMinutes: new Date().getTimezoneOffset(),
               services: options.services,
+              refresh,
             },
           });
         } catch (error) {

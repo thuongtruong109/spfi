@@ -64,6 +64,7 @@ interface CallShopifyGraphqlOptions<TVariables> {
   /** Return usable fields when Shopify responds with both data and field errors. */
   allowPartialData?: boolean;
   maxThrottleRetries?: number;
+  signal?: AbortSignal;
 }
 
 interface ShopifyGraphqlRequest<TVariables> {
@@ -103,6 +104,7 @@ export async function callShopifyGraphql<
   retryTransport,
   allowPartialData = false,
   maxThrottleRetries = DEFAULT_MAX_GRAPHQL_THROTTLE_RETRIES,
+  signal,
 }: CallShopifyGraphqlOptions<TVariables>): Promise<
   TData | ShopifyGraphqlPartialResponse<TData>
 > {
@@ -138,8 +140,12 @@ export async function callShopifyGraphql<
     retryTransport,
   );
   let lastTransportError: unknown;
+  signal?.throwIfAborted();
+  const proxyVariants = await resolveShopifyProxyVariants(event, sock);
+  signal?.throwIfAborted();
 
-  for (const proxyUrl of await resolveShopifyProxyVariants(event, sock)) {
+  for (const proxyUrl of proxyVariants) {
+    signal?.throwIfAborted();
     const agent = createProxyAgent(proxyUrl);
     const config: AxiosRequestConfig<ShopifyGraphqlRequest<TVariables>> = {
       url: endpoint,
@@ -154,18 +160,20 @@ export async function callShopifyGraphql<
       proxy: false,
       timeout: timeoutMs,
       transformResponse: [parseJsonPreservingUnsafeIntegers],
+      signal,
     };
     let envelope: ShopifyGraphqlEnvelope<TData> | null = null;
     let throttleRetryCount = 0;
 
     while (true) {
-      await waitForShopifyThrottle(throttleKey);
+      await waitForShopifyThrottle(throttleKey, signal);
 
       try {
         const response = await axios.request<ShopifyGraphqlEnvelope<TData>>(config);
         envelope = response.data;
         forwardGraphqlThrottleHeaders(event, response.headers, envelope.extensions);
       } catch (error) {
+        if (signal?.aborted) throw signal.reason || error;
         if (axios.isAxiosError(error) && error.response?.status === 429) {
           const retryDelayMs = parseRetryAfterMs(
             getAxiosHeaderValue(error.response.headers, "retry-after"),

@@ -197,6 +197,22 @@ describe("dashboard traffic availability", () => {
       { storeId: "complete", status: "reporting" },
     ]);
   });
+
+  it("uses the oldest source freshness for an aggregate", () => {
+    const older = reportingTraffic("2026-09-20T08:00:00.000Z");
+    older.generatedAt = "2026-09-20T08:00:00.000Z";
+    older.cacheAge = 120;
+    older.isStale = true;
+    const newer = reportingTraffic("2026-09-20T09:00:00.000Z");
+    newer.generatedAt = "2026-09-20T09:00:00.000Z";
+    newer.cacheAge = 30;
+
+    expect(aggregateDashboardTraffic([older, newer])).toMatchObject({
+      generatedAt: "2026-09-20T08:00:00.000Z",
+      cacheAge: 120,
+      isStale: true,
+    });
+  });
 });
 
 function reportingTraffic(successfulAt: string) {

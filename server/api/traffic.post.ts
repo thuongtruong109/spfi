@@ -5,6 +5,7 @@ import { fetchShopifyTraffic } from "~~/server/utils/shopify-traffic";
 interface TrafficBody {
   storeId?: string;
   token?: string;
+  refresh?: boolean;
 }
 
 export default defineEventHandler(async (event) => {
@@ -16,6 +17,7 @@ export default defineEventHandler(async (event) => {
     event,
     storeId,
     token,
+    refresh: body.refresh === true,
   });
   setResponseHeader(event, "x-spf-field-convention", "app-camel-case");
   return traffic;

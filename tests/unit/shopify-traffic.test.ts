@@ -48,6 +48,9 @@ describe("Shopify traffic analytics", () => {
       queries.today.indexOf("WITH TIMEZONE"),
     );
     expect(DASHBOARD_TRAFFIC_QUERY).not.toContain("$dimension");
+    expect(DASHBOARD_TRAFFIC_QUERY).not.toMatch(
+      /\b(trafficTypes|platforms|browsers|landingPages|campaigns|aiReferrals)\s*:/,
+    );
   });
 
   it("builds one whitelisted dimension query with totals and an overflow row", () => {
@@ -154,18 +157,6 @@ describe("Shopify traffic analytics", () => {
             online_store_visitors: "45",
           },
         ]),
-        trafficTypes: result([
-          { traffic_type: "Organic", sessions: "6", online_store_visitors: "5" },
-        ]),
-        landingPages: result([{ landing_page_path: "/products/tee", sessions: "4" }]),
-        campaigns: result([
-          { utm_campaign: "spring", sessions: "3" },
-          { utm_campaign: null, sessions: "7" },
-        ]),
-        aiReferrals: {
-          tableData: null,
-          parseErrors: ["Dimension unavailable on this API version"],
-        },
       },
       "Etc/UTC",
       "2026-09-20T09:00:00.000Z",
@@ -204,9 +195,13 @@ describe("Shopify traffic analytics", () => {
     expect(traffic.availability.daily).toBe("available");
     expect(traffic.rangeData["7d"].availability.sources).toBe("available");
     expect(traffic.sources?.[1]?.label).toBe("Direct / unknown");
-    expect(traffic.trafficTypes[0]?.label).toBe("Organic");
-    expect(traffic.campaigns).toHaveLength(1);
-    expect(traffic.aiReferrals).toEqual([]);
+    expect(traffic).toMatchObject({
+      generatedAt: "2026-09-20T09:00:00.000Z",
+      cacheAge: 0,
+      isStale: false,
+    });
+    expect(traffic).not.toHaveProperty("trafficTypes");
+    expect(traffic).not.toHaveProperty("campaigns");
   });
 
   it("returns exactly 250 dimension rows and detects only a real overflow row", () => {
