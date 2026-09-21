@@ -3,7 +3,7 @@
     <div class="products-manager">
       <!-- Loading state -->
       <div v-if="productStore.isLoading && !products.length" id="loading">
-        <LoaderCircle class="loading-icon" aria-hidden="true" />
+        <ApiLoadingIcon class="loading-icon" aria-hidden="true" />
         {{ t("product.loadingProducts") }}
       </div>
       <div v-else-if="productStore.error" id="loading" class="error-state" role="alert">
@@ -951,7 +951,7 @@
           </template>
           <div v-else class="product-catalog-editor">
             <div v-if="isEditingProductDetailLoading" class="product-edit-loading">
-              <LoaderCircle class="loading-icon" aria-hidden="true" />
+              <ApiLoadingIcon class="loading-icon" aria-hidden="true" />
               {{ t("product.loadingCatalogEditor") }}
             </div>
             <div v-else-if="editingProductDetailError" class="product-edit-error">
@@ -1068,7 +1068,6 @@ import {
   Eye,
   EyeOff,
   FileText,
-  LoaderCircle,
   Pencil,
   Plus,
   RadioTower,
@@ -1079,6 +1078,7 @@ import {
   X,
 } from "@lucide/vue";
 import { computed, nextTick, ref, watch } from "vue";
+import ApiLoadingIcon from "~/components/ApiLoadingIcon.vue";
 import LocalizedPriceInput from "~/components/product/LocalizedPriceInput.vue";
 import { useActiveShopAuth } from "~/composables/useActiveShopAuth";
 import { useStoreFeedback } from "~/composables/useStoreFeedback";
@@ -2456,13 +2456,6 @@ async function refreshProducts() {
 .loading-icon {
   width: 17px;
   height: 17px;
-  animation: product-loading-spin 0.8s linear infinite;
-}
-
-@keyframes product-loading-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* Modals */

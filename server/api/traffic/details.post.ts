@@ -9,6 +9,7 @@ import {
   isDashboardTrafficDimensionKey,
 } from "~~/server/utils/shopify-traffic";
 import { createApiErrorFromMessage } from "~~/server/utils/callShopifyApi";
+import { isRequestAbortError } from "~~/server/utils/request-abort";
 
 interface TrafficDetailsBody {
   storeId?: string;
@@ -37,15 +38,20 @@ export default defineEventHandler(async (event) => {
   }
 
   setResponseHeader(event, "cache-control", "private, no-store");
-  const dimensionResult = await fetchShopifyTrafficDimension({
-    event,
-    storeId,
-    token,
-    range,
-    dimension,
-    timeZone: body.timeZone,
-    refresh: body.refresh === true,
-  });
-  setResponseHeader(event, "x-spf-field-convention", "app-camel-case");
-  return dimensionResult;
+  try {
+    const dimensionResult = await fetchShopifyTrafficDimension({
+      event,
+      storeId,
+      token,
+      range,
+      dimension,
+      timeZone: body.timeZone,
+      refresh: body.refresh === true,
+    });
+    setResponseHeader(event, "x-spf-field-convention", "app-camel-case");
+    return dimensionResult;
+  } catch (error) {
+    if (isRequestAbortError(error)) return;
+    throw error;
+  }
 });

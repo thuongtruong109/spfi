@@ -43,14 +43,14 @@
           :class="{ 'is-featured': index === 0 }"
           :to="item.to"
         >
-          <span class="workflow-icon-wrap">
-            <component :is="item.icon" class="workflow-icon" />
+          <span class="workflow-icon-wrap" :class="`is-${item.tone}`">
+            <component :is="item.icon" class="workflow-icon" aria-hidden="true" />
           </span>
           <div>
-            <h2>{{ item.title }}</h2>
+            <h3>{{ item.title }}</h3>
             <p>{{ item.description }}</p>
           </div>
-          <IconsArrowRight class="workflow-arrow" />
+          <IconsArrowRight class="workflow-arrow" aria-hidden="true" />
         </NuxtLink>
       </div>
     </section>
@@ -95,7 +95,7 @@
           class="assurance-item"
         >
           <div class="assurance-icon">
-            <component :is="item.icon" />
+            <component :is="item.icon" aria-hidden="true" />
           </div>
           <h3>{{ item.title }}</h3>
           <p>{{ item.description }}</p>
@@ -163,6 +163,18 @@
 </template>
 
 <script setup lang="ts">
+import {
+  Activity,
+  Boxes,
+  Gauge,
+  GitBranch,
+  LayoutDashboard,
+  PlugZap,
+  Settings2,
+  Sheet,
+  ShieldCheck,
+  Store,
+} from "@lucide/vue";
 import IconsLandingClean from "~/components/icons/landing/Clean.vue";
 import IconsLandingFlash from "~/components/icons/landing/Flash.vue";
 import IconsLandingUsefull from "~/components/icons/landing/Usefull.vue";
@@ -174,43 +186,50 @@ const quickLinks = computed(() => [
     to: "/dashboard",
     title: t("nav.dashboard"),
     description: t("home.quickDashboardDescription"),
-    icon: "IconsHero",
+    icon: LayoutDashboard,
+    tone: "green",
   },
   {
     to: "/setup",
     title: t("home.quickSetupTitle"),
     description: t("home.quickSetupDescription"),
-    icon: "IconsHero",
+    icon: PlugZap,
+    tone: "blue",
   },
   {
     to: "/manager",
     title: t("home.quickManagerTitle"),
     description: t("home.quickManagerDescription"),
-    icon: "IconsBulking",
+    icon: Boxes,
+    tone: "violet",
   },
   {
     to: "/store",
     title: t("nav.store"),
     description: t("home.quickStoreDescription"),
-    icon: "IconsRefresh",
+    icon: Store,
+    tone: "amber",
   },
   {
     to: "/settings#sheets",
     title: t("home.quickSheetTitle"),
     description: t("home.quickSheetDescription"),
-    icon: "IconsCopy",
+    icon: Sheet,
+    tone: "green",
   },
   {
     to: "/status",
     title: t("home.quickStatusTitle"),
     description: t("home.quickStatusDescription"),
-    icon: "IconsCheck",
+    icon: Activity,
+    tone: "blue",
   },
   {
     to: "/settings",
     title: t("nav.settings"),
     description: t("home.quickSettingsDescription"),
-    icon: "IconsSync",
+    icon: Settings2,
+    tone: "violet",
   },
 ]);
 
@@ -236,17 +255,17 @@ const assuranceItems = computed(() => [
   {
     title: t("home.assuranceVaultTitle"),
     description: t("home.assuranceVaultDescription"),
-    icon: "IconsCheck",
+    icon: ShieldCheck,
   },
   {
     title: t("home.assuranceRateTitle"),
     description: t("home.assuranceRateDescription"),
-    icon: "IconsSync",
+    icon: Gauge,
   },
   {
     title: t("home.assuranceFlowTitle"),
     description: t("home.assuranceFlowDescription"),
-    icon: "IconsRefresh",
+    icon: GitBranch,
   },
 ]);
 
@@ -524,6 +543,33 @@ const faqItems = computed(() => [
   background: var(--green-soft);
 }
 
+.workflow-icon-wrap.is-blue {
+  border-color: color-mix(in srgb, var(--blue) 18%, transparent);
+  background: var(--blue-soft);
+}
+
+.workflow-icon-wrap.is-blue .workflow-icon {
+  color: var(--blue);
+}
+
+.workflow-icon-wrap.is-amber {
+  border-color: color-mix(in srgb, var(--amber) 18%, transparent);
+  background: var(--amber-soft);
+}
+
+.workflow-icon-wrap.is-amber .workflow-icon {
+  color: var(--amber);
+}
+
+.workflow-icon-wrap.is-violet {
+  border-color: color-mix(in srgb, var(--violet) 18%, transparent);
+  background: var(--violet-soft);
+}
+
+.workflow-icon-wrap.is-violet .workflow-icon {
+  color: var(--violet);
+}
+
 .workflow-icon {
   width: 20px;
   height: 20px;
@@ -534,7 +580,7 @@ const faqItems = computed(() => [
   grid-column: 1 / -1;
 }
 
-.workflow-card h2 {
+.workflow-card h3 {
   margin: 0 0 7px;
   color: var(--text);
   font-size: 1rem;
@@ -557,6 +603,12 @@ const faqItems = computed(() => [
 
 .workflow-card:hover .workflow-arrow {
   transform: translateX(3px);
+}
+
+.workflow-card:focus-visible {
+  border-color: color-mix(in srgb, var(--green) 46%, var(--line));
+  box-shadow: var(--focus-ring);
+  outline: none;
 }
 
 .landing-section {

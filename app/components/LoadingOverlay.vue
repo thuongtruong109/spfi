@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { LoaderCircle } from "@lucide/vue";
+import ApiLoadingIcon from "~/components/ApiLoadingIcon.vue";
 
 defineProps<{ visible: boolean }>();
 const { t } = useLocalization();
@@ -15,7 +15,7 @@ const { t } = useLocalization();
       aria-busy="true"
     >
       <div class="loading-spinner">
-        <LoaderCircle class="spin-icon" :size="28" aria-hidden="true" />
+        <ApiLoadingIcon class="spin-icon" :size="28" aria-hidden="true" />
         <span class="loading-text">{{ t("common.loading") }}</span>
       </div>
     </div>
@@ -49,7 +49,6 @@ const { t } = useLocalization();
 
 .spin-icon {
   color: var(--text-secondary, #666);
-  animation: spin 0.8s linear infinite;
 }
 
 .loading-text {
@@ -66,11 +65,5 @@ const { t } = useLocalization();
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

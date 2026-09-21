@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LoaderCircle } from "@lucide/vue";
+import ApiLoadingIcon from "~/components/ApiLoadingIcon.vue";
 import type { TrafficDimensionLoadProgress } from "~~/types/dashboard";
 
 const props = defineProps<{
@@ -17,7 +17,7 @@ const progressWidth = computed(
   <div class="traffic-loading-overlay" role="status" aria-live="polite">
     <div class="traffic-loading-card">
       <div class="traffic-loading-heading">
-        <LoaderCircle aria-hidden="true" />
+        <ApiLoadingIcon :size="20" aria-hidden="true" />
         <div>
           <strong>{{
             t("dashboard.trafficFullLoadingRange", { range: rangeLabel })
@@ -80,7 +80,6 @@ const progressWidth = computed(
   height: 20px;
   flex: 0 0 20px;
   color: var(--green);
-  animation: traffic-loading-spin 0.8s linear infinite;
 }
 
 .traffic-loading-heading > div {
@@ -114,17 +113,7 @@ const progressWidth = computed(
   transition: width 0.2s ease;
 }
 
-@keyframes traffic-loading-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .traffic-loading-heading > svg {
-    animation: none;
-  }
-
   .traffic-loading-track i {
     transition: none;
   }
