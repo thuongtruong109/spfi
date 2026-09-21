@@ -36,8 +36,10 @@ function input(): TrafficExportInput {
   return {
     data,
     points: [{ period: "2026-09-19", sessions: 42, visitors: 30, pageviews: 90 }],
+    range: "7d",
     rangeLabel: "Last 7 days",
     exportedAt: new Date("2026-09-19T10:00:00.000Z"),
+    locale: "en-US",
     labels: {
       title: "Traffic report",
       range: "Range",
@@ -54,6 +56,12 @@ function input(): TrafficExportInput {
       devices: "Devices",
       details: "Details",
       dimension: "Dimension",
+      viewsPerSession: "Views per session",
+      purchases: "Purchases",
+      dimensionLabels: {
+        source: "Source",
+        campaign: "Campaign",
+      },
     },
   };
 }
@@ -62,6 +70,8 @@ describe("traffic export", () => {
   it("builds a complete range-scoped JSON payload", () => {
     const payload = buildTrafficExportPayload(input());
     expect(payload.range).toBe("Last 7 days");
+    expect(payload.rangeKey).toBe("7d");
+    expect(payload.locale).toBe("en-US");
     expect(payload.metrics?.sessions).toBe(42);
     expect(payload.availability.metrics).toBe("unknown");
     expect(payload.breakdowns.sources?.[0]?.label).toBe("Search & Social");
@@ -93,5 +103,26 @@ describe("traffic export", () => {
     expect(payload.breakdowns.sources).toBeNull();
     expect(payload.trend).toBeNull();
     expect(html).toContain("—");
+  });
+
+  it("uses the selected locale and a stable dimension order", () => {
+    const localized = input();
+    localized.locale = "de-DE";
+    localized.data.metrics = createTrafficMetrics({ sessions: 1234 });
+    const source = localized.data.dimensions.source;
+    localized.data.dimensions = {
+      campaign: source,
+      source,
+    };
+
+    const payload = buildTrafficExportPayload(localized);
+    const html = buildTrafficHtmlReport(localized);
+
+    expect(Object.keys(payload.dimensions)).toEqual(["source", "campaign"]);
+    expect(html).toContain('<html lang="de-DE">');
+    expect(html).toContain("1.234");
+    expect(html.indexOf("· Source")).toBeLessThan(html.indexOf("· Campaign"));
+    expect(html).toContain("Views per session");
+    expect(html).toContain("Purchases");
   });
 });

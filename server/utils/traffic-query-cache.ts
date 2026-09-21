@@ -181,8 +181,9 @@ export function buildTrafficDimensionCacheKey(
   token: string,
   range: DashboardTrafficRange,
   dimension: DashboardTrafficDimensionKey,
+  timeZone?: string,
 ) {
-  return `dimension:${credentialScope(storeId, token)}:${range}:${dimension}`;
+  return `dimension:${credentialScope(storeId, token)}:${range}:${dimension}:${timeZone || "store"}`;
 }
 
 function credentialScope(storeId: string, token: string) {

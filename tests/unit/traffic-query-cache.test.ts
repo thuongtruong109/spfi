@@ -171,9 +171,20 @@ describe("traffic query cache", () => {
     ).resolves.toMatchObject({ value: 3 });
   });
 
-  it("isolates cache entries when a credential rotates", () => {
+  it("isolates cache entries when a credential or timezone changes", () => {
     expect(buildTrafficDimensionCacheKey("shop-a", "token-a", "7d", "source")).not.toBe(
       buildTrafficDimensionCacheKey("shop-a", "token-b", "7d", "source"),
+    );
+    expect(
+      buildTrafficDimensionCacheKey("shop-a", "token-a", "7d", "source", "Etc/UTC"),
+    ).not.toBe(
+      buildTrafficDimensionCacheKey(
+        "shop-a",
+        "token-a",
+        "7d",
+        "source",
+        "Asia/Ho_Chi_Minh",
+      ),
     );
   });
 });

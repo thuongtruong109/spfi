@@ -126,46 +126,49 @@ function storeDescription(store: DashboardTrafficStoreReport) {
 <template>
   <div v-if="totalStores" class="traffic-reporting">
     <div class="traffic-reporting-bar">
-      <div class="traffic-reporting-summary">
-        <strong>
-          {{
-            t("dashboard.trafficStoresReporting", {
-              available: reportingStores,
-              total: totalStores,
-            })
-          }}
-        </strong>
-        <span
-          :class="[
-            'traffic-freshness',
-            { 'is-stale': isStale, 'has-no-success': !lastSuccessfulAt },
-          ]"
-        >
-          {{ t(freshnessKey) }}
-        </span>
-        <span v-if="lastSuccessfulAt" class="traffic-last-success">
-          {{
-            t("dashboard.trafficLastSuccessfulAt", {
-              time: formatSuccessfulAt(lastSuccessfulAt),
-            })
-          }}
-        </span>
+      <div class="traffic-reporting-status">
+        <div class="traffic-reporting-summary">
+          <strong>
+            {{
+              t("dashboard.trafficStoresReporting", {
+                available: reportingStores,
+                total: totalStores,
+              })
+            }}
+          </strong>
+          <span
+            :class="[
+              'traffic-freshness',
+              { 'is-stale': isStale, 'has-no-success': !lastSuccessfulAt },
+            ]"
+          >
+            {{ t(freshnessKey) }}
+          </span>
+          <span v-if="lastSuccessfulAt" class="traffic-last-success">
+            {{
+              t("dashboard.trafficLastSuccessfulAt", {
+                time: formatSuccessfulAt(lastSuccessfulAt),
+              })
+            }}
+          </span>
+        </div>
+        <details v-if="problemStores.length" class="traffic-store-issues">
+          <summary>
+            {{
+              t("dashboard.trafficStoreIssues", {
+                count: problemStores.length,
+              })
+            }}
+          </summary>
+          <ul>
+            <li v-for="store in problemStores" :key="store.storeId">
+              <strong>{{ store.label }}</strong>
+              <span>{{ storeDescription(store) }}</span>
+            </li>
+          </ul>
+        </details>
       </div>
-      <details v-if="problemStores.length" class="traffic-store-issues">
-        <summary>
-          {{
-            t("dashboard.trafficStoreIssues", {
-              count: problemStores.length,
-            })
-          }}
-        </summary>
-        <ul>
-          <li v-for="store in problemStores" :key="store.storeId">
-            <strong>{{ store.label }}</strong>
-            <span>{{ storeDescription(store) }}</span>
-          </li>
-        </ul>
-      </details>
+      <slot name="actions" />
     </div>
     <div v-if="partialBlocks.length" class="traffic-coverage-warning" role="status">
       <strong>{{ t("dashboard.trafficPartialBlocks", { range: rangeLabel }) }}</strong>
@@ -186,6 +189,16 @@ function storeDescription(store: DashboardTrafficStoreReport) {
   margin-bottom: 12px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
+}
+
+.traffic-reporting-status {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 12px;
 }
 
 .traffic-reporting-summary {
@@ -293,6 +306,10 @@ function storeDescription(store: DashboardTrafficStoreReport) {
 @media (max-width: 620px) {
   .traffic-reporting-bar {
     flex-direction: column;
+  }
+
+  .traffic-reporting-status {
+    width: 100%;
   }
 
   .traffic-store-issues ul {

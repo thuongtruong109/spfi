@@ -12,14 +12,22 @@ import type {
   DashboardTrafficRange,
   DashboardTrafficRangeData,
 } from "~~/types/dashboard";
-import type { DashboardTrafficDimensionOption } from "~~/utils/dashboard-traffic-dimensions";
+import {
+  DASHBOARD_TRAFFIC_DIMENSION_GROUPS,
+  DASHBOARD_TRAFFIC_DIMENSION_LABEL_KEYS,
+  type DashboardTrafficDimensionOption,
+} from "~~/utils/dashboard-traffic-dimensions";
 
-const props = defineProps<{
-  data: DashboardTrafficRangeData;
-  range: DashboardTrafficRange;
-  rangeLabel: string;
-  loadingDimensions?: string[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    data: DashboardTrafficRangeData;
+    range: DashboardTrafficRange;
+    rangeLabel: string;
+    loadingDimensions?: string[];
+    lazyLoading?: boolean;
+  }>(),
+  { lazyLoading: true },
+);
 
 const emit = defineEmits<{
   dimensionChange: [dimension: DashboardTrafficDimensionKey];
@@ -28,44 +36,18 @@ const emit = defineEmits<{
 const { locale, t } = useLocalization();
 const metrics = computed(() => props.data.metrics);
 
-const acquisitionOptions = computed<DashboardTrafficDimensionOption[]>(() => [
-  { key: "source", label: t("dashboard.trafficDetailSource") },
-  { key: "referrerDomain", label: t("dashboard.trafficDetailReferrerDomain") },
-  { key: "referrerTerms", label: t("dashboard.trafficDetailReferrerTerms") },
-  { key: "trafficType", label: t("dashboard.trafficDetailTrafficType") },
-  { key: "platform", label: t("dashboard.trafficDetailPlatform") },
-  { key: "channel", label: t("dashboard.trafficDetailChannel") },
-  { key: "medium", label: t("dashboard.trafficDetailMedium") },
-  { key: "aiReferral", label: t("dashboard.trafficDetailAiReferral") },
-]);
-
-const audienceOptions = computed<DashboardTrafficDimensionOption[]>(() => [
-  { key: "country", label: t("dashboard.trafficDetailCountry") },
-  { key: "region", label: t("dashboard.trafficDetailRegion") },
-  { key: "city", label: t("dashboard.trafficDetailCity") },
-]);
-
-const technologyOptions = computed<DashboardTrafficDimensionOption[]>(() => [
-  { key: "deviceType", label: t("dashboard.trafficDetailDevice") },
-  { key: "browser", label: t("dashboard.trafficDetailBrowser") },
-  { key: "browserVersion", label: t("dashboard.trafficDetailBrowserVersion") },
-  { key: "operatingSystem", label: t("dashboard.trafficDetailOs") },
-  {
-    key: "operatingSystemVersion",
-    label: t("dashboard.trafficDetailOsVersion"),
-  },
-  { key: "apiClient", label: t("dashboard.trafficDetailApiClient") },
-]);
-
-const contentOptions = computed<DashboardTrafficDimensionOption[]>(() => [
-  { key: "landingPagePath", label: t("dashboard.trafficDetailLandingPath") },
-  { key: "landingPageType", label: t("dashboard.trafficDetailLandingType") },
-  { key: "campaign", label: t("dashboard.trafficDetailCampaign") },
-  {
-    key: "campaignContent",
-    label: t("dashboard.trafficDetailCampaignContent"),
-  },
-]);
+const acquisitionOptions = computed(() =>
+  dimensionOptions(DASHBOARD_TRAFFIC_DIMENSION_GROUPS.acquisition),
+);
+const audienceOptions = computed(() =>
+  dimensionOptions(DASHBOARD_TRAFFIC_DIMENSION_GROUPS.audience),
+);
+const technologyOptions = computed(() =>
+  dimensionOptions(DASHBOARD_TRAFFIC_DIMENSION_GROUPS.technology),
+);
+const contentOptions = computed(() =>
+  dimensionOptions(DASHBOARD_TRAFFIC_DIMENSION_GROUPS.content),
+);
 
 const funnelStages = computed(() => {
   if (!metrics.value) return [];
@@ -113,6 +95,15 @@ function sessionShare(value: number) {
 
 function width(value: number) {
   return `${Math.max(0, Math.min(100, sessionShare(value) * 100))}%`;
+}
+
+function dimensionOptions(
+  dimensions: readonly DashboardTrafficDimensionKey[],
+): DashboardTrafficDimensionOption[] {
+  return dimensions.map((key) => ({
+    key,
+    label: t(DASHBOARD_TRAFFIC_DIMENSION_LABEL_KEYS[key]),
+  }));
 }
 </script>
 
@@ -171,6 +162,7 @@ function width(value: number) {
         :range="range"
         :range-label="rangeLabel"
         :loading-dimensions="loadingDimensions"
+        :lazy-loading="lazyLoading"
         @dimension-change="emit('dimensionChange', $event)"
       />
       <DashboardTrafficDimensionCard
@@ -182,6 +174,7 @@ function width(value: number) {
         :range="range"
         :range-label="rangeLabel"
         :loading-dimensions="loadingDimensions"
+        :lazy-loading="lazyLoading"
         @dimension-change="emit('dimensionChange', $event)"
       />
       <DashboardTrafficDimensionCard
@@ -193,6 +186,7 @@ function width(value: number) {
         :range="range"
         :range-label="rangeLabel"
         :loading-dimensions="loadingDimensions"
+        :lazy-loading="lazyLoading"
         @dimension-change="emit('dimensionChange', $event)"
       />
       <DashboardTrafficDimensionCard
@@ -204,6 +198,7 @@ function width(value: number) {
         :range="range"
         :range-label="rangeLabel"
         :loading-dimensions="loadingDimensions"
+        :lazy-loading="lazyLoading"
         @dimension-change="emit('dimensionChange', $event)"
       />
     </div>

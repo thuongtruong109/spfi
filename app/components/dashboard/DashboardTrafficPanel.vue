@@ -15,6 +15,7 @@ import type {
   DashboardTrafficDimensionKey,
   DashboardTrafficRange,
   DashboardTrafficSummary,
+  TrafficDimensionLoadProgress,
 } from "~~/types/dashboard";
 import { resolveDashboardTrafficRangeData } from "~~/utils/dashboard-traffic";
 
@@ -24,6 +25,10 @@ const props = defineProps<{
   loadingInsightDimensions?: string[];
   storeCount: number;
   showInsights?: boolean;
+  exportPending?: boolean;
+  fullLoading?: boolean;
+  fullLoadProgress?: TrafficDimensionLoadProgress;
+  lazyInsightLoading?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -33,11 +38,14 @@ const emit = defineEmits<{
       dimension: DashboardTrafficDimensionKey;
     },
   ];
+  rangeChange: [range: DashboardTrafficRange];
 }>();
 
 const { locale, t } = useLocalization();
 const range = ref<DashboardTrafficRange>("24h");
 const breakdown = ref<"sources" | "countries" | "devices">("sources");
+
+watch(range, (value) => emit("rangeChange", value), { immediate: true });
 
 const breakdownOptions = computed(() => [
   { value: "sources" as const, label: t("dashboard.trafficSources") },
@@ -213,7 +221,20 @@ function formatCoverage(reporting: number, total: number) {
       :store-count="storeCount"
       :range="range"
       :range-label="rangeLabel"
-    />
+    >
+      <template #actions>
+        <div v-if="traffic.available" class="traffic-toolbar-actions">
+          <slot name="controls-prefix" />
+          <DashboardTrafficControls
+            v-model="range"
+            :data="selectedRangeData"
+            :points="points"
+            :range-label="rangeLabel"
+            :export-pending="exportPending"
+          />
+        </div>
+      </template>
+    </DashboardTrafficReportingStatus>
     <div v-if="loading && !traffic.available" class="traffic-state">
       {{ t("dashboard.trafficLoading") }}
     </div>
@@ -230,183 +251,169 @@ function formatCoverage(reporting: number, total: number) {
         t("dashboard.trafficPermissionHint")
       }}</span>
     </div>
-    <template v-else>
-      <div
-        v-if="metricsFailed || metricsAvailability === 'partial'"
-        class="traffic-query-warning"
-        role="status"
-      >
-        {{
-          t(
-            metricsAvailability === "partial" && !metricsFailed
-              ? "dashboard.trafficQueryPartial"
-              : "dashboard.trafficMetricsQueryFailed",
-            { range: rangeLabel },
-          )
-        }}
-      </div>
-      <div class="traffic-overview-row">
-        <section class="traffic-metric-grid">
-          <div>
-            <span><MousePointerClick />{{ t("dashboard.trafficMetricSessions") }}</span>
-            <strong>{{
-              metricsFailed ? "—" : formatNumber(selectedMetrics?.sessions || 0)
-            }}</strong>
-            <small>{{ rangeLabel }}</small>
-          </div>
-          <div>
-            <span><UsersRound />{{ t("dashboard.trafficMetricVisitors") }}</span>
-            <strong>{{
-              metricsFailed ? "—" : formatNumber(selectedMetrics?.visitors || 0)
-            }}</strong>
-            <small>{{ t("dashboard.trafficUniqueShopify") }}</small>
-          </div>
-          <div>
-            <span><Eye />{{ t("dashboard.trafficMetricPageviews") }}</span>
-            <strong>{{
-              metricsFailed ? "—" : formatNumber(selectedMetrics?.pageviews || 0)
-            }}</strong>
-            <small v-if="!metricsFailed">
-              {{
-                t("dashboard.trafficViewsPerSession", {
-                  value: (selectedMetrics?.pageviewsPerSession || 0).toFixed(1),
-                })
-              }}
-            </small>
-          </div>
-          <div>
-            <span><ChartNoAxesCombined />{{ t("dashboard.trafficMetricBounce") }}</span>
-            <strong>{{
-              metricsFailed ? "—" : formatPercent(selectedMetrics?.bounceRate || 0)
-            }}</strong>
-            <small v-if="!metricsFailed">
-              {{
-                t("dashboard.trafficBouncesDetail", {
-                  count: formatNumber(selectedMetrics?.bounces || 0),
-                })
-              }}
-            </small>
-          </div>
-          <div>
-            <span><ShoppingCart />{{ t("dashboard.trafficMetricConversion") }}</span>
-            <strong>{{
-              metricsFailed ? "—" : formatPercent(selectedMetrics?.conversionRate || 0)
-            }}</strong>
-            <small v-if="!metricsFailed">
-              {{
-                t("dashboard.trafficConversionsDetail", {
-                  count: formatNumber(selectedMetrics?.completedCheckouts || 0),
-                })
-              }}
-            </small>
-          </div>
-          <div>
-            <span><Clock3 />{{ t("dashboard.trafficMetricDuration") }}</span>
-            <strong>
-              {{
+    <div v-else class="traffic-data-stage" :aria-busy="fullLoading">
+      <div class="traffic-data-content" :class="{ 'is-loading': fullLoading }">
+        <div
+          v-if="metricsFailed || metricsAvailability === 'partial'"
+          class="traffic-query-warning"
+          role="status"
+        >
+          {{
+            t(
+              metricsAvailability === "partial" && !metricsFailed
+                ? "dashboard.trafficQueryPartial"
+                : "dashboard.trafficMetricsQueryFailed",
+              { range: rangeLabel },
+            )
+          }}
+        </div>
+        <div class="traffic-overview-row">
+          <section class="traffic-metric-grid">
+            <div>
+              <strong>{{
+                metricsFailed ? "—" : formatNumber(selectedMetrics?.sessions || 0)
+              }}</strong>
+              <span
+                ><MousePointerClick />{{ t("dashboard.trafficMetricSessions") }}</span
+              >
+            </div>
+            <div>
+              <strong>{{
+                metricsFailed ? "—" : formatNumber(selectedMetrics?.visitors || 0)
+              }}</strong>
+              <span><UsersRound />{{ t("dashboard.trafficMetricVisitors") }}</span>
+            </div>
+            <div>
+              <strong>{{
+                metricsFailed ? "—" : formatNumber(selectedMetrics?.pageviews || 0)
+              }}</strong>
+              <span><Eye />{{ t("dashboard.trafficMetricPageviews") }}</span>
+            </div>
+            <div>
+              <strong>{{
+                metricsFailed ? "—" : formatPercent(selectedMetrics?.bounceRate || 0)
+              }}</strong>
+              <span
+                ><ChartNoAxesCombined />{{ t("dashboard.trafficMetricBounce") }}</span
+              >
+            </div>
+            <div>
+              <strong>{{
                 metricsFailed
                   ? "—"
-                  : formatDuration(selectedMetrics?.averageSessionDuration || 0)
+                  : formatPercent(selectedMetrics?.conversionRate || 0)
+              }}</strong>
+              <span><ShoppingCart />{{ t("dashboard.trafficMetricConversion") }}</span>
+            </div>
+            <div>
+              <strong>
+                {{
+                  metricsFailed
+                    ? "—"
+                    : formatDuration(selectedMetrics?.averageSessionDuration || 0)
+                }}
+              </strong>
+              <span><Clock3 />{{ t("dashboard.trafficMetricDuration") }}</span>
+            </div>
+          </section>
+        </div>
+
+        <section class="traffic-content-grid">
+          <div class="traffic-chart-card">
+            <div class="traffic-section-heading">
+              <strong><ChartNoAxesCombined />{{ t("dashboard.trafficTrend") }}</strong>
+              <span class="traffic-active-range">{{ rangeLabel }}</span>
+            </div>
+            <div v-if="trendUnavailable" class="traffic-query-error">
+              {{ t("dashboard.trafficTrendQueryFailed", { range: rangeLabel }) }}
+            </div>
+            <template v-else>
+              <p v-if="trafficTimeZoneNote" class="traffic-timezone-note">
+                {{ trafficTimeZoneNote }}
+              </p>
+              <DashboardTrafficChart
+                :points="points || []"
+                :granularity="granularity"
+              />
+              <p v-if="trendAvailability === 'partial'" class="traffic-query-note">
+                {{ t("dashboard.trafficQueryPartial") }}
+              </p>
+            </template>
+          </div>
+
+          <div class="traffic-breakdown-card">
+            <div class="traffic-section-heading traffic-breakdown-heading">
+              <strong><ChartPie />{{ t("dashboard.trafficBreakdown") }}</strong>
+              <div
+                class="dashboard-segmented-control"
+                :aria-label="t('dashboard.trafficBreakdown')"
+              >
+                <button
+                  v-for="option in breakdownOptions"
+                  :key="option.value"
+                  type="button"
+                  :class="{ active: breakdown === option.value }"
+                  @click="breakdown = option.value"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+            </div>
+            <div
+              v-if="breakdownUnavailable"
+              class="traffic-breakdown-empty traffic-query-error"
+            >
+              {{
+                t("dashboard.trafficBreakdownQueryFailed", {
+                  dimension: selectedBreakdownLabel,
+                  range: rangeLabel,
+                })
               }}
-            </strong>
-            <small>{{ rangeLabel }}</small>
+            </div>
+            <div v-else-if="breakdownSegments.length" class="traffic-breakdown-chart">
+              <DashboardDonutChart
+                :segments="breakdownSegments"
+                :center-label="t('dashboard.trafficSessions')"
+                :center-value="formatNumber(breakdownKnownTotal)"
+                :ariaLabel="t('dashboard.trafficBreakdownChartLabel')"
+                :size="154"
+              />
+            </div>
+            <div v-else class="traffic-breakdown-empty">
+              {{ t("dashboard.trafficNoBreakdown") }}
+            </div>
+            <p v-if="breakdownAvailability === 'partial'" class="traffic-query-note">
+              {{ t("dashboard.trafficQueryPartial") }}
+            </p>
+            <div class="traffic-breakdown-coverage">
+              <span
+                v-for="row in breakdownCoverage"
+                :key="row.value"
+                :class="{ 'is-partial': row.reportingStores < row.totalStores }"
+              >
+                {{ row.label }}
+                {{ formatCoverage(row.reportingStores, row.totalStores) }}
+              </span>
+            </div>
           </div>
         </section>
 
-        <DashboardTrafficControls
-          v-model="range"
+        <DashboardTrafficInsights
+          v-if="showInsights"
           :data="selectedRangeData"
-          :points="points"
+          :range="range"
           :range-label="rangeLabel"
+          :loading-dimensions="loadingInsightDimensions"
+          :lazy-loading="lazyInsightLoading"
+          @dimension-change="emit('dimensionChange', { range, dimension: $event })"
         />
       </div>
-
-      <section class="traffic-content-grid">
-        <div class="traffic-chart-card">
-          <div class="traffic-section-heading">
-            <strong><ChartNoAxesCombined />{{ t("dashboard.trafficTrend") }}</strong>
-            <span class="traffic-active-range">{{ rangeLabel }}</span>
-          </div>
-          <div v-if="trendUnavailable" class="traffic-query-error">
-            {{ t("dashboard.trafficTrendQueryFailed", { range: rangeLabel }) }}
-          </div>
-          <template v-else>
-            <p v-if="trafficTimeZoneNote" class="traffic-timezone-note">
-              {{ trafficTimeZoneNote }}
-            </p>
-            <DashboardTrafficChart :points="points || []" :granularity="granularity" />
-            <p v-if="trendAvailability === 'partial'" class="traffic-query-note">
-              {{ t("dashboard.trafficQueryPartial") }}
-            </p>
-          </template>
-        </div>
-
-        <div class="traffic-breakdown-card">
-          <div class="traffic-section-heading traffic-breakdown-heading">
-            <strong><ChartPie />{{ t("dashboard.trafficBreakdown") }}</strong>
-            <div
-              class="dashboard-segmented-control"
-              :aria-label="t('dashboard.trafficBreakdown')"
-            >
-              <button
-                v-for="option in breakdownOptions"
-                :key="option.value"
-                type="button"
-                :class="{ active: breakdown === option.value }"
-                @click="breakdown = option.value"
-              >
-                {{ option.label }}
-              </button>
-            </div>
-          </div>
-          <div
-            v-if="breakdownUnavailable"
-            class="traffic-breakdown-empty traffic-query-error"
-          >
-            {{
-              t("dashboard.trafficBreakdownQueryFailed", {
-                dimension: selectedBreakdownLabel,
-                range: rangeLabel,
-              })
-            }}
-          </div>
-          <div v-else-if="breakdownSegments.length" class="traffic-breakdown-chart">
-            <DashboardDonutChart
-              :segments="breakdownSegments"
-              :center-label="t('dashboard.trafficSessions')"
-              :center-value="formatNumber(breakdownKnownTotal)"
-              :ariaLabel="t('dashboard.trafficBreakdownChartLabel')"
-              :size="154"
-            />
-          </div>
-          <div v-else class="traffic-breakdown-empty">
-            {{ t("dashboard.trafficNoBreakdown") }}
-          </div>
-          <p v-if="breakdownAvailability === 'partial'" class="traffic-query-note">
-            {{ t("dashboard.trafficQueryPartial") }}
-          </p>
-          <div class="traffic-breakdown-coverage">
-            <span
-              v-for="row in breakdownCoverage"
-              :key="row.value"
-              :class="{ 'is-partial': row.reportingStores < row.totalStores }"
-            >
-              {{ row.label }}
-              {{ formatCoverage(row.reportingStores, row.totalStores) }}
-            </span>
-          </div>
-        </div>
-      </section>
-
-      <DashboardTrafficInsights
-        v-if="showInsights"
-        :data="selectedRangeData"
-        :range="range"
+      <DashboardTrafficLoadingOverlay
+        v-if="fullLoading && fullLoadProgress"
         :range-label="rangeLabel"
-        :loading-dimensions="loadingInsightDimensions"
-        @dimension-change="emit('dimensionChange', { range, dimension: $event })"
+        :progress="fullLoadProgress"
       />
-    </template>
+    </div>
   </article>
 </template>
 
@@ -436,6 +443,24 @@ function formatCoverage(reporting: number, total: number) {
   place-items: center;
   color: var(--muted);
   font-size: 12px;
+}
+
+.traffic-data-stage {
+  position: relative;
+  min-height: 320px;
+}
+
+.traffic-data-content {
+  transition:
+    opacity 0.18s ease,
+    filter 0.18s ease;
+}
+
+.traffic-data-content.is-loading {
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.28;
+  filter: saturate(0.45);
 }
 
 .traffic-unavailable {
@@ -509,10 +534,15 @@ function formatCoverage(reporting: number, total: number) {
 }
 
 .traffic-overview-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 58px;
-  gap: 8px;
   margin-bottom: 12px;
+}
+
+.traffic-toolbar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .traffic-metric-grid {
@@ -523,10 +553,13 @@ function formatCoverage(reporting: number, total: number) {
 }
 
 .traffic-metric-grid > div {
-  display: grid;
-  gap: 3px;
+  display: flex;
   min-width: 0;
-  padding: 0 12px;
+  min-height: 76px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface-soft);
@@ -536,10 +569,13 @@ function formatCoverage(reporting: number, total: number) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  justify-content: flex-end;
   color: var(--muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.045em;
+  line-height: 1.35;
+  text-align: right;
 }
 
 .traffic-metric-grid span svg {
@@ -555,16 +591,8 @@ function formatCoverage(reporting: number, total: number) {
   font-weight: 700;
   line-height: 1.2;
   text-overflow: ellipsis;
-  text-align: center;
-}
-
-.traffic-metric-grid small {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 8px;
-  text-overflow: ellipsis;
+  text-align: left;
   white-space: nowrap;
-  text-align: center;
 }
 
 .traffic-content-grid {
@@ -693,10 +721,6 @@ function formatCoverage(reporting: number, total: number) {
 }
 
 @media (max-width: 1120px) {
-  .traffic-overview-row {
-    grid-template-columns: 1fr;
-  }
-
   .traffic-metric-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -709,6 +733,12 @@ function formatCoverage(reporting: number, total: number) {
 }
 
 @media (max-width: 620px) {
+  .traffic-toolbar-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    margin-left: 0;
+  }
+
   .traffic-section-heading.traffic-breakdown-heading {
     flex-direction: column;
     align-items: flex-start;

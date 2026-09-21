@@ -33,6 +33,29 @@ describe("DashboardTrafficDimensionCard", () => {
 
     expect(wrapper.emitted("dimensionChange")?.at(-1)).toEqual(["campaign"]);
   });
+
+  it("does not issue lazy requests in Full mode and resumes them in Lazy mode", async () => {
+    installNuxtImports();
+    const wrapper = shallowMount(DashboardTrafficDimensionCard, {
+      props: {
+        icon: defineComponent({ template: "<svg />" }),
+        title: "Acquisition",
+        subtitle: "Traffic acquisition",
+        dimensions: {},
+        options: [{ key: "source", label: "Source" }],
+        range: "24h",
+        rangeLabel: "Last 24 hours",
+        lazyLoading: false,
+      },
+      global: { stubs: { DashboardDonutChart: true } },
+    });
+
+    expect(wrapper.emitted("dimensionChange")).toBeUndefined();
+
+    await wrapper.setProps({ lazyLoading: true });
+    await nextTick();
+    expect(wrapper.emitted("dimensionChange")?.at(-1)).toEqual(["source"]);
+  });
 });
 
 function installNuxtImports() {

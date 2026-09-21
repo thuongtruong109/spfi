@@ -14,6 +14,7 @@ const props = defineProps<{
   data: DashboardTrafficRangeData;
   points: DashboardTrafficPoint[] | null;
   rangeLabel: string;
+  exportPending?: boolean;
 }>();
 
 const range = defineModel<DashboardTrafficRange>({ required: true });
@@ -54,11 +55,17 @@ const exportOptions = computed<
 ]);
 
 async function handleExport(format: TrafficExportFormat, close: () => void) {
-  if (isExporting.value) return;
+  if (isExporting.value || props.exportPending) return;
   isExporting.value = true;
   try {
-    await exportTraffic(format, props.data, props.points, props.rangeLabel);
-    close();
+    const exported = await exportTraffic(
+      format,
+      range.value,
+      props.data,
+      props.points,
+      props.rangeLabel,
+    );
+    if (exported) close();
   } finally {
     isExporting.value = false;
   }
@@ -91,9 +98,21 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
           class="traffic-export-trigger"
           size="medium"
           icon-only
-          :loading="isExporting"
-          :aria-label="t('dashboard.trafficExport')"
-          :title="t('dashboard.trafficExport')"
+          :loading="isExporting || exportPending"
+          :aria-label="
+            t(
+              exportPending
+                ? 'dashboard.trafficExportPreparing'
+                : 'dashboard.trafficExport',
+            )
+          "
+          :title="
+            t(
+              exportPending
+                ? 'dashboard.trafficExportPreparing'
+                : 'dashboard.trafficExport',
+            )
+          "
         >
           <template #icon><Download /></template>
         </BaseButton>
@@ -122,17 +141,17 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
 
 <style scoped>
 .traffic-controls {
-  display: grid;
-  width: 38px;
+  display: flex;
+  width: auto;
   min-width: 0;
-  align-content: center;
+  align-items: center;
   justify-self: end;
   gap: 6px;
 }
 
 .traffic-range-tabs {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(3, minmax(34px, 1fr));
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--border);
@@ -142,7 +161,7 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
 
 .traffic-range-tabs button {
   min-height: 32px;
-  padding: 0 2px;
+  padding: 0 7px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -169,12 +188,13 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
 }
 
 .traffic-export-trigger {
-  width: 100% !important;
+  width: var(--control-height-md) !important;
   border-radius: 9px;
 }
 
 .traffic-export-popover {
-  width: 100%;
+  flex: 0 0 var(--control-height-md);
+  width: var(--control-height-md);
 }
 
 .traffic-export-popover :deep(.popover-trigger) {

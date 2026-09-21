@@ -11,16 +11,20 @@ import {
   type DashboardTrafficDimensionOption,
 } from "~~/utils/dashboard-traffic-dimensions";
 
-const props = defineProps<{
-  icon: Component;
-  title: string;
-  subtitle: string;
-  dimensions: DashboardTrafficDimensions;
-  options: DashboardTrafficDimensionOption[];
-  range: DashboardTrafficRange;
-  rangeLabel: string;
-  loadingDimensions?: string[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    icon: Component;
+    title: string;
+    subtitle: string;
+    dimensions: DashboardTrafficDimensions;
+    options: DashboardTrafficDimensionOption[];
+    range: DashboardTrafficRange;
+    rangeLabel: string;
+    loadingDimensions?: string[];
+    lazyLoading?: boolean;
+  }>(),
+  { lazyLoading: true },
+);
 
 const emit = defineEmits<{
   dimensionChange: [dimension: DashboardTrafficDimensionKey];
@@ -88,10 +92,11 @@ watch(
       props.range,
       activeDimension.value,
       Boolean(props.dimensions[activeDimension.value]),
+      props.lazyLoading,
     ] as const,
-  ([, dimension]) => {
+  ([, dimension, , lazyLoading]) => {
     expanded.value = false;
-    emit("dimensionChange", dimension);
+    if (lazyLoading) emit("dimensionChange", dimension);
   },
   { immediate: true },
 );

@@ -1,5 +1,5 @@
 import { shallowMount } from "@vue/test-utils";
-import { computed, ref, watch } from "vue";
+import { computed, defineComponent, nextTick, ref, watch } from "vue";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import DashboardTrafficPanel from "~/components/dashboard/DashboardTrafficPanel.vue";
 import DashboardTrafficReportingStatus from "~/components/dashboard/DashboardTrafficReportingStatus.vue";
@@ -25,6 +25,10 @@ describe("DashboardTrafficPanel", () => {
     expect(wrapper.text()).toContain("dashboard.trafficMetricSessions");
     expect(wrapper.text()).toContain("9");
     expect(wrapper.text()).not.toContain("dashboard.trafficUnavailable");
+    const firstMetric = wrapper.get(".traffic-metric-grid > div");
+    expect(firstMetric.element.firstElementChild?.tagName).toBe("STRONG");
+    expect(firstMetric.element.lastElementChild?.tagName).toBe("SPAN");
+    expect(firstMetric.find("small").exists()).toBe(false);
   });
 
   it("shows unavailable only when no summary alias was usable", () => {
@@ -72,6 +76,92 @@ describe("DashboardTrafficPanel", () => {
 
     expect(wrapper.text()).toContain("dashboard.trafficQueryFailed");
     expect(wrapper.text()).not.toContain("dashboard.trafficPermissionHint");
+  });
+
+  it("renders the load mode and horizontal controls in the reporting bar", () => {
+    installNuxtImports();
+    const traffic = emptyDashboardTraffic();
+    traffic.available = true;
+    traffic.availableStores = 1;
+    traffic.rangeData["24h"].metrics = createTrafficMetrics({ sessions: 5 });
+
+    const wrapper = shallowMount(DashboardTrafficPanel, {
+      props: { traffic, storeCount: 1 },
+      slots: {
+        "controls-prefix": '<div class="test-load-mode">Full</div>',
+      },
+      global: {
+        stubs: {
+          DashboardTrafficReportingStatus: {
+            template:
+              '<div class="traffic-reporting-bar"><slot name="actions" /></div>',
+          },
+          DashboardTrafficControls: {
+            template: '<aside class="traffic-controls">Controls</aside>',
+          },
+          DashboardTrafficChart: true,
+          DashboardDonutChart: true,
+          DashboardTrafficInsights: true,
+        },
+      },
+    });
+
+    const toolbar = wrapper.get(".traffic-reporting-bar > .traffic-toolbar-actions");
+    expect(toolbar.find(".test-load-mode").exists()).toBe(true);
+    expect(toolbar.find(".traffic-controls").exists()).toBe(true);
+  });
+
+  it("keeps range controls usable while the selected range shows progress", async () => {
+    installNuxtImports();
+    const traffic = emptyDashboardTraffic();
+    traffic.available = true;
+    traffic.availableStores = 1;
+    traffic.rangeData["24h"].metrics = createTrafficMetrics({ sessions: 5 });
+    const ControlsStub = defineComponent({
+      name: "DashboardTrafficControls",
+      props: { modelValue: String },
+      emits: ["update:modelValue"],
+      template:
+        "<button class=\"test-range-control\" @click=\"$emit('update:modelValue', '7d')\">Range</button>",
+    });
+
+    const wrapper = shallowMount(DashboardTrafficPanel, {
+      props: {
+        traffic,
+        storeCount: 1,
+        fullLoading: true,
+        fullLoadProgress: {
+          loaded: 7,
+          total: 21,
+          percent: 33,
+          complete: false,
+        },
+      },
+      global: {
+        stubs: {
+          DashboardTrafficReportingStatus: {
+            template:
+              '<div class="traffic-reporting-bar"><slot name="actions" /></div>',
+          },
+          DashboardTrafficControls: ControlsStub,
+          DashboardTrafficLoadingOverlay: {
+            props: ["progress"],
+            template:
+              '<div class="test-loading-overlay">{{ progress.loaded }}/{{ progress.total }}</div>',
+          },
+          DashboardTrafficChart: true,
+          DashboardDonutChart: true,
+          DashboardTrafficInsights: true,
+        },
+      },
+    });
+
+    expect(wrapper.get(".traffic-data-content").classes()).toContain("is-loading");
+    expect(wrapper.get(".test-loading-overlay").text()).toBe("7/21");
+
+    await wrapper.get(".test-range-control").trigger("click");
+    await nextTick();
+    expect(wrapper.emitted("rangeChange")?.at(-1)).toEqual(["7d"]);
   });
 
   it("shows store reporting, freshness, failures, and selected-range coverage", () => {
@@ -143,9 +233,13 @@ describe("DashboardTrafficPanel", () => {
 
     const freshStatus = shallowMount(DashboardTrafficReportingStatus, {
       props: { ...statusProps, loading: false },
+      slots: { actions: '<button class="test-actions">Actions</button>' },
     });
     expect(freshStatus.text()).toContain("dashboard.trafficDataFresh");
     expect(freshStatus.text()).not.toContain("dashboard.trafficDataStale");
+    expect(freshStatus.find(".traffic-reporting-bar > .test-actions").exists()).toBe(
+      true,
+    );
 
     traffic.isStale = true;
     const cachedStatus = shallowMount(DashboardTrafficReportingStatus, {

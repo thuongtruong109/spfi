@@ -76,28 +76,32 @@ export const DASHBOARD_TRAFFIC_BLOCKS = [
 
 export type DashboardTrafficBlock = (typeof DASHBOARD_TRAFFIC_BLOCKS)[number];
 
+export const DASHBOARD_TRAFFIC_DIMENSION_KEYS = [
+  "source",
+  "referrerDomain",
+  "referrerTerms",
+  "trafficType",
+  "platform",
+  "channel",
+  "medium",
+  "aiReferral",
+  "country",
+  "region",
+  "city",
+  "deviceType",
+  "browser",
+  "browserVersion",
+  "operatingSystem",
+  "operatingSystemVersion",
+  "apiClient",
+  "landingPagePath",
+  "landingPageType",
+  "campaign",
+  "campaignContent",
+] as const;
+
 export type DashboardTrafficDimensionKey =
-  | "source"
-  | "referrerDomain"
-  | "referrerTerms"
-  | "country"
-  | "region"
-  | "city"
-  | "browser"
-  | "browserVersion"
-  | "operatingSystem"
-  | "operatingSystemVersion"
-  | "deviceType"
-  | "apiClient"
-  | "trafficType"
-  | "platform"
-  | "channel"
-  | "medium"
-  | "landingPageType"
-  | "landingPagePath"
-  | "campaign"
-  | "campaignContent"
-  | "aiReferral";
+  (typeof DASHBOARD_TRAFFIC_DIMENSION_KEYS)[number];
 
 export interface DashboardTrafficDimensionRow {
   label: string;
@@ -114,8 +118,17 @@ export interface DashboardTrafficDimensionRow {
   conversionRate: number;
 }
 
-export type DashboardTrafficRange = "24h" | "7d" | "30d";
+export const DASHBOARD_TRAFFIC_RANGES = ["24h", "7d", "30d"] as const;
+
+export type DashboardTrafficRange = (typeof DASHBOARD_TRAFFIC_RANGES)[number];
 export type DashboardTrafficTimeZoneMode = "store" | "per-store" | "unknown";
+
+export interface TrafficDimensionLoadProgress {
+  loaded: number;
+  total: number;
+  percent: number;
+  complete: boolean;
+}
 
 export interface DashboardTrafficBlockCoverage {
   reportingStores: number;

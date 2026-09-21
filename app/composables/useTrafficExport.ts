@@ -1,5 +1,6 @@
 import type {
   DashboardTrafficPoint,
+  DashboardTrafficRange,
   DashboardTrafficRangeData,
 } from "~~/types/dashboard";
 import {
@@ -8,6 +9,8 @@ import {
   type TrafficExportInput,
   type TrafficExportLabels,
 } from "~~/utils/traffic-export";
+import { DASHBOARD_TRAFFIC_DIMENSION_LABEL_KEYS } from "~~/utils/dashboard-traffic-dimensions";
+import { DASHBOARD_TRAFFIC_DIMENSION_KEYS } from "~~/types/dashboard";
 import { useLocalization } from "~/composables/useLocalization";
 import { useToastStore } from "~/stores/toast";
 
@@ -19,6 +22,7 @@ export function useTrafficExport() {
 
   async function exportTraffic(
     format: TrafficExportFormat,
+    range: DashboardTrafficRange,
     data: DashboardTrafficRangeData,
     points: DashboardTrafficPoint[] | null,
     rangeLabel: string,
@@ -28,16 +32,18 @@ export function useTrafficExport() {
     const input: TrafficExportInput = {
       data,
       points,
+      range,
       rangeLabel,
       exportedAt,
+      locale: locale.value,
       labels,
     };
     const stamp = exportedAt.toISOString().replace(/[:.]/g, "-");
-    const baseName = `spfi-traffic-${stamp}`;
+    const baseName = `spfi-traffic-${range}-${stamp}`;
 
     try {
       if (format === "png") {
-        const blob = await renderTrafficPng(input, locale.value);
+        const blob = await renderTrafficPng(input);
         downloadBlob(blob, `${baseName}.png`);
       } else if (format === "html") {
         downloadText(
@@ -55,8 +61,10 @@ export function useTrafficExport() {
       toast.success(
         t("dashboard.trafficExportSuccess", { format: format.toUpperCase() }),
       );
+      return true;
     } catch {
       toast.error(t("dashboard.trafficExportFailed"));
+      return false;
     }
   }
 
@@ -77,13 +85,22 @@ export function useTrafficExport() {
       devices: t("dashboard.trafficDevices"),
       details: t("dashboard.trafficAnalysisTitle"),
       dimension: t("dashboard.trafficDimension"),
+      viewsPerSession: t("dashboard.trafficDetailViewsPerSession"),
+      purchases: t("dashboard.trafficFunnelPurchase"),
+      dimensionLabels: Object.fromEntries(
+        DASHBOARD_TRAFFIC_DIMENSION_KEYS.map((dimension) => [
+          dimension,
+          t(DASHBOARD_TRAFFIC_DIMENSION_LABEL_KEYS[dimension]),
+        ]),
+      ),
     };
   }
 
   return { exportTraffic };
 }
 
-async function renderTrafficPng(input: TrafficExportInput, locale: string) {
+async function renderTrafficPng(input: TrafficExportInput) {
+  const { locale } = input;
   const width = 1600;
   const height = 1120;
   const canvas = document.createElement("canvas");

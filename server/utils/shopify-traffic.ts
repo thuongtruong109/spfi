@@ -195,8 +195,12 @@ export async function fetchShopifyTrafficDimension(input: {
   token: string;
   range: DashboardTrafficRange;
   dimension: DashboardTrafficDimensionKey;
+  timeZone?: string;
   refresh?: boolean;
 }): Promise<TrafficDimensionResponse> {
+  const timeZone =
+    input.timeZone === undefined ? undefined : requireIanaTimeZone(input.timeZone);
+  const requestInput = { ...input, timeZone };
   const requestAbort = createRequestAbortSignal(input.event);
   try {
     return await trafficQueryCache.resolve({
@@ -205,11 +209,12 @@ export async function fetchShopifyTrafficDimension(input: {
         input.token,
         input.range,
         input.dimension,
+        timeZone,
       ),
       policy: TRAFFIC_DIMENSION_CACHE_POLICIES[input.range],
       signal: requestAbort.signal,
       refresh: input.refresh,
-      load: (signal) => loadShopifyTrafficDimension(input, signal),
+      load: (signal) => loadShopifyTrafficDimension(requestInput, signal),
     });
   } finally {
     requestAbort.dispose();
@@ -250,6 +255,7 @@ async function loadShopifyTrafficDimension(
     token: string;
     range: DashboardTrafficRange;
     dimension: DashboardTrafficDimensionKey;
+    timeZone?: string;
     refresh?: boolean;
   },
   signal: AbortSignal,

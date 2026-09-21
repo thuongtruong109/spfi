@@ -1,5 +1,8 @@
 import { defineEventHandler, readBody, setResponseHeader } from "h3";
-import type { DashboardTrafficRange } from "~~/types/dashboard";
+import {
+  DASHBOARD_TRAFFIC_RANGES,
+  type DashboardTrafficRange,
+} from "~~/types/dashboard";
 import { requireShopifyCredentials } from "~~/server/utils/shopify-admin-request";
 import {
   fetchShopifyTrafficDimension,
@@ -12,10 +15,11 @@ interface TrafficDetailsBody {
   token?: string;
   range?: string;
   dimension?: string;
+  timeZone?: string;
   refresh?: boolean;
 }
 
-const VALID_RANGES = new Set<DashboardTrafficRange>(["24h", "7d", "30d"]);
+const VALID_RANGES = new Set<DashboardTrafficRange>(DASHBOARD_TRAFFIC_RANGES);
 
 export default defineEventHandler(async (event) => {
   const body = (await readBody<TrafficDetailsBody>(event)) || {};
@@ -39,6 +43,7 @@ export default defineEventHandler(async (event) => {
     token,
     range,
     dimension,
+    timeZone: body.timeZone,
     refresh: body.refresh === true,
   });
   setResponseHeader(event, "x-spf-field-convention", "app-camel-case");

@@ -1,7 +1,10 @@
 import type {
   DashboardTrafficPoint,
+  DashboardTrafficDimensionKey,
+  DashboardTrafficRange,
   DashboardTrafficRangeData,
 } from "~~/types/dashboard";
+import { DASHBOARD_TRAFFIC_DIMENSION_KEYS } from "~~/types/dashboard";
 
 export interface TrafficExportLabels {
   title: string;
@@ -19,20 +22,27 @@ export interface TrafficExportLabels {
   devices: string;
   details: string;
   dimension: string;
+  viewsPerSession: string;
+  purchases: string;
+  dimensionLabels: Partial<Record<DashboardTrafficDimensionKey, string>>;
 }
 
 export interface TrafficExportInput {
   data: DashboardTrafficRangeData;
   points: DashboardTrafficPoint[] | null;
+  range: DashboardTrafficRange;
   rangeLabel: string;
   exportedAt: Date;
+  locale: string;
   labels: TrafficExportLabels;
 }
 
 export function buildTrafficExportPayload(input: TrafficExportInput) {
   return {
     exportedAt: input.exportedAt.toISOString(),
+    locale: input.locale,
     range: input.rangeLabel,
+    rangeKey: input.range,
     metrics: input.data.metrics,
     availability: input.data.availability,
     trend: input.points,
@@ -41,7 +51,7 @@ export function buildTrafficExportPayload(input: TrafficExportInput) {
       countries: input.data.countries,
       devices: input.data.devices,
     },
-    dimensions: input.data.dimensions,
+    dimensions: orderedDimensions(input.data),
   };
 }
 
@@ -49,11 +59,17 @@ export function buildTrafficHtmlReport(input: TrafficExportInput) {
   const { data, labels } = input;
   const metrics = data.metrics;
   const metricCards = [
-    [labels.sessions, metrics ? formatNumber(metrics.sessions) : "—"],
-    [labels.visitors, metrics ? formatNumber(metrics.visitors) : "—"],
-    [labels.pageviews, metrics ? formatNumber(metrics.pageviews) : "—"],
-    [labels.bounceRate, metrics ? formatPercent(metrics.bounceRate) : "—"],
-    [labels.conversionRate, metrics ? formatPercent(metrics.conversionRate) : "—"],
+    [labels.sessions, metrics ? formatNumber(metrics.sessions, input.locale) : "—"],
+    [labels.visitors, metrics ? formatNumber(metrics.visitors, input.locale) : "—"],
+    [labels.pageviews, metrics ? formatNumber(metrics.pageviews, input.locale) : "—"],
+    [
+      labels.bounceRate,
+      metrics ? formatPercent(metrics.bounceRate, input.locale) : "—",
+    ],
+    [
+      labels.conversionRate,
+      metrics ? formatPercent(metrics.conversionRate, input.locale) : "—",
+    ],
     [
       labels.averageDuration,
       metrics ? formatDuration(metrics.averageSessionDuration) : "—",
@@ -69,7 +85,7 @@ export function buildTrafficHtmlReport(input: TrafficExportInput) {
     ? input.points
         .map(
           (point) =>
-            `<tr><td>${escapeHtml(point.period)}</td><td>${formatNumber(point.sessions)}</td><td>${formatNumber(point.visitors)}</td><td>${formatNumber(point.pageviews)}</td></tr>`,
+            `<tr><td>${escapeHtml(point.period)}</td><td>${formatNumber(point.sessions, input.locale)}</td><td>${formatNumber(point.visitors, input.locale)}</td><td>${formatNumber(point.pageviews, input.locale)}</td></tr>`,
         )
         .join("")
     : '<tr><td colspan="4">—</td></tr>';
@@ -83,28 +99,29 @@ export function buildTrafficHtmlReport(input: TrafficExportInput) {
         `<section class="card"><h2>${escapeHtml(title)}</h2>${buildBreakdownTable(
           rows as DashboardTrafficRangeData["sources"],
           labels,
+          input.locale,
         )}</section>`,
     )
     .join("");
-  const dimensionTables = Object.entries(data.dimensions)
+  const dimensionTables = Object.entries(orderedDimensions(data))
     .flatMap(([dimension, result]) => {
       if (!result) return [];
       const rows = result.rows
         .map(
           (row) => `<tr>
-            <td>${escapeHtml(row.label)}</td><td>${formatNumber(row.sessions)}</td><td>${formatNumber(row.visitors)}</td><td>${formatNumber(row.pageviews)}</td><td>${formatPercent(row.bounceRate)}</td><td>${formatPercent(row.conversionRate)}</td>
+            <td>${escapeHtml(row.label)}</td><td>${formatNumber(row.sessions, input.locale)}</td><td>${formatNumber(row.visitors, input.locale)}</td><td>${formatNumber(row.pageviews, input.locale)}</td><td>${formatNumber(row.pageviewsPerSession, input.locale)}</td><td>${formatPercent(row.bounceRate, input.locale)}</td><td>${formatDuration(row.averageSessionDuration)}</td><td>${formatNumber(row.completedCheckouts, input.locale)}</td><td>${formatPercent(row.conversionRate, input.locale)}</td>
           </tr>`,
         )
         .join("");
       const count = `${result.rows.length}${result.hasMore ? "+" : ""}`;
       return [
-        `<section class="wide"><h2>${escapeHtml(labels.details)} · ${escapeHtml(dimension)} <small>${escapeHtml(count)}</small></h2><table><thead><tr><th>${escapeHtml(labels.dimension)}</th><th>${escapeHtml(labels.sessions)}</th><th>${escapeHtml(labels.visitors)}</th><th>${escapeHtml(labels.pageviews)}</th><th>${escapeHtml(labels.bounceRate)}</th><th>${escapeHtml(labels.conversionRate)}</th></tr></thead><tbody>${rows}</tbody></table></section>`,
+        `<section class="wide"><h2>${escapeHtml(labels.details)} · ${escapeHtml(labels.dimensionLabels[dimension as DashboardTrafficDimensionKey] || dimension)} <small>${escapeHtml(count)}</small></h2><table><thead><tr><th>${escapeHtml(labels.dimension)}</th><th>${escapeHtml(labels.sessions)}</th><th>${escapeHtml(labels.visitors)}</th><th>${escapeHtml(labels.pageviews)}</th><th>${escapeHtml(labels.viewsPerSession)}</th><th>${escapeHtml(labels.bounceRate)}</th><th>${escapeHtml(labels.averageDuration)}</th><th>${escapeHtml(labels.purchases)}</th><th>${escapeHtml(labels.conversionRate)}</th></tr></thead><tbody>${rows}</tbody></table></section>`,
       ];
     })
     .join("");
 
   return `<!doctype html>
-<html lang="en">
+<html lang="${escapeHtml(input.locale)}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -114,7 +131,7 @@ export function buildTrafficHtmlReport(input: TrafficExportInput) {
   </style>
 </head>
 <body><main>
-  <header class="hero"><h1>${escapeHtml(labels.title)}</h1><div class="meta">${escapeHtml(input.rangeLabel)} · ${escapeHtml(labels.exportedAt)} ${escapeHtml(input.exportedAt.toLocaleString())}</div></header>
+  <header class="hero"><h1>${escapeHtml(labels.title)}</h1><div class="meta">${escapeHtml(input.rangeLabel)} · ${escapeHtml(labels.exportedAt)} ${escapeHtml(input.exportedAt.toLocaleString(input.locale))}</div></header>
   <section class="metrics">${metricCards}</section>
   <section class="wide"><h2>${escapeHtml(labels.trend)}</h2><table><thead><tr><th>${escapeHtml(labels.range)}</th><th>${escapeHtml(labels.sessions)}</th><th>${escapeHtml(labels.visitors)}</th><th>${escapeHtml(labels.pageviews)}</th></tr></thead><tbody>${trendRows}</tbody></table></section>
   <div class="grid">${breakdowns}</div>
@@ -125,23 +142,33 @@ export function buildTrafficHtmlReport(input: TrafficExportInput) {
 function buildBreakdownTable(
   rows: DashboardTrafficRangeData["sources"],
   labels: TrafficExportLabels,
+  locale: string,
 ) {
   if (!rows) return "<p>—</p>";
   const body = rows
     .map(
       (row) =>
-        `<tr><td>${escapeHtml(row.label)}</td><td>${formatNumber(row.sessions)}</td><td>${formatNumber(row.visitors)}</td></tr>`,
+        `<tr><td>${escapeHtml(row.label)}</td><td>${formatNumber(row.sessions, locale)}</td><td>${formatNumber(row.visitors, locale)}</td></tr>`,
     )
     .join("");
   return `<table><thead><tr><th>${escapeHtml(labels.dimension)}</th><th>${escapeHtml(labels.sessions)}</th><th>${escapeHtml(labels.visitors)}</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value);
+function orderedDimensions(data: DashboardTrafficRangeData) {
+  return Object.fromEntries(
+    DASHBOARD_TRAFFIC_DIMENSION_KEYS.flatMap((dimension) => {
+      const result = data.dimensions[dimension];
+      return result ? [[dimension, result] as const] : [];
+    }),
+  );
 }
 
-function formatPercent(value: number) {
-  return new Intl.NumberFormat("en-US", {
+function formatNumber(value: number, locale: string) {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value);
+}
+
+function formatPercent(value: number, locale: string) {
+  return new Intl.NumberFormat(locale, {
     style: "percent",
     maximumFractionDigits: 1,
   }).format(value);

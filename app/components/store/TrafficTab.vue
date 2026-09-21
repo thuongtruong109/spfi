@@ -8,11 +8,64 @@ import { useTrafficStore } from "~/stores/traffic";
 
 const trafficStore = useTrafficStore();
 const { storeId, token } = useActiveShopAuth();
+const loadMode = ref<"full" | "lazy">("full");
+const selectedRange = ref<DashboardTrafficRange>("24h");
+const selectedRangeProgress = computed(
+  () => trafficStore.trafficInsightProgress[selectedRange.value],
+);
+const isSelectedRangeLoading = computed(
+  () =>
+    loadMode.value === "full" &&
+    trafficStore.isLoadingAllInsights &&
+    trafficStore.activeFullInsightRange === selectedRange.value,
+);
+
+watch(
+  () =>
+    [
+      storeId.value,
+      token.value,
+      trafficStore.hasFetched,
+      trafficStore.isLoading,
+      trafficStore.traffic.available,
+      loadMode.value,
+      selectedRange.value,
+    ] as const,
+  ([
+    activeStoreId,
+    activeToken,
+    hasFetched,
+    isLoading,
+    trafficAvailable,
+    mode,
+    range,
+  ]) => {
+    if (mode === "lazy") {
+      trafficStore.cancelTrafficDimensionRequests();
+      return;
+    }
+    if (
+      !activeStoreId ||
+      !activeToken ||
+      !hasFetched ||
+      isLoading ||
+      !trafficAvailable ||
+      !trafficStore.isStoreActive(activeStoreId)
+    ) {
+      return;
+    }
+    void trafficStore.fetchTrafficRangeDimensions(activeStoreId, activeToken, range);
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => trafficStore.cancelTrafficDimensionRequests());
 
 function loadInsightDimension(request: {
   range: DashboardTrafficRange;
   dimension: DashboardTrafficDimensionKey;
 }) {
+  if (loadMode.value === "full") return;
   if (!storeId.value || !token.value) return;
   void trafficStore.fetchTrafficDimension(
     storeId.value,
@@ -40,9 +93,25 @@ function loadInsightDimension(request: {
       :loading="trafficStore.isLoading"
       :loading-insight-dimensions="trafficStore.loadingInsightDimensions"
       :store-count="1"
+      :export-pending="
+        loadMode === 'full' &&
+        trafficStore.hasFetched &&
+        !selectedRangeProgress.complete
+      "
+      :full-loading="isSelectedRangeLoading"
+      :full-load-progress="selectedRangeProgress"
+      :lazy-insight-loading="loadMode === 'lazy'"
       show-insights
       @dimension-change="loadInsightDimension"
-    />
+      @range-change="selectedRange = $event"
+    >
+      <template #controls-prefix>
+        <StoreTrafficLoadModeSelect
+          v-model="loadMode"
+          :loading="trafficStore.isLoadingAllInsights"
+        />
+      </template>
+    </DashboardTrafficPanel>
   </section>
 </template>
 

@@ -1,12 +1,17 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { usePerStoreCache } from "~/composables/usePerStoreCache";
 import { useLocalizationStore } from "~/stores/localization";
 import type {
   DashboardTrafficDimensionKey,
   DashboardTrafficRange,
+  TrafficDimensionLoadProgress,
   TrafficDimensionResponse,
   TrafficOverviewResponse,
+} from "~~/types/traffic";
+import {
+  DASHBOARD_TRAFFIC_DIMENSION_KEYS,
+  DASHBOARD_TRAFFIC_RANGES,
 } from "~~/types/traffic";
 import {
   cloneDashboardTraffic,
@@ -21,6 +26,8 @@ interface TrafficStoreCache {
   loadedInsightDimensions: string[];
 }
 
+const INSIGHT_DIMENSION_COUNT = DASHBOARD_TRAFFIC_DIMENSION_KEYS.length;
+
 export const useTrafficStore = defineStore("traffic", () => {
   const localizationStore = useLocalizationStore();
   const traffic = ref<TrafficOverviewResponse>(emptyDashboardTraffic());
@@ -28,11 +35,37 @@ export const useTrafficStore = defineStore("traffic", () => {
   const isLoading = ref(false);
   const loadingInsightDimensions = ref<string[]>([]);
   const loadedInsightDimensions = ref<string[]>([]);
+  const isLoadingAllInsights = ref(false);
+  const activeFullInsightRange = ref<DashboardTrafficRange | null>(null);
+  const trafficInsightProgress = computed<
+    Record<DashboardTrafficRange, TrafficDimensionLoadProgress>
+  >(
+    () =>
+      Object.fromEntries(
+        DASHBOARD_TRAFFIC_RANGES.map((range) => {
+          const loaded = DASHBOARD_TRAFFIC_DIMENSION_KEYS.filter((dimension) =>
+            loadedInsightDimensions.value.includes(
+              trafficDimensionRequestKey(range, dimension),
+            ),
+          ).length;
+          return [
+            range,
+            {
+              loaded,
+              total: INSIGHT_DIMENSION_COUNT,
+              percent: Math.round((loaded / INSIGHT_DIMENSION_COUNT) * 100),
+              complete: loaded === INSIGHT_DIMENSION_COUNT,
+            },
+          ];
+        }),
+      ) as Record<DashboardTrafficRange, TrafficDimensionLoadProgress>,
+  );
   const error = ref<string | null>(null);
   const insightError = ref<string | null>(null);
   let scopeVersion = 0;
   let requestSequence = 0;
   let insightRequestSequence = 0;
+  let fullInsightBatchSequence = 0;
   let activeOverviewRequest: {
     storeId: string;
     controller: AbortController;
@@ -46,6 +79,12 @@ export const useTrafficStore = defineStore("traffic", () => {
       promise: Promise<boolean>;
     }
   >();
+  let activeFullInsightRequest: {
+    storeId: string;
+    range: DashboardTrafficRange;
+    batchId: number;
+    promise: Promise<boolean>;
+  } | null = null;
 
   const cache = usePerStoreCache<TrafficStoreCache>({
     capture: () => ({
@@ -163,7 +202,14 @@ export const useTrafficStore = defineStore("traffic", () => {
           "/api/traffic/details",
           {
             method: "POST",
-            body: { storeId, token, range, dimension, refresh: force },
+            body: {
+              storeId,
+              token,
+              range,
+              dimension,
+              timeZone: traffic.value.timeZone || undefined,
+              refresh: force,
+            },
             signal: controller.signal,
           },
         );
@@ -218,6 +264,75 @@ export const useTrafficStore = defineStore("traffic", () => {
     return promise;
   }
 
+  async function fetchTrafficRangeDimensions(
+    storeId: string,
+    token: string,
+    range: DashboardTrafficRange,
+    force = false,
+  ) {
+    if (!storeId || !token) return false;
+
+    cache.activate(storeId);
+    if (!hasFetched.value || !traffic.value.available) return false;
+    if (trafficInsightProgress.value[range].complete && !force) return true;
+    if (activeFullInsightRequest) {
+      if (
+        activeFullInsightRequest.storeId === storeId &&
+        activeFullInsightRequest.range === range &&
+        !force
+      ) {
+        return activeFullInsightRequest.promise;
+      }
+      abortInsightRequests();
+    }
+
+    const requestVersion = scopeVersion;
+    const batchId = ++fullInsightBatchSequence;
+    const dimensions = DASHBOARD_TRAFFIC_DIMENSION_KEYS.filter(
+      (dimension) =>
+        force ||
+        !loadedInsightDimensions.value.includes(
+          trafficDimensionRequestKey(range, dimension),
+        ),
+    );
+    let allSucceeded = true;
+    isLoadingAllInsights.value = dimensions.length > 0;
+    activeFullInsightRange.value = range;
+
+    const promise = (async () => {
+      for (const dimension of dimensions) {
+        if (!isFullInsightBatchActive(storeId, requestVersion, batchId)) break;
+        const succeeded = await fetchTrafficDimension(
+          storeId,
+          token,
+          range,
+          dimension,
+          force,
+        );
+        if (!succeeded) {
+          allSucceeded = false;
+          break;
+        }
+      }
+
+      const isActive = isFullInsightBatchActive(storeId, requestVersion, batchId);
+      if (!allSucceeded && isActive && !insightError.value) {
+        insightError.value = localizationStore.t("traffic.errorInsights");
+      }
+
+      return allSucceeded && isActive && trafficInsightProgress.value[range].complete;
+    })().finally(() => {
+      if (activeFullInsightRequest?.batchId === batchId) {
+        activeFullInsightRequest = null;
+        isLoadingAllInsights.value = false;
+        activeFullInsightRange.value = null;
+      }
+    });
+
+    activeFullInsightRequest = { storeId, range, batchId, promise };
+    return promise;
+  }
+
   function isActive(storeId: string, requestVersion: number, requestId: number) {
     return (
       scopeVersion === requestVersion &&
@@ -239,12 +354,26 @@ export const useTrafficStore = defineStore("traffic", () => {
     );
   }
 
+  function isFullInsightBatchActive(
+    storeId: string,
+    requestVersion: number,
+    batchId: number,
+  ) {
+    return (
+      scopeVersion === requestVersion &&
+      fullInsightBatchSequence === batchId &&
+      cache.isActive(storeId)
+    );
+  }
+
   function resetState() {
     traffic.value = emptyDashboardTraffic();
     hasFetched.value = false;
     isLoading.value = false;
     loadingInsightDimensions.value = [];
     loadedInsightDimensions.value = [];
+    isLoadingAllInsights.value = false;
+    activeFullInsightRange.value = null;
     activeInsightRequests.clear();
     error.value = null;
     insightError.value = null;
@@ -259,6 +388,10 @@ export const useTrafficStore = defineStore("traffic", () => {
   }
 
   function abortInsightRequests() {
+    fullInsightBatchSequence += 1;
+    activeFullInsightRequest = null;
+    isLoadingAllInsights.value = false;
+    activeFullInsightRange.value = null;
     for (const request of activeInsightRequests.values()) {
       request.controller.abort();
     }
@@ -278,11 +411,16 @@ export const useTrafficStore = defineStore("traffic", () => {
     isLoading,
     loadingInsightDimensions,
     loadedInsightDimensions,
+    isLoadingAllInsights,
+    activeFullInsightRange,
+    trafficInsightProgress,
     error,
     insightError,
     isStoreActive: cache.isActive,
     fetchTraffic,
     fetchTrafficDimension,
+    fetchTrafficRangeDimensions,
+    cancelTrafficDimensionRequests: abortInsightRequests,
     hydrate: cache.hydrate,
     evictStore: cache.evict,
     $reset,
