@@ -86,6 +86,14 @@ export class TrafficQueryCache {
       this.flights.delete(key);
       flight = undefined;
     }
+    if (!refresh && cached && cached.staleUntil > now) {
+      cached.touchedAt = now;
+      if (!flight) {
+        flight = this.startFlight(key, policy, load);
+        void flight.promise.catch(() => undefined);
+      }
+      return withDiagnostics(cached, now, true);
+    }
     if (!flight) {
       flight = this.startFlight(key, policy, load);
     }

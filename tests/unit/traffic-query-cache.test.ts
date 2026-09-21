@@ -57,7 +57,7 @@ describe("traffic query cache", () => {
     expect(load).toHaveBeenCalledOnce();
   });
 
-  it("serves an explicitly stale value when refresh fails", async () => {
+  it("serves an explicitly stale value when a forced refresh fails", async () => {
     let now = Date.parse("2026-09-20T10:00:00.000Z");
     const cache = new TrafficQueryCache(() => now);
     const policy = { freshForMs: 1_000, staleForMs: 10_000 };
@@ -69,11 +69,38 @@ describe("traffic query cache", () => {
       cache.resolve({
         key: "overview",
         policy,
+        refresh: true,
         load: async () => {
           throw new Error("Shopify unavailable");
         },
       }),
     ).resolves.toMatchObject({ value: 1, cacheAge: 2, isStale: true });
+  });
+
+  it("returns stale data immediately while revalidating it in the background", async () => {
+    let now = Date.parse("2026-09-20T10:00:00.000Z");
+    const cache = new TrafficQueryCache(() => now);
+    const policy = { freshForMs: 1_000, staleForMs: 10_000 };
+    let resolveRefresh!: (result: CacheValue) => void;
+
+    await cache.resolve({ key: "overview", policy, load: async () => value(1) });
+    now += 2_500;
+    const stale = await cache.resolve({
+      key: "overview",
+      policy,
+      load: () =>
+        new Promise<CacheValue>((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    });
+
+    expect(stale).toMatchObject({ value: 1, cacheAge: 2, isStale: true });
+    resolveRefresh(value(2));
+    await vi.waitFor(async () => {
+      await expect(
+        cache.resolve({ key: "overview", policy, load: async () => value(3) }),
+      ).resolves.toMatchObject({ value: 2, isStale: false });
+    });
   });
 
   it("keeps upstream alive while another waiter remains", async () => {

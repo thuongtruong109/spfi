@@ -96,7 +96,7 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
         <BaseButton
           v-bind="triggerProps"
           class="traffic-export-trigger"
-          size="medium"
+          size="small"
           icon-only
           :loading="isExporting || exportPending"
           :aria-label="
@@ -141,8 +141,11 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
 
 <style scoped>
 .traffic-controls {
+  --traffic-control-size: var(--control-height-sm);
+
   display: flex;
   width: auto;
+  height: var(--traffic-control-size);
   min-width: 0;
   align-items: center;
   justify-self: end;
@@ -151,16 +154,18 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
 
 .traffic-range-tabs {
   display: grid;
+  height: var(--traffic-control-size);
   grid-template-columns: repeat(3, minmax(34px, 1fr));
   gap: 2px;
-  padding: 3px;
+  padding: 2px;
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--surface-low);
 }
 
 .traffic-range-tabs button {
-  min-height: 32px;
+  height: 26px;
+  min-height: 26px;
   padding: 0 7px;
   border: 0;
   border-radius: 6px;
@@ -188,13 +193,16 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
 }
 
 .traffic-export-trigger {
-  width: var(--control-height-md) !important;
+  width: var(--traffic-control-size) !important;
+  height: var(--traffic-control-size);
+  min-height: var(--traffic-control-size);
   border-radius: 9px;
 }
 
 .traffic-export-popover {
-  flex: 0 0 var(--control-height-md);
-  width: var(--control-height-md);
+  flex: 0 0 var(--traffic-control-size);
+  width: var(--traffic-control-size);
+  height: var(--traffic-control-size);
 }
 
 .traffic-export-popover :deep(.popover-trigger) {

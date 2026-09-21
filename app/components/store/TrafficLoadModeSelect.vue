@@ -31,11 +31,13 @@ const options = computed(() => [
 <style scoped>
 .traffic-load-mode-select {
   width: 104px;
+  height: var(--control-height-sm);
   flex: 0 0 104px;
 }
 
 .traffic-load-mode-select :deep(.select-trigger) {
-  min-height: var(--control-height-md);
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
   background: var(--surface-low);
 }
 

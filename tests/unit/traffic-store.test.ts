@@ -231,7 +231,7 @@ describe("traffic store", () => {
     await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
   });
 
-  it("loads every dimension for only the selected range sequentially", async () => {
+  it("loads every dimension for only the selected range with bounded concurrency", async () => {
     let activeDetails = 0;
     let maximumConcurrency = 0;
     const request = vi.fn(
@@ -277,7 +277,10 @@ describe("traffic store", () => {
     );
     expect(detailCalls).toHaveLength(DASHBOARD_TRAFFIC_DIMENSION_KEYS.length);
     expect(detailCalls.every(([, options]) => options.body.range === "7d")).toBe(true);
-    expect(maximumConcurrency).toBe(1);
+    expect(maximumConcurrency).toBe(2);
+    expect(
+      detailCalls.slice(0, 4).map(([, options]) => options.body.dimension),
+    ).toEqual(["source", "country", "deviceType", "landingPagePath"]);
     expect(store.trafficInsightProgress["7d"].complete).toBe(true);
     expect(store.trafficInsightProgress["24h"].complete).toBe(false);
     expect(store.trafficInsightProgress["30d"].complete).toBe(false);
@@ -325,7 +328,7 @@ describe("traffic store", () => {
     const fullLoad = store.fetchTrafficRangeDimensions("shop-a", "token-a", "24h");
     await Promise.resolve();
 
-    expect(detailSignals).toHaveLength(1);
+    expect(detailSignals).toHaveLength(2);
     expect(store.isLoadingAllInsights).toBe(true);
     store.cancelTrafficDimensionRequests();
 
@@ -334,7 +337,7 @@ describe("traffic store", () => {
     expect(store.isLoadingAllInsights).toBe(false);
     expect(
       request.mock.calls.filter(([url]) => url === "/api/traffic/details"),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
 
   it("keeps a visible error when one request in a full batch fails", async () => {
@@ -380,7 +383,7 @@ describe("traffic store", () => {
     expect(store.insightError).toBeTruthy();
     expect(
       request.mock.calls.filter(([url]) => url === "/api/traffic/details"),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
 
   it("aborts the old request when the active shop changes", async () => {

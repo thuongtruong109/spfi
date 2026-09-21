@@ -26,9 +26,13 @@ describe("DashboardTrafficPanel", () => {
     expect(wrapper.text()).toContain("9");
     expect(wrapper.text()).not.toContain("dashboard.trafficUnavailable");
     const firstMetric = wrapper.get(".traffic-metric-grid > div");
-    expect(firstMetric.element.firstElementChild?.tagName).toBe("STRONG");
-    expect(firstMetric.element.lastElementChild?.tagName).toBe("SPAN");
-    expect(firstMetric.find("small").exists()).toBe(false);
+    expect(firstMetric.element.firstElementChild?.tagName).toBe("SPAN");
+    expect(firstMetric.element.lastElementChild?.tagName).toBe("SMALL");
+    expect(firstMetric.find("small").text()).toBe("dashboard.trafficRange24h");
+    expect(wrapper.text()).toContain("dashboard.trafficUniqueShopify");
+    expect(wrapper.text()).toContain("dashboard.trafficViewsPerSession");
+    expect(wrapper.text()).toContain("dashboard.trafficBouncesDetail");
+    expect(wrapper.text()).toContain("dashboard.trafficConversionsDetail");
   });
 
   it("shows unavailable only when no summary alias was usable", () => {

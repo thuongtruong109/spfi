@@ -270,42 +270,66 @@ function formatCoverage(reporting: number, total: number) {
         <div class="traffic-overview-row">
           <section class="traffic-metric-grid">
             <div>
-              <strong>{{
-                metricsFailed ? "—" : formatNumber(selectedMetrics?.sessions || 0)
-              }}</strong>
               <span
                 ><MousePointerClick />{{ t("dashboard.trafficMetricSessions") }}</span
               >
+              <strong>{{
+                metricsFailed ? "—" : formatNumber(selectedMetrics?.sessions || 0)
+              }}</strong>
+              <small>{{ rangeLabel }}</small>
             </div>
             <div>
+              <span><UsersRound />{{ t("dashboard.trafficMetricVisitors") }}</span>
               <strong>{{
                 metricsFailed ? "—" : formatNumber(selectedMetrics?.visitors || 0)
               }}</strong>
-              <span><UsersRound />{{ t("dashboard.trafficMetricVisitors") }}</span>
+              <small>{{ t("dashboard.trafficUniqueShopify") }}</small>
             </div>
             <div>
+              <span><Eye />{{ t("dashboard.trafficMetricPageviews") }}</span>
               <strong>{{
                 metricsFailed ? "—" : formatNumber(selectedMetrics?.pageviews || 0)
               }}</strong>
-              <span><Eye />{{ t("dashboard.trafficMetricPageviews") }}</span>
+              <small v-if="!metricsFailed">
+                {{
+                  t("dashboard.trafficViewsPerSession", {
+                    value: (selectedMetrics?.pageviewsPerSession || 0).toFixed(1),
+                  })
+                }}
+              </small>
             </div>
             <div>
-              <strong>{{
-                metricsFailed ? "—" : formatPercent(selectedMetrics?.bounceRate || 0)
-              }}</strong>
               <span
                 ><ChartNoAxesCombined />{{ t("dashboard.trafficMetricBounce") }}</span
               >
+              <strong>{{
+                metricsFailed ? "—" : formatPercent(selectedMetrics?.bounceRate || 0)
+              }}</strong>
+              <small v-if="!metricsFailed">
+                {{
+                  t("dashboard.trafficBouncesDetail", {
+                    count: formatNumber(selectedMetrics?.bounces || 0),
+                  })
+                }}
+              </small>
             </div>
             <div>
+              <span><ShoppingCart />{{ t("dashboard.trafficMetricConversion") }}</span>
               <strong>{{
                 metricsFailed
                   ? "—"
                   : formatPercent(selectedMetrics?.conversionRate || 0)
               }}</strong>
-              <span><ShoppingCart />{{ t("dashboard.trafficMetricConversion") }}</span>
+              <small v-if="!metricsFailed">
+                {{
+                  t("dashboard.trafficConversionsDetail", {
+                    count: formatNumber(selectedMetrics?.completedCheckouts || 0),
+                  })
+                }}
+              </small>
             </div>
             <div>
+              <span><Clock3 />{{ t("dashboard.trafficMetricDuration") }}</span>
               <strong>
                 {{
                   metricsFailed
@@ -313,7 +337,7 @@ function formatCoverage(reporting: number, total: number) {
                     : formatDuration(selectedMetrics?.averageSessionDuration || 0)
                 }}
               </strong>
-              <span><Clock3 />{{ t("dashboard.trafficMetricDuration") }}</span>
+              <small>{{ rangeLabel }}</small>
             </div>
           </section>
         </div>
@@ -553,12 +577,11 @@ function formatCoverage(reporting: number, total: number) {
 }
 
 .traffic-metric-grid > div {
-  display: flex;
+  display: grid;
   min-width: 0;
-  min-height: 76px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  min-height: 104px;
+  align-content: center;
+  gap: 4px;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -569,13 +592,13 @@ function formatCoverage(reporting: number, total: number) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  justify-content: flex-end;
+  justify-content: flex-start;
   color: var(--muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.045em;
   line-height: 1.35;
-  text-align: right;
+  text-align: left;
 }
 
 .traffic-metric-grid span svg {
@@ -593,6 +616,15 @@ function formatCoverage(reporting: number, total: number) {
   text-overflow: ellipsis;
   text-align: left;
   white-space: nowrap;
+}
+
+.traffic-metric-grid small {
+  overflow: hidden;
+  min-height: 1.35em;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
 }
 
 .traffic-content-grid {

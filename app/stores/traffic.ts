@@ -27,6 +27,13 @@ interface TrafficStoreCache {
 }
 
 const INSIGHT_DIMENSION_COUNT = DASHBOARD_TRAFFIC_DIMENSION_KEYS.length;
+const FULL_INSIGHT_CONCURRENCY = 2;
+const FULL_INSIGHT_PRIORITY: readonly DashboardTrafficDimensionKey[] = [
+  "source",
+  "country",
+  "deviceType",
+  "landingPagePath",
+];
 
 export const useTrafficStore = defineStore("traffic", () => {
   const localizationStore = useLocalizationStore();
@@ -288,32 +295,47 @@ export const useTrafficStore = defineStore("traffic", () => {
 
     const requestVersion = scopeVersion;
     const batchId = ++fullInsightBatchSequence;
-    const dimensions = DASHBOARD_TRAFFIC_DIMENSION_KEYS.filter(
-      (dimension) =>
-        force ||
-        !loadedInsightDimensions.value.includes(
-          trafficDimensionRequestKey(range, dimension),
-        ),
+    const dimensions = prioritizeInsightDimensions(
+      DASHBOARD_TRAFFIC_DIMENSION_KEYS.filter(
+        (dimension) =>
+          force ||
+          !loadedInsightDimensions.value.includes(
+            trafficDimensionRequestKey(range, dimension),
+          ),
+      ),
     );
     let allSucceeded = true;
     isLoadingAllInsights.value = dimensions.length > 0;
     activeFullInsightRange.value = range;
 
     const promise = (async () => {
-      for (const dimension of dimensions) {
-        if (!isFullInsightBatchActive(storeId, requestVersion, batchId)) break;
-        const succeeded = await fetchTrafficDimension(
-          storeId,
-          token,
-          range,
-          dimension,
-          force,
-        );
-        if (!succeeded) {
-          allSucceeded = false;
-          break;
+      let nextDimensionIndex = 0;
+      const loadNextDimension = async () => {
+        while (
+          allSucceeded &&
+          isFullInsightBatchActive(storeId, requestVersion, batchId)
+        ) {
+          const dimension = dimensions[nextDimensionIndex];
+          nextDimensionIndex += 1;
+          if (!dimension) return;
+
+          const succeeded = await fetchTrafficDimension(
+            storeId,
+            token,
+            range,
+            dimension,
+            force,
+          );
+          if (!succeeded) allSucceeded = false;
         }
-      }
+      };
+
+      await Promise.all(
+        Array.from(
+          { length: Math.min(FULL_INSIGHT_CONCURRENCY, dimensions.length) },
+          () => loadNextDimension(),
+        ),
+      );
 
       const isActive = isFullInsightBatchActive(storeId, requestVersion, batchId);
       if (!allSucceeded && isActive && !insightError.value) {
@@ -426,3 +448,16 @@ export const useTrafficStore = defineStore("traffic", () => {
     $reset,
   };
 });
+
+function prioritizeInsightDimensions(
+  dimensions: readonly DashboardTrafficDimensionKey[],
+) {
+  const priority = new Map(
+    FULL_INSIGHT_PRIORITY.map((dimension, index) => [dimension, index]),
+  );
+  return [...dimensions].sort(
+    (left, right) =>
+      (priority.get(left) ?? FULL_INSIGHT_PRIORITY.length) -
+      (priority.get(right) ?? FULL_INSIGHT_PRIORITY.length),
+  );
+}

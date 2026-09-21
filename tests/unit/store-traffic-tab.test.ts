@@ -39,7 +39,7 @@ const StoreTrafficLoadModeSelectStub = defineComponent({
   },
   emits: ["update:modelValue"],
   template:
-    "<button type=\"button\" @click=\"$emit('update:modelValue', 'lazy')\">{{ modelValue }}</button>",
+    "<button type=\"button\" @click=\"$emit('update:modelValue', 'full')\">{{ modelValue }}</button>",
 });
 
 describe("Store TrafficTab loading mode", () => {
@@ -78,7 +78,7 @@ describe("Store TrafficTab loading mode", () => {
     });
   });
 
-  it("starts in Full mode and cancels the batch when Lazy is selected", async () => {
+  it("starts in Lazy mode and loads the selected range only when Full is selected", async () => {
     const wrapper = mount(TrafficTab, {
       global: {
         stubs: {
@@ -89,26 +89,29 @@ describe("Store TrafficTab loading mode", () => {
     });
     await nextTick();
 
-    expect(wrapper.get("button").text()).toBe("full");
+    expect(wrapper.get("button").text()).toBe("lazy");
     expect(
       mocks.trafficStore.fetchTrafficRangeDimensions as ReturnType<typeof vi.fn>,
-    ).toHaveBeenCalledWith("shop-a", "token-a", "24h");
+    ).not.toHaveBeenCalled();
+    expect(
+      mocks.trafficStore.cancelTrafficDimensionRequests as ReturnType<typeof vi.fn>,
+    ).toHaveBeenCalledOnce();
 
     wrapper.findComponent(DashboardTrafficPanelStub).vm.$emit("rangeChange", "7d");
     await nextTick();
     expect(
       mocks.trafficStore.fetchTrafficRangeDimensions as ReturnType<typeof vi.fn>,
-    ).toHaveBeenLastCalledWith("shop-a", "token-a", "7d");
+    ).not.toHaveBeenCalled();
 
     await wrapper.get("button").trigger("click");
     await nextTick();
     expect(
-      mocks.trafficStore.cancelTrafficDimensionRequests as ReturnType<typeof vi.fn>,
-    ).toHaveBeenCalledOnce();
+      mocks.trafficStore.fetchTrafficRangeDimensions as ReturnType<typeof vi.fn>,
+    ).toHaveBeenCalledWith("shop-a", "token-a", "7d");
 
     wrapper.unmount();
     expect(
       mocks.trafficStore.cancelTrafficDimensionRequests as ReturnType<typeof vi.fn>,
-    ).toHaveBeenCalledTimes(2);
+    ).toHaveBeenCalledTimes(3);
   });
 });

@@ -8,7 +8,7 @@ import { useTrafficStore } from "~/stores/traffic";
 
 const trafficStore = useTrafficStore();
 const { storeId, token } = useActiveShopAuth();
-const loadMode = ref<"full" | "lazy">("full");
+const loadMode = ref<"full" | "lazy">("lazy");
 const selectedRange = ref<DashboardTrafficRange>("24h");
 const selectedRangeProgress = computed(
   () => trafficStore.trafficInsightProgress[selectedRange.value],

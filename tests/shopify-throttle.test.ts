@@ -3,8 +3,10 @@ import test from "node:test";
 import {
   capShopifyThrottleDelayMs,
   getGraphqlCostSummary,
+  getGraphqlThrottleDecision,
   getGraphqlThrottleDelayMs,
   getRestCallLimitDelayMs,
+  getShopifyqlBudgetDelayMs,
   getShopifyqlCostSummary,
   isGraphqlThrottled,
   parseShopifyRestCallLimit,
@@ -51,6 +53,101 @@ test("GraphQL retry delay is calculated from the returned throttle state", () =>
       },
     }),
     510,
+  );
+});
+
+test("ShopifyQL throttling waits for its independent window to reset", () => {
+  const now = Date.parse("2026-07-16T07:05:40.000Z");
+  assert.deepEqual(
+    getGraphqlThrottleDecision({
+      now,
+      shopifyqlOperation: true,
+      extensions: {
+        cost: {
+          requestedQueryCost: 3,
+          throttleStatus: {
+            currentlyAvailable: 999,
+            restoreRate: 50,
+          },
+        },
+        shopifyqlCost: {
+          requestedQueryCost: 40,
+          maximumAvailable: 1000,
+          currentlyAvailable: 0,
+          windowResetAt: "2026-07-16T07:06:00+00:00",
+        },
+      },
+    }),
+    { delayMs: 20_250, scope: "shopifyql" },
+  );
+});
+
+test("ShopifyQL throttling reads reset metadata returned on the field error", () => {
+  const now = Date.parse("2026-07-16T07:05:50.000Z");
+  assert.deepEqual(
+    getGraphqlThrottleDecision({
+      now,
+      shopifyqlOperation: true,
+      errors: [
+        {
+          extensions: {
+            code: "THROTTLED",
+            cost: {
+              requestedQueryCost: 200,
+              maximumAvailable: 1000,
+              currentlyAvailable: 0,
+              windowResetAt: "2026-07-16T07:06:00+00:00",
+            },
+          },
+        },
+      ],
+    }),
+    { delayMs: 10_250, scope: "shopifyql" },
+  );
+});
+
+test("ShopifyQL uses a full-window fallback when reset metadata is unavailable", () => {
+  assert.deepEqual(
+    getGraphqlThrottleDecision({
+      shopifyqlOperation: true,
+      extensions: {
+        cost: {
+          requestedQueryCost: 3,
+          throttleStatus: { currentlyAvailable: 999, restoreRate: 50 },
+        },
+      },
+    }),
+    { delayMs: 60_000, scope: "shopifyql" },
+  );
+});
+
+test("ShopifyQL proactively pauses the next query when the remaining budget is low", () => {
+  const now = Date.parse("2026-07-16T07:05:55.000Z");
+  assert.equal(
+    getShopifyqlBudgetDelayMs(
+      {
+        shopifyqlCost: {
+          requestedQueryCost: 80,
+          currentlyAvailable: 50,
+          windowResetAt: "2026-07-16T07:06:00+00:00",
+        },
+      },
+      now,
+    ),
+    5_250,
+  );
+  assert.equal(
+    getShopifyqlBudgetDelayMs(
+      {
+        shopifyqlCost: {
+          requestedQueryCost: 50,
+          currentlyAvailable: 50,
+          windowResetAt: "2026-07-16T07:06:00+00:00",
+        },
+      },
+      now,
+    ),
+    null,
   );
 });
 

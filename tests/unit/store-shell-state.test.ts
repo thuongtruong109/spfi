@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import BaseButton from "~/components/BaseButton.vue";
 import StoreAddModeToggle from "~/components/store/AddModeToggle.vue";
+import StoreViewTabs from "~/components/store/ViewTabs.vue";
 import { useStoreTabLoadingState } from "~/composables/useStoreTabLoadingState";
 import { useCommerceOpsStore } from "~/stores/commerceOps";
 import { useCustomerStore } from "~/stores/customers";
@@ -26,8 +27,55 @@ describe("store shell UI state", () => {
           "store.addMode": "Add mode",
           "store.single": "Single",
           "store.bulk": "Bulk",
+          "store.views": "Store data views",
+          "store.tabProfile": "Profile",
+          "store.tabTraffic": "Traffic",
+          "store.tabTransactions": "Transactions",
+          "store.tabPayouts": "Payouts",
+          "store.tabDisputes": "Disputes",
+          "store.tabOrders": "Orders",
+          "store.tabProducts": "Products",
+          "store.tabCustomers": "Customers",
+          "store.tabMarkets": "Markets",
         })[key] || key,
     }));
+    vi.stubGlobal("useTabKeyboardNavigation", () => ({
+      handleTabKeydown: vi.fn(),
+    }));
+  });
+
+  it("keeps the disputes view visible and selectable in store navigation", async () => {
+    const wrapper = mount(StoreViewTabs, {
+      props: {
+        activeTab: "transactions",
+        activeLabel: "Money movement",
+      },
+      global: {
+        stubs: {
+          IconsUser: true,
+          IconsDate: true,
+          IconsRefresh: true,
+          IconsCheck: true,
+          IconsCopy: true,
+          IconsBulking: true,
+          IconsUsers: true,
+          IconsSync: true,
+        },
+      },
+    });
+
+    const disputeTab = wrapper
+      .findAll('[role="tab"]')
+      .find((tab) => tab.text().trim() === "Disputes");
+
+    expect(disputeTab).toBeDefined();
+    expect(disputeTab?.attributes("aria-selected")).toBe("false");
+
+    await disputeTab?.trigger("click");
+    expect(wrapper.emitted("select")?.[0]).toEqual(["disputes"]);
+
+    await wrapper.setProps({ activeTab: "disputes" });
+    expect(disputeTab?.attributes("aria-selected")).toBe("true");
   });
 
   it("uses one accessible mode selector for both add-store entry points", async () => {
