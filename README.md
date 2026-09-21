@@ -299,13 +299,17 @@ not repeat network requests. The page also supports store/currency filters,
 debounced search, interactive ranking controls, and CSV, TSV, JSON, or printable
 HTML exports of the current filtered view.
 
-The app-wide local per-IP limit remains enabled by default. The additional
+The app-wide local per-IP limit remains enabled by default. Dashboard/traffic
+analytics and export routes also consume stricter route-specific buckets, so a
+costly request cannot exhaust the ordinary API allowance. The additional
 token-specific limit is disabled because Shopify does not publish a numeric
-limit for the OAuth token endpoint. A deployment can override either policy
+limit for the OAuth token endpoint. A deployment can override each policy
 without changing source code:
 
 ```text
 NUXT_API_RATE_LIMIT_PER_MINUTE=600
+NUXT_ANALYTICS_RATE_LIMIT_PER_MINUTE=120
+NUXT_EXPORT_RATE_LIMIT_PER_MINUTE=20
 NUXT_TOKEN_RATE_LIMIT_PER_MINUTE=0
 ```
 

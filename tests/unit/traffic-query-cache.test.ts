@@ -46,6 +46,7 @@ describe("traffic query cache", () => {
       generatedAt: "2026-09-20T10:00:00.000Z",
       cacheAge: 0,
       isStale: false,
+      cacheStatus: "miss",
     });
     await expect(second).resolves.toMatchObject({ value: 42 });
 
@@ -53,6 +54,7 @@ describe("traffic query cache", () => {
     await expect(cache.resolve(options)).resolves.toMatchObject({
       cacheAge: 2,
       isStale: false,
+      cacheStatus: "hit",
     });
     expect(load).toHaveBeenCalledOnce();
   });
@@ -74,7 +76,12 @@ describe("traffic query cache", () => {
           throw new Error("Shopify unavailable");
         },
       }),
-    ).resolves.toMatchObject({ value: 1, cacheAge: 2, isStale: true });
+    ).resolves.toMatchObject({
+      value: 1,
+      cacheAge: 2,
+      isStale: true,
+      cacheStatus: "stale",
+    });
   });
 
   it("returns stale data immediately while revalidating it in the background", async () => {

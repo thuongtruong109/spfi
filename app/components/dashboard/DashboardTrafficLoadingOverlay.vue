@@ -17,7 +17,7 @@ const progressWidth = computed(
   <div class="traffic-loading-overlay" role="status" aria-live="polite">
     <div class="traffic-loading-card">
       <div class="traffic-loading-heading">
-        <ApiLoadingIcon :size="20" aria-hidden="true" />
+        <ApiLoadingIcon variant="section" :size="20" aria-hidden="true" />
         <div>
           <strong>{{
             t("dashboard.trafficFullLoadingRange", { range: rangeLabel })

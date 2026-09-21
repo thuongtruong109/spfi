@@ -1,18 +1,31 @@
 <script setup lang="ts">
-import { RefreshCw } from "@lucide/vue";
+import { LoaderCircle, RefreshCw } from "@lucide/vue";
 
 withDefaults(
   defineProps<{
     size?: number;
+    variant?: "transition" | "section";
   }>(),
   {
     size: 16,
+    variant: "transition",
   },
 );
 </script>
 
 <template>
-  <RefreshCw class="api-loading-icon" :size="size" />
+  <LoaderCircle
+    v-if="variant === 'section'"
+    class="api-loading-icon is-section"
+    data-loading-icon="section"
+    :size="size"
+  />
+  <RefreshCw
+    v-else
+    class="api-loading-icon is-transition"
+    data-loading-icon="transition"
+    :size="size"
+  />
 </template>
 
 <style scoped>

@@ -38,6 +38,7 @@ import {
 } from "./shopify-throttle";
 import { resolveShopifyRestTransportRetry } from "./shopify-transport-retry";
 import type { StoreLocalData } from "~~/types/shopify";
+import { recordShopifyQueueLatency } from "./request-observability";
 type ShopifyApiMethod = "GET" | "POST" | "PUT" | "DELETE";
 type ShopifyQueryParams = Record<string, unknown>;
 
@@ -515,6 +516,7 @@ export async function callShopifyApiWithResponse<TResponse, TBody = unknown>({
       const response = await requestWithRateLimitRetry<TResponse, string>(
         requestConfig,
         throttleKey,
+        event,
         signal,
       );
       const proactiveDelayMs = getRestCallLimitDelayMs(
@@ -550,10 +552,11 @@ export async function callShopifyApiWithResponse<TResponse, TBody = unknown>({
 async function requestWithRateLimitRetry<TResponse, TBody>(
   requestConfig: AxiosRequestConfig<TBody>,
   throttleKey: string,
+  event: H3Event,
   signal?: AbortSignal,
 ): Promise<AxiosResponse<TResponse>> {
   for (let retryCount = 0; ; retryCount += 1) {
-    await waitForShopifyThrottle(throttleKey, signal);
+    recordShopifyQueueLatency(event, await waitForShopifyThrottle(throttleKey, signal));
 
     try {
       return await axios.request<TResponse, AxiosResponse<TResponse>, TBody>(

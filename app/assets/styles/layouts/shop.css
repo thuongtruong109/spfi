@@ -25,6 +25,8 @@
 
 /* Sidebar Styling */
 .sidebar {
+  --sidebar-collapsed-control-size: 32px;
+
   width: 286px;
   flex: 0 0 286px;
   position: sticky;
@@ -84,8 +86,8 @@
 }
 
 .sidebar.is-collapsed .sidebar-overview-actions .base-button {
-  width: 26px;
-  min-height: 28px;
+  width: var(--sidebar-collapsed-control-size);
+  min-height: var(--sidebar-collapsed-control-size);
 }
 
 .sidebar.is-collapsed .sidebar-toggle {
@@ -97,12 +99,46 @@
 }
 
 .sidebar.is-collapsed .sidebar-content {
-  padding-inline: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-inline: 0;
 }
 
-.sidebar.is-collapsed .sidebar-item,
+.sidebar.is-collapsed .sidebar-item {
+  width: 40px;
+  min-height: 40px;
+  justify-content: center;
+  padding: 4px;
+  gap: 0;
+  border-color: transparent;
+  background: transparent;
+}
+
 .sidebar.is-collapsed .sidebar-item-label {
   justify-content: center;
+}
+
+.sidebar.is-collapsed .store-mark {
+  width: var(--sidebar-collapsed-control-size);
+  height: var(--sidebar-collapsed-control-size);
+}
+
+.sidebar.is-collapsed .sidebar-item:hover {
+  border-color: transparent;
+  background: transparent;
+}
+
+.sidebar.is-collapsed .sidebar-item:hover .store-mark {
+  border-color: color-mix(in srgb, var(--green) 30%, var(--border));
+  background: var(--surface-raised);
+}
+
+.sidebar.is-collapsed .sidebar-item.active .store-mark,
+.sidebar.is-collapsed .sidebar-item.active:hover .store-mark {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--bg);
 }
 
 .search-container {

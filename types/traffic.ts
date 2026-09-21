@@ -255,6 +255,7 @@ export interface TrafficQueryDiagnostics {
   generatedAt: string | null;
   cacheAge: number;
   isStale: boolean;
+  cacheStatus?: "hit" | "miss" | "stale";
 }
 
 export interface TrafficDimensionResponse

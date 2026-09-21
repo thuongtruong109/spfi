@@ -65,12 +65,12 @@ export default defineNuxtPlugin(() => {
     },
     onResponse({ request, response, options }) {
       if (isInternalApiRequest(request)) {
-        updateRateLimitFromResponse(rateLimit, response.headers, options);
+        updateRateLimitFromResponse(rateLimit, response.headers, options, false);
       }
     },
     onResponseError({ request, response, options }) {
       if (isInternalApiRequest(request)) {
-        updateRateLimitFromResponse(rateLimit, response.headers, options);
+        updateRateLimitFromResponse(rateLimit, response.headers, options, true);
       }
     },
   });
@@ -88,6 +88,7 @@ function updateRateLimitFromResponse(
   rateLimit: ReturnType<typeof useRateLimitStore>,
   headers: Headers,
   options: unknown,
+  failed: boolean,
 ) {
   const request = (options as unknown as TrackedFetchOptions)[RATE_LIMIT_REQUEST];
   rateLimit.updateFromHeaders(
@@ -96,6 +97,7 @@ function updateRateLimitFromResponse(
     request?.storeId || "",
     request?.sequence ?? Date.now(),
   );
+  rateLimit.recordOperationalResponse(headers, failed);
 }
 
 function isInternalApiRequest(request: unknown) {

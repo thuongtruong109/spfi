@@ -31,6 +31,16 @@ export function compareDecimalStrings(leftValue: string, rightValue: string) {
   return left === right ? 0 : left > right ? 1 : -1;
 }
 
+export function multiplyDecimalStrings(leftValue: string, rightValue: string) {
+  const left = parseDecimalString(leftValue);
+  const right = parseDecimalString(rightValue);
+  return formatDecimalString(left.units * right.units, left.scale + right.scale);
+}
+
+export function subtractDecimalStrings(leftValue: string, rightValue: string) {
+  return addDecimalStrings(leftValue, negateDecimalString(rightValue));
+}
+
 function parseDecimalString(value: string): ParsedDecimal {
   const normalized = String(value || "0").trim();
   const match = normalized.match(/^(-?)(\d+)(?:\.(\d+))?$/);

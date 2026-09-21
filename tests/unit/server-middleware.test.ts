@@ -156,4 +156,31 @@ describe("rate-limit middleware", () => {
     expect(event.responseHeaders["x-ratelimit-limit"]).toBe("20");
     expect(event.responseHeaders["x-ratelimit-remaining"]).toBe("19");
   });
+
+  it("applies stricter analytics and export policies alongside the API quota", () => {
+    const analytics = createEvent({
+      url: "https://app.example/api/traffic/range",
+      ip: `198.18.0.${Math.floor(Math.random() * 200) + 1}`,
+      config: {
+        apiRateLimitPerMinute: 600,
+        analyticsRateLimitPerMinute: 3,
+        exportRateLimitPerMinute: 2,
+        tokenRateLimitPerMinute: 0,
+        trustProxyHeaders: false,
+      },
+    });
+    rateLimitHandler(analytics as never);
+    expect(analytics.responseHeaders["x-ratelimit-limit"]).toBe("3");
+    expect(analytics.responseHeaders["x-ratelimit-analytics-remaining"]).toBe("2");
+    expect(analytics.responseHeaders["x-ratelimit-api-remaining"]).toBe("599");
+
+    const exportRequest = createEvent({
+      url: "https://app.example/api/export/csv/orders",
+      ip: `198.19.0.${Math.floor(Math.random() * 200) + 1}`,
+      config: analytics.config,
+    });
+    rateLimitHandler(exportRequest as never);
+    expect(exportRequest.responseHeaders["x-ratelimit-limit"]).toBe("2");
+    expect(exportRequest.responseHeaders["x-ratelimit-export-remaining"]).toBe("1");
+  });
 });

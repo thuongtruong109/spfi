@@ -30,6 +30,22 @@ test("all-store aggregation sums matching currencies without mixing them", () =>
     { currency: "THB", amount: 100 },
     { currency: "USD", amount: 50 },
   ]);
+  assert.deepEqual(result.reconciliation.rows, [
+    {
+      currency: "THB",
+      orderTotal: 1500,
+      paymentGross: 40,
+      difference: -1460,
+      status: "mismatch",
+    },
+    {
+      currency: "USD",
+      orderTotal: 45,
+      paymentGross: 20,
+      difference: -25,
+      status: "mismatch",
+    },
+  ]);
   assert.equal(result.traffic.availableStores, 3);
   assert.equal(result.traffic.today.sessions, 1545);
   assert.equal(result.traffic.last30Days.visitors, 1545);
@@ -56,6 +72,10 @@ test("currency filtering recalculates counts, rankings, and money series", () =>
   assert.equal(result.payments.availableStores, 1);
   assert.equal(result.payments.payouts.count, 1);
   assert.equal(result.payments.transactions.count, 1);
+  assert.deepEqual(
+    result.reconciliation.rows.map((row) => row.currency),
+    ["USD"],
+  );
   assert.equal(result.customerCount, 20);
   assert.strictEqual(filterDashboardAggregateCurrency(aggregate, " ALL "), aggregate);
 });
@@ -195,6 +215,19 @@ function snapshot(
           },
         ],
       },
+    },
+    reconciliation: {
+      available: true,
+      dataAsOf: "2026-08-10T00:00:00.000Z",
+      rows: [
+        {
+          currency,
+          orderTotal: revenueAmount,
+          paymentGross: 20,
+          difference: 20 - revenueAmount,
+          status: revenueAmount === 20 ? "matched" : "mismatch",
+        },
+      ],
     },
     traffic: {
       ...emptyDashboardTraffic(),

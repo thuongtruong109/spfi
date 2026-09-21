@@ -31,6 +31,7 @@ import {
 } from "./shopify-throttle";
 import { resolveShopifyGraphqlTransportRetry } from "./shopify-transport-retry";
 import { buildShopifyGid } from "./shopify-gid.ts";
+import { recordShopifyQueueLatency } from "./request-observability";
 
 export interface ShopifyGraphqlError {
   message: string;
@@ -171,9 +172,15 @@ export async function callShopifyGraphql<
     let throttleRetryCount = 0;
 
     while (true) {
-      await waitForShopifyThrottle(throttleKey, signal);
+      recordShopifyQueueLatency(
+        event,
+        await waitForShopifyThrottle(throttleKey, signal),
+      );
       if (shopifyqlThrottleKey) {
-        await waitForShopifyThrottle(shopifyqlThrottleKey, signal);
+        recordShopifyQueueLatency(
+          event,
+          await waitForShopifyThrottle(shopifyqlThrottleKey, signal),
+        );
       }
 
       try {

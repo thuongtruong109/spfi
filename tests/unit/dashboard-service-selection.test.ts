@@ -66,6 +66,12 @@ describe("dashboard service selection", () => {
     expect(snapshot.productCount).toBe(0);
     expect(snapshot.customerCount).toBe(0);
     expect(snapshot.payments.available).toBe(false);
+    expect(snapshot.resources?.profile.state).toBe("available");
+    expect(snapshot.resources?.orders).toEqual({
+      state: "unavailable",
+      dataAsOf: null,
+    });
+    expect(snapshot.reconciliation.available).toBe(false);
     expect(snapshot.warnings).toEqual([]);
   });
 
@@ -109,6 +115,10 @@ describe("dashboard service selection", () => {
       Object.values(snapshot.traffic.availability).every((state) => state === "failed"),
     ).toBe(true);
     expect(snapshot.traffic.reporting.reportingStores).toBe(0);
+    expect(snapshot.resources?.traffic).toEqual({
+      state: "failed",
+      dataAsOf: null,
+    });
     expect(snapshot.warnings).toEqual([
       expect.objectContaining({ resource: "traffic" }),
     ]);

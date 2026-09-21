@@ -1,5 +1,7 @@
 import {
+  DEFAULT_ANALYTICS_RATE_LIMIT_PER_MINUTE,
   DEFAULT_API_RATE_LIMIT_PER_MINUTE,
+  DEFAULT_EXPORT_RATE_LIMIT_PER_MINUTE,
   DEFAULT_TOKEN_RATE_LIMIT_PER_MINUTE,
 } from "./server/utils/rate-limit-policy";
 import { readFileSync } from "node:fs";
@@ -54,6 +56,8 @@ export default defineNuxtConfig({
     },
     // Fail closed when no deployment-specific limits are configured.
     apiRateLimitPerMinute: DEFAULT_API_RATE_LIMIT_PER_MINUTE,
+    analyticsRateLimitPerMinute: DEFAULT_ANALYTICS_RATE_LIMIT_PER_MINUTE,
+    exportRateLimitPerMinute: DEFAULT_EXPORT_RATE_LIMIT_PER_MINUTE,
     tokenRateLimitPerMinute: DEFAULT_TOKEN_RATE_LIMIT_PER_MINUTE,
   },
   nitro: {

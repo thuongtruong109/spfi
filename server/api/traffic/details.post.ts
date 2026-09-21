@@ -10,6 +10,7 @@ import {
 } from "~~/server/utils/shopify-traffic";
 import { createApiErrorFromMessage } from "~~/server/utils/callShopifyApi";
 import { isRequestAbortError } from "~~/server/utils/request-abort";
+import { setTrafficDiagnosticsHeaders } from "~~/server/utils/traffic-response";
 
 interface TrafficDetailsBody {
   storeId?: string;
@@ -48,6 +49,7 @@ export default defineEventHandler(async (event) => {
       timeZone: body.timeZone,
       refresh: body.refresh === true,
     });
+    setTrafficDiagnosticsHeaders(event, dimensionResult);
     setResponseHeader(event, "x-spf-field-convention", "app-camel-case");
     return dimensionResult;
   } catch (error) {

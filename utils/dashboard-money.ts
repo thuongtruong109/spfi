@@ -1,12 +1,18 @@
 import type { DashboardMoney } from "~~/types/dashboard";
 import { getCurrencyFractionDigits } from "./order.ts";
+import { addDecimalStrings } from "./decimal-string.ts";
+
+export type DashboardMoneyAccumulator = Map<string, string>;
 
 export function addMoneyAmount(
-  target: Map<string, number>,
+  target: DashboardMoneyAccumulator,
   currency: string,
-  amount: number,
+  amount: string | number,
 ) {
-  target.set(currency, (target.get(currency) || 0) + amount);
+  target.set(
+    currency,
+    addDecimalStrings(target.get(currency) || "0", normalizeDecimalAmount(amount)),
+  );
 }
 
 export function roundMoneyAmount(value: number, currency?: string) {
@@ -15,13 +21,18 @@ export function roundMoneyAmount(value: number, currency?: string) {
   return value < 0 ? -rounded : rounded;
 }
 
-export function moneyRowsFromMap(source?: Map<string, number>): DashboardMoney[] {
+export function moneyRowsFromMap(source?: DashboardMoneyAccumulator): DashboardMoney[] {
   if (!source) return [];
 
   return [...source.entries()]
     .map(([currency, amount]) => ({
       currency,
-      amount: roundMoneyAmount(amount, currency),
+      amount: roundMoneyAmount(Number(amount), currency),
     }))
     .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+}
+
+function normalizeDecimalAmount(value: string | number) {
+  const normalized = String(value ?? "0").trim();
+  return /^-?\d+(?:\.\d+)?$/.test(normalized) ? normalized : "0";
 }

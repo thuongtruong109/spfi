@@ -437,7 +437,7 @@ function formatCoverage(reporting: number, total: number) {
         role="status"
         aria-live="polite"
       >
-        <ApiLoadingIcon :size="20" aria-hidden="true" />
+        <ApiLoadingIcon variant="section" :size="20" aria-hidden="true" />
         <strong>{{ t("dashboard.trafficRangeLoading", { range: rangeLabel }) }}</strong>
       </div>
       <DashboardTrafficLoadingOverlay

@@ -13,8 +13,9 @@ withDefaults(
 
 <template>
   <section class="shop-empty-state" :class="{ 'is-loading': loading }">
-    <div v-if="$slots.icon" class="shop-empty-icon">
-      <slot name="icon" />
+    <div v-if="loading || $slots.icon" class="shop-empty-icon">
+      <ApiLoadingIcon v-if="loading" variant="section" :size="24" />
+      <slot v-else name="icon" />
     </div>
     <h2>{{ title }}</h2>
     <p>{{ description }}</p>
@@ -61,10 +62,6 @@ withDefaults(
 .shop-empty-icon :deep(svg) {
   width: 24px;
   height: 24px;
-}
-
-.shop-empty-state.is-loading .shop-empty-icon :deep(svg) {
-  animation: spin 0.9s linear infinite;
 }
 
 .shop-empty-state h2 {
@@ -134,11 +131,5 @@ withDefaults(
   color: var(--text-muted);
   font-size: 0.85rem;
   font-weight: 600;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

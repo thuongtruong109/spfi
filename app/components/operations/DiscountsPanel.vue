@@ -78,10 +78,11 @@ async function runAction(discount: DiscountSummary, action: DiscountAction) {
       v-else-if="
         store.loadingResources.includes('discounts') && !store.discounts.length
       "
-      class="ops-empty"
+      class="ops-empty is-loading"
       role="status"
     >
-      {{ t("operations.discount.loading") }}
+      <ApiLoadingIcon variant="section" aria-hidden="true" />
+      <span>{{ t("operations.discount.loading") }}</span>
     </div>
     <div v-else-if="store.discounts.length" class="ops-table-scroll">
       <table class="ops-table">

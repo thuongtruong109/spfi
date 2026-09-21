@@ -3,7 +3,10 @@ import type {
   DashboardTrafficGranularity,
   DashboardTrafficPoint,
 } from "~~/types/dashboard";
-import { parseShopifyqlPeriod } from "~~/utils/shopifyql-period";
+import {
+  formatTrafficChartAxisPeriod,
+  formatTrafficChartTooltipPeriod,
+} from "~~/utils/traffic-chart-period";
 
 const props = defineProps<{
   points: DashboardTrafficPoint[];
@@ -47,7 +50,7 @@ function draw() {
   const left = 42;
   const right = 12;
   const top = 28;
-  const bottom = 34;
+  const bottom = props.granularity === "hour" ? 42 : 34;
   const chartWidth = width - left - right;
   const chartHeight = height - top - bottom;
   geometry = { left, width: chartWidth };
@@ -89,11 +92,17 @@ function draw() {
     props.points.length - 1,
   ]);
   context.fillStyle = textColor;
-  context.textAlign = "center";
   for (const index of labelIndexes) {
     const point = props.points[index];
     if (!point) continue;
-    context.fillText(formatPeriod(point.period, true), pointX(index), height - 13);
+    drawAxisPeriod(
+      context,
+      formatTrafficChartAxisPeriod(point.period, props.granularity, locale.value),
+      pointX(index),
+      index,
+      props.points.length,
+      height,
+    );
   }
 
   if (hoveredIndex.value !== null) {
@@ -164,6 +173,35 @@ function drawMarker(
   context.fill();
 }
 
+function drawAxisPeriod(
+  context: CanvasRenderingContext2D,
+  label: ReturnType<typeof formatTrafficChartAxisPeriod>,
+  x: number,
+  index: number,
+  pointCount: number,
+  height: number,
+) {
+  context.textAlign =
+    pointCount <= 1
+      ? "center"
+      : index === 0
+        ? "left"
+        : index === pointCount - 1
+          ? "right"
+          : "center";
+
+  if (!label.secondary) {
+    context.fillText(label.primary, x, height - 13);
+    return;
+  }
+
+  context.fillText(label.primary, x, height - 20);
+  context.save();
+  context.globalAlpha = 0.72;
+  context.fillText(label.secondary, x, height - 9);
+  context.restore();
+}
+
 function handlePointer(event: PointerEvent) {
   if (!canvas.value || !props.points.length || !geometry.width) return;
   const rect = canvas.value.getBoundingClientRect();
@@ -182,19 +220,6 @@ function clearPointer() {
   draw();
 }
 
-function formatPeriod(value: string, short = false) {
-  const date = parseShopifyqlPeriod(value);
-  if (!date) return value;
-  return new Intl.DateTimeFormat(locale.value, {
-    timeZone: "UTC",
-    ...(props.granularity === "hour"
-      ? { hour: "2-digit", minute: "2-digit" }
-      : props.granularity === "month"
-        ? { month: short ? "short" : "long", year: "numeric" }
-        : { month: short ? "short" : "long", day: "numeric" }),
-  }).format(date);
-}
-
 function formatNumber(value: number) {
   return new Intl.NumberFormat(locale.value, {
     notation: "compact",
@@ -210,7 +235,7 @@ function niceCeiling(value: number) {
 }
 
 watch(
-  () => [props.points, locale.value],
+  () => [props.points, props.granularity, locale.value],
   () => nextTick(draw),
   { deep: true },
 );
@@ -256,7 +281,9 @@ onBeforeUnmount(() => {
       :style="{ left: `${tooltipX}px` }"
       aria-live="polite"
     >
-      <strong>{{ formatPeriod(tooltipPoint.period) }}</strong>
+      <strong>{{
+        formatTrafficChartTooltipPeriod(tooltipPoint.period, granularity, locale)
+      }}</strong>
       <span>{{ t("dashboard.trafficSessions") }}: {{ tooltipPoint.sessions }}</span>
       <span>{{ t("dashboard.trafficVisitors") }}: {{ tooltipPoint.visitors }}</span>
       <span>{{ t("dashboard.trafficPageviews") }}: {{ tooltipPoint.pageviews }}</span>

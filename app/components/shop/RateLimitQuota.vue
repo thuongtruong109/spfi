@@ -73,6 +73,11 @@ const graphqlTone = computed(() => {
   if (exactGraphqlPercentage.value <= 50) return "is-warning";
   return "is-healthy";
 });
+const latestShopifyCost = computed(() => {
+  const snapshot = graphqlCost.value;
+  if (!snapshot) return null;
+  return snapshot.actualCost ?? snapshot.requestedCost;
+});
 const resetText = computed(() => {
   if (!rateLimit.isKnown || rateLimit.resetAt === null) {
     return t("quota.waiting");
@@ -115,6 +120,15 @@ function formatCost(value: number) {
   return new Intl.NumberFormat(locale.value, {
     maximumFractionDigits: 1,
   }).format(value);
+}
+
+function formatPercent(value: number | null) {
+  return value === null ? "—" : `${Math.round(value)}%`;
+}
+
+function formatLatency(value: number | null) {
+  if (value === null) return "—";
+  return value < 1_000 ? `${Math.round(value)} ms` : `${(value / 1_000).toFixed(1)} s`;
 }
 </script>
 
@@ -263,6 +277,34 @@ function formatCost(value: number) {
             </span>
           </div>
         </div>
+
+        <dl class="quota-diagnostics" :aria-label="t('quota.operationalMetrics')">
+          <div>
+            <dt>{{ t("quota.cacheHitRatio") }}</dt>
+            <dd>{{ formatPercent(rateLimit.cacheHitRatio) }}</dd>
+          </div>
+          <div>
+            <dt>{{ t("quota.shopifyCost") }}</dt>
+            <dd>
+              {{ latestShopifyCost === null ? "—" : formatCost(latestShopifyCost) }}
+              <small v-if="graphqlCost && graphqlCost.requestedCost !== null">
+                {{
+                  t("quota.shopifyCostRequested", {
+                    cost: formatCost(graphqlCost.requestedCost || 0),
+                  })
+                }}
+              </small>
+            </dd>
+          </div>
+          <div>
+            <dt>{{ t("quota.queueLatency") }}</dt>
+            <dd>{{ formatLatency(rateLimit.averageQueueLatencyMs) }}</dd>
+          </div>
+          <div>
+            <dt>{{ t("quota.errorRate") }}</dt>
+            <dd>{{ formatPercent(rateLimit.errorRate) }}</dd>
+          </div>
+        </dl>
       </div>
     </BasePopover>
   </section>
@@ -390,6 +432,48 @@ function formatCost(value: number) {
   margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
+}
+
+.quota-diagnostics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.quota-diagnostics > div {
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: var(--surface-low);
+}
+
+.quota-diagnostics dt {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.quota-diagnostics dd {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 3px 0 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.quota-diagnostics small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .quota-heading,

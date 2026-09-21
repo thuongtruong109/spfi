@@ -82,7 +82,7 @@ export class TrafficQueryCache {
     const cached = this.entries.get(key) as TrafficCacheEntry<T> | undefined;
     if (!refresh && cached && cached.freshUntil > now) {
       cached.touchedAt = now;
-      return withDiagnostics(cached, now, false);
+      return withDiagnostics(cached, now, "hit");
     }
 
     let flight = this.flights.get(key) as TrafficCacheFlight<T> | undefined;
@@ -96,7 +96,7 @@ export class TrafficQueryCache {
         flight = this.startFlight(key, policy, load);
         void flight.promise.catch(() => undefined);
       }
-      return withDiagnostics(cached, now, true);
+      return withDiagnostics(cached, now, "stale");
     }
     if (!flight) {
       flight = this.startFlight(key, policy, load);
@@ -104,14 +104,14 @@ export class TrafficQueryCache {
 
     try {
       const entry = await waitForFlight(flight, signal);
-      return withDiagnostics(entry, this.now(), false);
+      return withDiagnostics(entry, this.now(), "miss");
     } catch (error) {
       if (signal?.aborted) throw abortReason(signal);
       const fallback = this.entries.get(key) as TrafficCacheEntry<T> | undefined;
       const fallbackNow = this.now();
       if (fallback && fallback.staleUntil > fallbackNow) {
         fallback.touchedAt = fallbackNow;
-        return withDiagnostics(fallback, fallbackNow, true);
+        return withDiagnostics(fallback, fallbackNow, "stale");
       }
       throw error;
     }
@@ -220,13 +220,14 @@ function credentialScope(storeId: string, token: string) {
 function withDiagnostics<T extends TrafficQueryDiagnostics>(
   entry: TrafficCacheEntry<T>,
   now: number,
-  isStale: boolean,
+  cacheStatus: "hit" | "miss" | "stale",
 ): T {
   return {
     ...entry.value,
     generatedAt: new Date(entry.generatedAtMs).toISOString(),
     cacheAge: Math.max(0, Math.floor((now - entry.generatedAtMs) / 1_000)),
-    isStale,
+    isStale: cacheStatus === "stale",
+    cacheStatus,
   };
 }
 

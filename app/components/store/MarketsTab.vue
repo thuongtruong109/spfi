@@ -426,7 +426,7 @@ async function removeMarket(market: ShopifyMarketSummary) {
         @update:model-value="conditionFilter = $event as ConditionFilter"
       />
       <span v-if="marketStore.isFiltering" class="markets-filter-progress">
-        <ApiLoadingIcon aria-hidden="true" />
+        <ApiLoadingIcon variant="section" aria-hidden="true" />
         {{ t("markets.filtering") }}
       </span>
     </div>
@@ -443,7 +443,7 @@ async function removeMarket(market: ShopifyMarketSummary) {
       class="markets-empty"
       aria-live="polite"
     >
-      <ApiLoadingIcon aria-hidden="true" />
+      <ApiLoadingIcon variant="section" aria-hidden="true" />
       {{ t("common.loading") }}
     </div>
     <div
@@ -541,6 +541,7 @@ async function removeMarket(market: ShopifyMarketSummary) {
             {{ t("markets.details") }}
             <ApiLoadingIcon
               v-if="marketStore.loadingMarketDetails.includes(market.id)"
+              variant="section"
               aria-hidden="true"
             />
           </summary>
@@ -561,7 +562,7 @@ async function removeMarket(market: ShopifyMarketSummary) {
             class="market-detail-message"
             role="status"
           >
-            <ApiLoadingIcon aria-hidden="true" />
+            <ApiLoadingIcon variant="section" aria-hidden="true" />
             {{ t("common.loading") }}
           </div>
           <div v-else class="market-detail-grid">

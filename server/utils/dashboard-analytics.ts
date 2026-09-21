@@ -15,7 +15,17 @@ import type {
   ShopifyPayout,
   ShopifyShop,
 } from "~~/types/shopify";
-import { addMoneyAmount, moneyRowsFromMap } from "../../utils/dashboard-money.ts";
+import {
+  addMoneyAmount,
+  moneyRowsFromMap,
+  type DashboardMoneyAccumulator,
+} from "../../utils/dashboard-money.ts";
+import {
+  compareDecimalStrings,
+  multiplyDecimalStrings,
+  subtractDecimalStrings,
+  sumDecimalStrings,
+} from "../../utils/decimal-string.ts";
 import {
   addDashboardCalendarDays,
   dashboardDateKey,
@@ -89,9 +99,9 @@ export function aggregateOrderAnalytics(
   topProducts: DashboardTopProduct[];
   fulfillmentBreakdown: DashboardFulfillmentBreakdown;
 } {
-  const today = new Map<string, number>();
-  const week = new Map<string, number>();
-  const month = new Map<string, number>();
+  const today: DashboardMoneyAccumulator = new Map();
+  const week: DashboardMoneyAccumulator = new Map();
+  const month: DashboardMoneyAccumulator = new Map();
   const revenueCounts = new Map<
     string,
     { today: number; week: number; month: number }
@@ -101,14 +111,14 @@ export function aggregateOrderAnalytics(
     {
       orders: number;
       orderCounts: Map<string, number>;
-      money: Map<string, number>;
+      money: DashboardMoneyAccumulator;
     }
   >();
   const products = new Map<
     string,
     DashboardTopProduct & {
       orderIds: Set<string>;
-      money: Map<string, number>;
+      money: DashboardMoneyAccumulator;
       stats: Map<string, { units: number; orderIds: Set<string> }>;
     }
   >();
@@ -133,14 +143,14 @@ export function aggregateOrderAnalytics(
     }
 
     if (!isRevenueOrder(order)) continue;
-    const amount = finiteAmount(order.current_total_price ?? order.total_price);
+    const amount = decimalAmount(order.current_total_price ?? order.total_price);
     const currency = normalizeCurrency(order.currency);
     const createdIso = createdAt.toISOString();
     const dateKey = dashboardDateKey(createdAt, period);
     const dayEntry = daily.get(dateKey) || {
       orders: 0,
       orderCounts: new Map<string, number>(),
-      money: new Map<string, number>(),
+      money: new Map<string, string>(),
     };
     dayEntry.orders += 1;
     addCount(dayEntry.orderCounts, currency);
@@ -184,7 +194,7 @@ export function aggregateOrderAnalytics(
         currencyStats: [],
         revenue: [],
         orderIds: new Set<string>(),
-        money: new Map<string, number>(),
+        money: new Map<string, string>(),
         stats: new Map<string, { units: number; orderIds: Set<string> }>(),
       };
       entry.units += quantity;
@@ -196,14 +206,19 @@ export function aggregateOrderAnalytics(
       currencyStat.units += quantity;
       currencyStat.orderIds.add(String(order.id));
       entry.stats.set(currency, currencyStat);
-      const discounts = (item.discount_allocations || []).reduce(
-        (total, allocation) => total + finiteAmount(allocation.amount),
-        0,
+      const discounts = sumDecimalStrings(
+        (item.discount_allocations || []).map((allocation) =>
+          decimalAmount(allocation.amount),
+        ),
+      );
+      const lineTotal = subtractDecimalStrings(
+        multiplyDecimalStrings(decimalAmount(item.price), String(quantity)),
+        discounts,
       );
       addMoneyAmount(
         entry.money,
         currency,
-        Math.max(0, finiteAmount(item.price) * quantity - discounts),
+        compareDecimalStrings(lineTotal, "0") > 0 ? lineTotal : "0",
       );
       products.set(key, entry);
     }
@@ -274,8 +289,8 @@ export function aggregatePaymentAnalytics(
   payouts: DashboardPayoutSummary;
   transactions: DashboardTransactionSummary;
 } {
-  const payoutTotal = new Map<string, number>();
-  const payoutPending = new Map<string, number>();
+  const payoutTotal: DashboardMoneyAccumulator = new Map();
+  const payoutPending: DashboardMoneyAccumulator = new Map();
   const payoutCounts = new Map<
     string,
     { count: number; pendingCount: number; paidCount: number; failedCount: number }
@@ -287,7 +302,7 @@ export function aggregatePaymentAnalytics(
   for (const payout of payouts) {
     const status = String(payout.status || "").toLowerCase();
     const currency = normalizeCurrency(payout.currency);
-    const amount = finiteAmount(payout.amount);
+    const amount = decimalAmount(payout.amount);
     const counts = payoutCounts.get(currency) || {
       count: 0,
       pendingCount: 0,
@@ -310,9 +325,9 @@ export function aggregatePaymentAnalytics(
     payoutCounts.set(currency, counts);
   }
 
-  const gross = new Map<string, number>();
-  const fees = new Map<string, number>();
-  const net = new Map<string, number>();
+  const gross: DashboardMoneyAccumulator = new Map();
+  const fees: DashboardMoneyAccumulator = new Map();
+  const net: DashboardMoneyAccumulator = new Map();
   const transactionCounts = new Map<string, number>();
   const realTransactions = transactions
     .filter((transaction) => !transaction.test && transaction.type !== "payout")
@@ -323,9 +338,9 @@ export function aggregatePaymentAnalytics(
   for (const transaction of realTransactions) {
     const currency = normalizeCurrency(transaction.currency);
     addCount(transactionCounts, currency);
-    addMoneyAmount(gross, currency, finiteAmount(transaction.amount));
-    addMoneyAmount(fees, currency, finiteAmount(transaction.fee));
-    addMoneyAmount(net, currency, finiteAmount(transaction.net));
+    addMoneyAmount(gross, currency, decimalAmount(transaction.amount));
+    addMoneyAmount(fees, currency, decimalAmount(transaction.fee));
+    addMoneyAmount(net, currency, decimalAmount(transaction.net));
   }
 
   const balanceRows = Array.isArray(balance) ? balance : balance ? [balance] : [];
@@ -454,6 +469,11 @@ function normalizeCurrency(currency: unknown) {
 function finiteAmount(value: unknown) {
   const amount = Number(value);
   return Number.isFinite(amount) ? amount : 0;
+}
+
+function decimalAmount(value: unknown) {
+  const normalized = String(value ?? "0").trim();
+  return /^-?\d+(?:\.\d+)?$/.test(normalized) ? normalized : "0";
 }
 
 function addCount(target: Map<string, number>, currency: string, count = 1) {

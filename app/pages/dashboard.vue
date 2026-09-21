@@ -17,6 +17,7 @@ import {
   aggregateDashboardSnapshots,
   filterDashboardAggregateCurrency,
 } from "~~/utils/dashboard-aggregate";
+import { summarizeDashboardResource } from "~~/utils/dashboard-resource";
 
 definePageMeta({ layout: false });
 const { locale, t } = useLocalization();
@@ -107,6 +108,14 @@ const trafficStoreCount = computed(() => {
     ? Math.max(selectedCount, totalStores.value)
     : selectedCount;
 });
+const resourceStates = computed(() => ({
+  orders: summarizeDashboardResource(stores.value, failures.value, "orders").state,
+  customers: summarizeDashboardResource(stores.value, failures.value, "customers")
+    .state,
+  products: summarizeDashboardResource(stores.value, failures.value, "products").state,
+  payments: summarizeDashboardResource(stores.value, failures.value, "payments").state,
+  users: summarizeDashboardResource(stores.value, failures.value, "users").state,
+}));
 const normalizedSearch = computed(() => debouncedSearch.value.trim().toLowerCase());
 const visibleStores = computed(() =>
   stores.value.filter((store) =>
@@ -402,6 +411,8 @@ onActivated(prepare);
           </template>
         </DashboardToolbar>
 
+        <DashboardResourceFreshness :stores="stores" :failures="failures" />
+
         <section
           class="dashboard-metric-grid"
           :aria-label="t('dashboard.businessOverview')"
@@ -430,6 +441,7 @@ onActivated(prepare);
               })
             "
             :loading="isLoading && !stores.length"
+            :resource-state="resourceStates.orders"
             tone="green"
           >
             <CircleDollarSign />
@@ -456,6 +468,7 @@ onActivated(prepare);
               })
             "
             :loading="isLoading && !stores.length"
+            :resource-state="resourceStates.orders"
             tone="blue"
             :delay="55"
           >
@@ -483,6 +496,7 @@ onActivated(prepare);
               })
             "
             :loading="isLoading && !stores.length"
+            :resource-state="resourceStates.orders"
             tone="violet"
             :delay="110"
           >
@@ -506,6 +520,7 @@ onActivated(prepare);
             :label="t('dashboard.pendingFulfillment')"
             :detail="t('dashboard.pendingFulfillmentDetail')"
             :loading="isLoading && !stores.length"
+            :resource-state="resourceStates.orders"
             tone="amber"
             :delay="165"
           >
@@ -517,11 +532,18 @@ onActivated(prepare);
           <DashboardMetricCard
             :label="t('dashboard.customers')"
             :detail="
-              t('dashboard.catalogueDetail', {
-                count: formatNumber(aggregate.productCount),
-              })
+              resourceStates.products === 'available' ||
+              resourceStates.products === 'stale' ||
+              resourceStates.products === 'partial'
+                ? t('dashboard.catalogueDetail', {
+                    count: formatNumber(aggregate.productCount),
+                  })
+                : resourceStates.products === 'failed'
+                  ? t('dashboard.resourceState.failed')
+                  : t('dashboard.resourceState.unavailable')
             "
             :loading="isLoading && !stores.length"
+            :resource-state="resourceStates.customers"
             tone="blue"
             :delay="220"
           >
@@ -539,6 +561,7 @@ onActivated(prepare);
               })
             "
             :loading="isLoading && !stores.length"
+            :resource-state="resourceStates.payments"
             tone="green"
             :delay="275"
           >
@@ -562,6 +585,7 @@ onActivated(prepare);
             :label="t('dashboard.usersAndStaff')"
             :detail="t('dashboard.accessStoresDetail', { count: stores.length })"
             :loading="isLoading && !stores.length"
+            :resource-state="resourceStates.users"
             tone="violet"
             :delay="330"
           >
@@ -782,6 +806,8 @@ onActivated(prepare);
             {{ t("dashboard.queueClear") }}
           </div>
         </section>
+
+        <DashboardReconciliation :reconciliation="aggregate.reconciliation" />
 
         <section class="dashboard-bottom-grid">
           <article class="dashboard-panel">

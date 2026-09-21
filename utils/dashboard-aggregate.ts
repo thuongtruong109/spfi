@@ -8,22 +8,27 @@ import type {
   DashboardTransactionSummary,
   StoreDashboardSnapshot,
 } from "~~/types/dashboard";
-import { moneyRowsFromMap } from "./dashboard-money.ts";
+import {
+  addMoneyAmount,
+  moneyRowsFromMap,
+  type DashboardMoneyAccumulator,
+} from "./dashboard-money.ts";
 import { aggregateDashboardTraffic } from "./dashboard-traffic.ts";
+import { aggregateDashboardReconciliations } from "./dashboard-reconciliation.ts";
 
 export function aggregateDashboardSnapshots(
   stores: StoreDashboardSnapshot[],
   failures: DashboardStoreFailure[] = [],
 ): DashboardAggregate {
-  const today = new Map<string, number>();
-  const week = new Map<string, number>();
-  const month = new Map<string, number>();
-  const balance = new Map<string, number>();
-  const payoutTotal = new Map<string, number>();
-  const payoutPending = new Map<string, number>();
-  const transactionGross = new Map<string, number>();
-  const transactionFees = new Map<string, number>();
-  const transactionNet = new Map<string, number>();
+  const today: DashboardMoneyAccumulator = new Map();
+  const week: DashboardMoneyAccumulator = new Map();
+  const month: DashboardMoneyAccumulator = new Map();
+  const balance: DashboardMoneyAccumulator = new Map();
+  const payoutTotal: DashboardMoneyAccumulator = new Map();
+  const payoutPending: DashboardMoneyAccumulator = new Map();
+  const transactionGross: DashboardMoneyAccumulator = new Map();
+  const transactionFees: DashboardMoneyAccumulator = new Map();
+  const transactionNet: DashboardMoneyAccumulator = new Map();
   const revenueCounts = new Map<
     string,
     { today: number; week: number; month: number }
@@ -38,7 +43,7 @@ export function aggregateDashboardSnapshots(
     {
       orders: number;
       orderCounts: Map<string, number>;
-      money: Map<string, number>;
+      money: DashboardMoneyAccumulator;
     }
   >();
   let orderCountToday = 0;
@@ -102,7 +107,7 @@ export function aggregateDashboardSnapshots(
       const entry = daily.get(point.date) || {
         orders: 0,
         orderCounts: new Map<string, number>(),
-        money: new Map<string, number>(),
+        money: new Map<string, string>(),
       };
       entry.orders += point.orders;
       addCountRows(entry.orderCounts, point.orderCounts);
@@ -220,6 +225,9 @@ export function aggregateDashboardSnapshots(
         recent: [],
       },
     },
+    reconciliation: aggregateDashboardReconciliations(
+      stores.map((store) => store.reconciliation),
+    ),
     traffic: aggregateDashboardTraffic(
       stores.map((store) => store.traffic),
       {
@@ -343,12 +351,16 @@ function filterStoreSnapshotCurrency(
         ),
       },
     },
+    reconciliation: {
+      ...store.reconciliation,
+      rows: store.reconciliation.rows.filter((row) => row.currency === currency),
+    },
   };
 }
 
-function addMoneyRows(target: Map<string, number>, rows: DashboardMoney[]) {
+function addMoneyRows(target: DashboardMoneyAccumulator, rows: DashboardMoney[]) {
   for (const row of rows) {
-    target.set(row.currency, (target.get(row.currency) || 0) + row.amount);
+    addMoneyAmount(target, row.currency, row.amount);
   }
 }
 

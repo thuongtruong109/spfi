@@ -36,6 +36,7 @@ import {
   mapDashboardUsers,
   mapPendingOrders,
 } from "./dashboard-analytics";
+import { buildDashboardReconciliation } from "~~/utils/dashboard-reconciliation";
 
 interface DashboardRequestContext {
   event: H3Event;
@@ -309,6 +310,16 @@ export async function fetchStoreDashboard({
       ...paymentAnalytics.transactions.currencyCounts.map((row) => row.currency),
     ]),
   ).sort();
+  const ordersAvailable =
+    enabledServices.has("orders") && ordersResult.status === "fulfilled";
+  const reconciliation = buildDashboardReconciliation(
+    orderAnalytics.revenue.month,
+    paymentAnalytics.transactions.gross,
+    ordersAvailable &&
+      enabledServices.has("payments") &&
+      transactionsResult.status === "fulfilled",
+    period.nowIso,
+  );
 
   return {
     storeId,
@@ -319,6 +330,45 @@ export async function fetchStoreDashboard({
     email: String(profile?.email || profile?.customer_email || ""),
     plan: String(profile?.plan_display_name || profile?.plan_name || ""),
     generatedAt: period.nowIso,
+    resources: {
+      profile: resourceFreshness(
+        enabledServices.has("profile"),
+        [profileResult],
+        period.nowIso,
+      ),
+      orders: resourceFreshness(
+        enabledServices.has("orders"),
+        [ordersResult, pendingCountResult, pendingOrdersResult],
+        period.nowIso,
+      ),
+      customers: resourceFreshness(
+        enabledServices.has("customers"),
+        [customerCountResult],
+        period.nowIso,
+      ),
+      products: resourceFreshness(
+        enabledServices.has("products"),
+        [productCountResult],
+        period.nowIso,
+      ),
+      payments: resourceFreshness(
+        enabledServices.has("payments"),
+        [balanceResult, payoutsResult, transactionsResult],
+        period.nowIso,
+      ),
+      users: resourceFreshness(
+        enabledServices.has("users"),
+        [usersResult],
+        period.nowIso,
+      ),
+      traffic: resourceFreshness(
+        enabledServices.has("traffic"),
+        [trafficResult],
+        traffic.generatedAt || period.nowIso,
+        traffic.isStale,
+        traffic.available,
+      ),
+    },
     revenue: orderAnalytics.revenue,
     fulfillmentBreakdown: orderAnalytics.fulfillmentBreakdown,
     pendingFulfillments: {
@@ -334,12 +384,32 @@ export async function fetchStoreDashboard({
       currencies: paymentCurrencies,
       ...paymentAnalytics,
     },
+    reconciliation,
     traffic,
     users: enabledServices.has("users")
       ? mapDashboardUsers(users, profile || null)
       : [],
     warnings,
   };
+}
+
+function resourceFreshness(
+  enabled: boolean,
+  results: PromiseSettledResult<unknown>[],
+  dataAsOf: string,
+  stale = false,
+  available = true,
+) {
+  if (!enabled) return { state: "unavailable" as const, dataAsOf: null };
+  if (results.some((result) => result.status === "rejected")) {
+    const hasFulfilledResult = results.some((result) => result.status === "fulfilled");
+    return {
+      state: hasFulfilledResult ? ("partial" as const) : ("failed" as const),
+      dataAsOf: hasFulfilledResult ? dataAsOf : null,
+    };
+  }
+  if (!available) return { state: "unavailable" as const, dataAsOf: null };
+  return { state: stale ? ("stale" as const) : ("available" as const), dataAsOf };
 }
 
 function loadDashboardService<T>(

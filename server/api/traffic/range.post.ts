@@ -3,6 +3,7 @@ import { requireShopifyCredentials } from "~~/server/utils/shopify-admin-request
 import { createApiErrorFromMessage } from "~~/server/utils/callShopifyApi";
 import { isRequestAbortError } from "~~/server/utils/request-abort";
 import { fetchShopifyTrafficRange } from "~~/server/utils/shopify-traffic";
+import { setTrafficDiagnosticsHeaders } from "~~/server/utils/traffic-response";
 import { DASHBOARD_TRAFFIC_RANGES, type DashboardTrafficRange } from "~~/types/traffic";
 
 interface TrafficRangeBody {
@@ -36,6 +37,7 @@ export default defineEventHandler(async (event) => {
       timeZone: body.timeZone,
       refresh: body.refresh === true,
     });
+    setTrafficDiagnosticsHeaders(event, result);
     setResponseHeader(event, "x-spf-field-convention", "app-camel-case");
     return result;
   } catch (error) {

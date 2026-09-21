@@ -39,11 +39,7 @@
         :title="t('store.loadingData')"
         :description="t('store.loadingDescription')"
         loading
-      >
-        <template #icon>
-          <IconsSync />
-        </template>
-      </ShopEmptyState>
+      />
 
       <!-- EMPTY / NOT FETCHED -->
       <ShopEmptyState

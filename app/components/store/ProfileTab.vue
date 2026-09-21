@@ -25,11 +25,7 @@
       :title="t('profile.loadingTitle')"
       :description="t('profile.loadingDescription')"
       loading
-    >
-      <template #icon>
-        <IconsSync />
-      </template>
-    </ShopEmptyState>
+    />
 
     <div v-else class="profile-stack">
       <section class="profile-hero">

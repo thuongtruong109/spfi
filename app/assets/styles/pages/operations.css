@@ -234,6 +234,13 @@
   font-size: 13px;
 }
 
+.ops-empty.is-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 .ops-resource-error {
   display: grid;
   gap: 4px;

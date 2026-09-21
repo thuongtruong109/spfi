@@ -58,17 +58,20 @@ export function buildShopifyThrottleKey(
 }
 
 export async function waitForShopifyThrottle(key: string, signal?: AbortSignal) {
+  const startedAt = Date.now();
+  let waited = false;
   while (true) {
     signal?.throwIfAborted();
     const gate = throttleGates.get(key);
-    if (!gate) return;
+    if (!gate) return waited ? Math.max(1, Date.now() - startedAt) : 0;
 
     const delayMs = gate.blockedUntil - Date.now();
     if (delayMs <= 0) {
       throttleGates.delete(key);
-      return;
+      return waited ? Math.max(1, Date.now() - startedAt) : 0;
     }
 
+    waited = true;
     await wait(delayMs, signal);
   }
 }

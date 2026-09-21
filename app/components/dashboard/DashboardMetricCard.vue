@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { useLocalization } from "~/composables/useLocalization";
+import type { DashboardResourceState } from "~~/types/dashboard";
 
 const { t } = useLocalization();
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     label: string;
     value?: string;
@@ -11,14 +12,26 @@ withDefaults(
     tone?: "green" | "blue" | "amber" | "violet" | "red";
     delay?: number;
     loading?: boolean;
+    resourceState?: DashboardResourceState;
   }>(),
   {
     tone: "green",
     value: "",
     delay: 0,
     loading: false,
+    resourceState: "available",
   },
 );
+
+const resourceStateLabel = computed(() => {
+  if (props.resourceState === "failed") return t("dashboard.resourceState.failed");
+  if (props.resourceState === "unavailable") {
+    return t("dashboard.resourceState.unavailable");
+  }
+  if (props.resourceState === "partial") return t("dashboard.resourceState.partial");
+  if (props.resourceState === "stale") return t("dashboard.resourceState.stale");
+  return t("dashboard.resourceState.available");
+});
 </script>
 
 <template>
@@ -36,10 +49,24 @@ withDefaults(
       class="metric-skeleton"
       :aria-label="t('dashboard.loadingMetric')"
     />
+    <p
+      v-else-if="resourceState === 'failed' || resourceState === 'unavailable'"
+      class="metric-value metric-state-value"
+      :class="`is-${resourceState}`"
+    >
+      {{ resourceStateLabel }}
+    </p>
     <p v-else class="metric-value">
       <slot name="value">{{ value }}</slot>
     </p>
     <p class="metric-detail">{{ detail }}</p>
+    <span
+      v-if="resourceState === 'stale' || resourceState === 'partial'"
+      class="metric-resource-note"
+      :class="`is-${resourceState}`"
+    >
+      {{ resourceStateLabel }}
+    </span>
   </article>
 </template>
 
@@ -143,6 +170,34 @@ withDefaults(
   color: color-mix(in srgb, var(--metric-accent) 76%, var(--muted));
   font-size: 10px;
   text-align: center;
+}
+
+.metric-state-value {
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.metric-state-value.is-failed {
+  color: var(--red);
+}
+
+.metric-state-value.is-unavailable {
+  color: var(--text-muted);
+}
+
+.metric-resource-note {
+  position: absolute;
+  top: 10px;
+  right: 11px;
+  color: var(--amber);
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.metric-resource-note.is-partial {
+  color: var(--red);
 }
 
 .metric-skeleton {
