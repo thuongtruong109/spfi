@@ -118,9 +118,73 @@ export interface DashboardTrafficDimensionRow {
   conversionRate: number;
 }
 
-export const DASHBOARD_TRAFFIC_RANGES = ["24h", "7d", "30d"] as const;
+export const DASHBOARD_TRAFFIC_OVERVIEW_RANGES = ["24h", "7d", "30d"] as const;
+
+export const DASHBOARD_TRAFFIC_RANGES = [
+  ...DASHBOARD_TRAFFIC_OVERVIEW_RANGES,
+  "60d",
+  "90d",
+  "6m",
+  "1y",
+] as const;
 
 export type DashboardTrafficRange = (typeof DASHBOARD_TRAFFIC_RANGES)[number];
+export type DashboardTrafficOverviewRange =
+  (typeof DASHBOARD_TRAFFIC_OVERVIEW_RANGES)[number];
+export type DashboardTrafficGranularity = "hour" | "day" | "week" | "month";
+
+export const DASHBOARD_TRAFFIC_RANGE_DEFINITIONS = {
+  "24h": {
+    shortLabel: "24H",
+    labelKey: "dashboard.trafficRange24h",
+    period: "SINCE -24h UNTIL now",
+    granularity: "hour",
+  },
+  "7d": {
+    shortLabel: "7D",
+    labelKey: "dashboard.trafficRange7d",
+    period: "SINCE -6d UNTIL now",
+    granularity: "day",
+  },
+  "30d": {
+    shortLabel: "30D",
+    labelKey: "dashboard.trafficRange30d",
+    period: "SINCE -29d UNTIL now",
+    granularity: "day",
+  },
+  "60d": {
+    shortLabel: "60D",
+    labelKey: "dashboard.trafficRange60d",
+    period: "SINCE -59d UNTIL now",
+    granularity: "day",
+  },
+  "90d": {
+    shortLabel: "90D",
+    labelKey: "dashboard.trafficRange90d",
+    period: "SINCE -89d UNTIL now",
+    granularity: "week",
+  },
+  "6m": {
+    shortLabel: "6M",
+    labelKey: "dashboard.trafficRange6m",
+    period: "SINCE -6m UNTIL now",
+    granularity: "week",
+  },
+  "1y": {
+    shortLabel: "1Y",
+    labelKey: "dashboard.trafficRange1y",
+    period: "SINCE -1y UNTIL now",
+    granularity: "month",
+  },
+} as const satisfies Record<
+  DashboardTrafficRange,
+  {
+    shortLabel: string;
+    labelKey: string;
+    period: string;
+    granularity: DashboardTrafficGranularity;
+  }
+>;
 export type DashboardTrafficTimeZoneMode = "store" | "per-store" | "unknown";
 
 export interface TrafficDimensionLoadProgress {
@@ -160,7 +224,7 @@ export interface DashboardTrafficReporting {
   reportingStores: number;
   lastSuccessfulAt: string | null;
   stores: DashboardTrafficStoreReport[];
-  coverage: Record<DashboardTrafficRange, DashboardTrafficRangeCoverage>;
+  coverage: Partial<Record<DashboardTrafficRange, DashboardTrafficRangeCoverage>>;
 }
 
 export interface DashboardTrafficDimensionResult {
@@ -175,6 +239,7 @@ export type DashboardTrafficDimensions = Partial<
 
 export interface DashboardTrafficRangeData {
   metrics: DashboardTrafficMetrics | null;
+  trend: DashboardTrafficPoint[] | null;
   sources: DashboardTrafficBreakdown[] | null;
   countries: DashboardTrafficBreakdown[] | null;
   devices: DashboardTrafficBreakdown[] | null;
@@ -200,6 +265,12 @@ export interface TrafficDimensionResponse
 
 /** @deprecated Use TrafficDimensionResponse for API contracts. */
 export type DashboardTrafficDimensionResponse = TrafficDimensionResponse;
+
+export interface TrafficRangeResponse extends TrafficQueryDiagnostics {
+  range: DashboardTrafficRange;
+  timeZone: string;
+  data: DashboardTrafficRangeData;
+}
 
 /**
  * The overview contract intentionally contains only data queried by

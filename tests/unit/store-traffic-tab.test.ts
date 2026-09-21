@@ -1,4 +1,4 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import {
   computed,
   defineComponent,
@@ -63,15 +63,22 @@ describe("Store TrafficTab loading mode", () => {
       isLoading: false,
       isLoadingAllInsights: false,
       activeFullInsightRange: null,
+      isLoadingRange: false,
+      activeRangeSummary: null,
       trafficInsightProgress: {
         "24h": { loaded: 0, total: 21, percent: 0, complete: false },
         "7d": { loaded: 0, total: 21, percent: 0, complete: false },
         "30d": { loaded: 0, total: 21, percent: 0, complete: false },
+        "60d": { loaded: 0, total: 21, percent: 0, complete: false },
+        "90d": { loaded: 0, total: 21, percent: 0, complete: false },
+        "6m": { loaded: 0, total: 21, percent: 0, complete: false },
+        "1y": { loaded: 0, total: 21, percent: 0, complete: false },
       },
       loadingInsightDimensions: [],
       error: null,
       insightError: null,
       isStoreActive: vi.fn(() => true),
+      fetchTrafficRange: vi.fn().mockResolvedValue(true),
       fetchTrafficRangeDimensions: vi.fn().mockResolvedValue(true),
       fetchTrafficDimension: vi.fn().mockResolvedValue(true),
       cancelTrafficDimensionRequests: vi.fn(),
@@ -104,7 +111,7 @@ describe("Store TrafficTab loading mode", () => {
     ).not.toHaveBeenCalled();
 
     await wrapper.get("button").trigger("click");
-    await nextTick();
+    await flushPromises();
     expect(
       mocks.trafficStore.fetchTrafficRangeDimensions as ReturnType<typeof vi.fn>,
     ).toHaveBeenCalledWith("shop-a", "token-a", "7d");
@@ -113,5 +120,27 @@ describe("Store TrafficTab loading mode", () => {
     expect(
       mocks.trafficStore.cancelTrafficDimensionRequests as ReturnType<typeof vi.fn>,
     ).toHaveBeenCalledTimes(3);
+  });
+
+  it("loads a long-range summary on demand without starting full details", async () => {
+    const wrapper = mount(TrafficTab, {
+      global: {
+        stubs: {
+          DashboardTrafficPanel: DashboardTrafficPanelStub,
+          StoreTrafficLoadModeSelect: StoreTrafficLoadModeSelectStub,
+        },
+      },
+    });
+    await flushPromises();
+
+    wrapper.findComponent(DashboardTrafficPanelStub).vm.$emit("rangeChange", "90d");
+    await flushPromises();
+
+    expect(
+      mocks.trafficStore.fetchTrafficRange as ReturnType<typeof vi.fn>,
+    ).toHaveBeenLastCalledWith("shop-a", "token-a", "90d");
+    expect(
+      mocks.trafficStore.fetchTrafficRangeDimensions as ReturnType<typeof vi.fn>,
+    ).not.toHaveBeenCalled();
   });
 });

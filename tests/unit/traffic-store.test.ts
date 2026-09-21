@@ -120,6 +120,58 @@ describe("traffic store", () => {
     );
   });
 
+  it("loads and caches an extended range summary on demand", async () => {
+    const rangeData = emptyDashboardTraffic().rangeData["90d"];
+    const request = vi.fn((url: string) => {
+      if (url === "/api/traffic/range") {
+        return Promise.resolve({
+          range: "90d",
+          timeZone: "Etc/UTC",
+          data: {
+            ...rangeData,
+            metrics: createTrafficMetrics({ sessions: 900, visitors: 600 }),
+            trend: [
+              {
+                period: "2026-09-14",
+                sessions: 80,
+                visitors: 52,
+                pageviews: 140,
+              },
+            ],
+            availability: {
+              metrics: "available",
+              trend: "available",
+              sources: "available",
+              countries: "available",
+              devices: "available",
+            },
+          },
+          generatedAt: "2026-09-21T00:00:00.000Z",
+          cacheAge: 0,
+          isStale: false,
+        });
+      }
+      return Promise.resolve(trafficFixture(12));
+    });
+    vi.stubGlobal("$fetch", request);
+    const store = useTrafficStore();
+
+    await store.fetchTraffic("shop-a", "token-a");
+    await expect(store.fetchTrafficRange("shop-a", "token-a", "90d")).resolves.toBe(
+      true,
+    );
+    await expect(store.fetchTrafficRange("shop-a", "token-a", "90d")).resolves.toBe(
+      true,
+    );
+
+    expect(store.traffic.rangeData["90d"].metrics?.sessions).toBe(900);
+    expect(store.traffic.rangeData["90d"].trend?.[0]?.sessions).toBe(80);
+    expect(store.loadedRanges).toContain("90d");
+    expect(
+      request.mock.calls.filter(([url]) => url === "/api/traffic/range"),
+    ).toHaveLength(1);
+  });
+
   it("deduplicates callers waiting for the same overview", async () => {
     let resolveOverview!: (value: DashboardTrafficSummary) => void;
     const request = vi.fn(

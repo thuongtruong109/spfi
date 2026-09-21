@@ -6,6 +6,7 @@ import type {
   DashboardTrafficOverviewAlias,
   DashboardTrafficPoint,
   DashboardTrafficRange,
+  DashboardTrafficOverviewRange,
   DashboardTrafficReporting,
   DashboardTrafficRangeAvailability,
   DashboardTrafficRangeData,
@@ -16,6 +17,8 @@ import type {
 import {
   DASHBOARD_TRAFFIC_BLOCKS,
   DASHBOARD_TRAFFIC_OVERVIEW_ALIASES,
+  DASHBOARD_TRAFFIC_OVERVIEW_RANGES,
+  DASHBOARD_TRAFFIC_RANGES,
 } from "../types/traffic.ts";
 
 const BREAKDOWN_LIMIT = 8;
@@ -50,22 +53,16 @@ export function emptyDashboardTraffic(): TrafficOverviewResponse {
     sources: null,
     countries: null,
     devices: null,
-    rangeData: {
-      "24h": emptyTrafficRangeData(),
-      "7d": emptyTrafficRangeData(),
-      "30d": emptyTrafficRangeData(),
-    },
+    rangeData: createTrafficRangeDataMap(() => emptyTrafficRangeData()),
   };
 }
 
 export function failedDashboardTraffic(): TrafficOverviewResponse {
   const traffic = emptyDashboardTraffic();
   traffic.availability = createDashboardTrafficAvailability("failed");
-  traffic.rangeData = {
-    "24h": emptyTrafficRangeData(trafficRangeAvailability("failed")),
-    "7d": emptyTrafficRangeData(trafficRangeAvailability("failed")),
-    "30d": emptyTrafficRangeData(trafficRangeAvailability("failed")),
-  };
+  traffic.rangeData = createTrafficRangeDataMap(() =>
+    emptyTrafficRangeData(trafficRangeAvailability("failed")),
+  );
   traffic.reporting = createSingleStoreTrafficReporting(traffic.rangeData, false, null);
   return traffic;
 }
@@ -92,9 +89,6 @@ export function createSingleStoreTrafficReporting(
 export function cloneDashboardTraffic(
   traffic: TrafficOverviewResponse,
 ): TrafficOverviewResponse {
-  const range24Hours = resolveDashboardTrafficRangeData(traffic, "24h");
-  const range7Days = resolveDashboardTrafficRangeData(traffic, "7d");
-  const range30Days = resolveDashboardTrafficRangeData(traffic, "30d");
   const available = isDashboardTrafficAvailable(traffic);
   const timeZone =
     typeof traffic.timeZone === "string" && traffic.timeZone.trim()
@@ -126,11 +120,9 @@ export function cloneDashboardTraffic(
     sources: cloneRowsIfUsable(traffic.sources, traffic.availability?.sources),
     countries: cloneRowsIfUsable(traffic.countries, traffic.availability?.countries),
     devices: cloneRowsIfUsable(traffic.devices, traffic.availability?.devices),
-    rangeData: {
-      "24h": cloneTrafficRangeData(range24Hours),
-      "7d": cloneTrafficRangeData(range7Days),
-      "30d": cloneTrafficRangeData(range30Days),
-    },
+    rangeData: createTrafficRangeDataMap((range) =>
+      cloneTrafficRangeData(resolveDashboardTrafficRangeData(traffic, range)),
+    ),
   };
 }
 
@@ -151,6 +143,7 @@ export function resolveDashboardTrafficRangeData(
     return {
       ...existing,
       metrics: cloneMetricsIfUsable(existing.metrics, availability.metrics),
+      trend: cloneRowsIfUsable(existing.trend, availability.trend),
       sources: cloneRowsIfUsable(existing.sources, availability.sources),
       countries: cloneRowsIfUsable(existing.countries, availability.countries),
       devices: cloneRowsIfUsable(existing.devices, availability.devices),
@@ -163,12 +156,23 @@ export function resolveDashboardTrafficRangeData(
       ? traffic.last24Hours
       : range === "7d"
         ? traffic.last7Days
-        : traffic.last30Days;
+        : range === "30d"
+          ? traffic.last30Days
+          : null;
+  const trend =
+    range === "24h"
+      ? traffic.hourly
+      : range === "7d"
+        ? traffic.daily?.slice(-7) || null
+        : range === "30d"
+          ? traffic.daily
+          : null;
   const sources = range === "30d" ? traffic.sources : null;
   const countries = range === "30d" ? traffic.countries : null;
   const devices = range === "30d" ? traffic.devices : null;
   return {
     metrics: cloneMetricsIfUsable(metrics, fallbackAvailability.metrics),
+    trend: cloneRowsIfUsable(trend, fallbackAvailability.trend),
     sources: cloneRowsIfUsable(sources, fallbackAvailability.sources),
     countries: cloneRowsIfUsable(countries, fallbackAvailability.countries),
     devices: cloneRowsIfUsable(devices, fallbackAvailability.devices),
@@ -227,29 +231,15 @@ export function aggregateDashboardTraffic(
     empty.reporting = reporting;
     if (!availabilityRows.length) return empty;
     empty.availability = aggregateTrafficAvailability(availabilityRows);
-    empty.rangeData = {
-      "24h": aggregateTrafficRangeData(
+    empty.rangeData = createTrafficRangeDataMap((range) =>
+      aggregateTrafficRangeData(
         [],
         [
-          ...traffic.map((item) => resolveDashboardTrafficRangeData(item, "24h")),
+          ...traffic.map((item) => resolveDashboardTrafficRangeData(item, range)),
           ...failedRanges.map((availability) => emptyTrafficRangeData(availability)),
         ],
       ),
-      "7d": aggregateTrafficRangeData(
-        [],
-        [
-          ...traffic.map((item) => resolveDashboardTrafficRangeData(item, "7d")),
-          ...failedRanges.map((availability) => emptyTrafficRangeData(availability)),
-        ],
-      ),
-      "30d": aggregateTrafficRangeData(
-        [],
-        [
-          ...traffic.map((item) => resolveDashboardTrafficRangeData(item, "30d")),
-          ...failedRanges.map((availability) => emptyTrafficRangeData(availability)),
-        ],
-      ),
-    };
+    );
     return empty;
   }
 
@@ -287,29 +277,15 @@ export function aggregateDashboardTraffic(
     devices: aggregateNullableBreakdowns(
       collectAliasValues(traffic, "devices", (item) => item.devices),
     ),
-    rangeData: {
-      "24h": aggregateTrafficRangeData(
-        available.map((item) => resolveDashboardTrafficRangeData(item, "24h")),
+    rangeData: createTrafficRangeDataMap((range) =>
+      aggregateTrafficRangeData(
+        available.map((item) => resolveDashboardTrafficRangeData(item, range)),
         [
-          ...traffic.map((item) => resolveDashboardTrafficRangeData(item, "24h")),
+          ...traffic.map((item) => resolveDashboardTrafficRangeData(item, range)),
           ...failedRanges.map((availability) => emptyTrafficRangeData(availability)),
         ],
       ),
-      "7d": aggregateTrafficRangeData(
-        available.map((item) => resolveDashboardTrafficRangeData(item, "7d")),
-        [
-          ...traffic.map((item) => resolveDashboardTrafficRangeData(item, "7d")),
-          ...failedRanges.map((availability) => emptyTrafficRangeData(availability)),
-        ],
-      ),
-      "30d": aggregateTrafficRangeData(
-        available.map((item) => resolveDashboardTrafficRangeData(item, "30d")),
-        [
-          ...traffic.map((item) => resolveDashboardTrafficRangeData(item, "30d")),
-          ...failedRanges.map((availability) => emptyTrafficRangeData(availability)),
-        ],
-      ),
-    },
+    ),
   };
 }
 
@@ -350,6 +326,7 @@ function emptyTrafficRangeData(
 ): DashboardTrafficRangeData {
   return {
     metrics: null,
+    trend: null,
     sources: null,
     countries: null,
     devices: null,
@@ -363,6 +340,7 @@ function cloneTrafficRangeData(
 ): DashboardTrafficRangeData {
   return {
     metrics: range.metrics ? { ...range.metrics } : null,
+    trend: range.trend?.map((row) => ({ ...row })) || null,
     sources: range.sources?.map((row) => ({ ...row })) || null,
     countries: range.countries?.map((row) => ({ ...row })) || null,
     devices: range.devices?.map((row) => ({ ...row })) || null,
@@ -386,6 +364,7 @@ function aggregateTrafficRangeData(
   availabilityRanges: DashboardTrafficRangeData[] = ranges,
 ): DashboardTrafficRangeData {
   const metrics = ranges.flatMap((range) => (range.metrics ? [range.metrics] : []));
+  const trend = ranges.flatMap((range) => (range.trend ? [range.trend] : []));
   const sources = ranges.flatMap((range) => (range.sources ? [range.sources] : []));
   const countries = ranges.flatMap((range) =>
     range.countries ? [range.countries] : [],
@@ -393,6 +372,7 @@ function aggregateTrafficRangeData(
   const devices = ranges.flatMap((range) => (range.devices ? [range.devices] : []));
   return {
     metrics: aggregateNullableMetrics(metrics),
+    trend: aggregateNullablePoints(trend),
     sources: aggregateNullableBreakdowns(sources),
     countries: aggregateNullableBreakdowns(countries),
     devices: aggregateNullableBreakdowns(devices),
@@ -484,13 +464,16 @@ function rangeAvailability(
       devices: availability.devices7Days,
     };
   }
-  return {
-    metrics: availability.last30Days,
-    trend: availability.daily,
-    sources: availability.sources,
-    countries: availability.countries,
-    devices: availability.devices,
-  };
+  if (range === "30d") {
+    return {
+      metrics: availability.last30Days,
+      trend: availability.daily,
+      sources: availability.sources,
+      countries: availability.countries,
+      devices: availability.devices,
+    };
+  }
+  return trafficRangeAvailability("unknown");
 }
 
 function normalizeRangeAvailability(
@@ -669,7 +652,7 @@ function aggregateDashboardTrafficReporting(
 }
 
 function createTrafficRangeCoverage(
-  ranges: Record<DashboardTrafficRange, DashboardTrafficRangeData[]>,
+  ranges: Record<DashboardTrafficOverviewRange, DashboardTrafficRangeData[]>,
   totalStores: number,
 ): DashboardTrafficReporting["coverage"] {
   return Object.fromEntries(
@@ -763,8 +746,16 @@ function isReportingState(state: DashboardTrafficAvailabilityState) {
   return state === "available" || state === "partial";
 }
 
-function trafficRanges(): DashboardTrafficRange[] {
-  return ["24h", "7d", "30d"];
+function trafficRanges(): DashboardTrafficOverviewRange[] {
+  return [...DASHBOARD_TRAFFIC_OVERVIEW_RANGES];
+}
+
+function createTrafficRangeDataMap(
+  create: (range: DashboardTrafficRange) => DashboardTrafficRangeData,
+): Record<DashboardTrafficRange, DashboardTrafficRangeData> {
+  return Object.fromEntries(
+    DASHBOARD_TRAFFIC_RANGES.map((range) => [range, create(range)]),
+  ) as Record<DashboardTrafficRange, DashboardTrafficRangeData>;
 }
 
 function trafficRangeAvailability(

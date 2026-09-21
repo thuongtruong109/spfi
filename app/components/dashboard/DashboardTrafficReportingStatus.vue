@@ -6,6 +6,7 @@ import type {
   DashboardTrafficSummary,
 } from "~~/types/dashboard";
 import { DASHBOARD_TRAFFIC_BLOCKS } from "~~/types/dashboard";
+import { DASHBOARD_TRAFFIC_RANGE_DEFINITIONS } from "~~/types/dashboard";
 import { resolveDashboardTrafficRangeData } from "~~/utils/dashboard-traffic";
 
 const props = defineProps<{
@@ -95,9 +96,7 @@ function blockLabel(block: DashboardTrafficBlock) {
 }
 
 function rangeShortLabel(range: DashboardTrafficRange) {
-  if (range === "24h") return t("dashboard.trafficRange24h");
-  if (range === "7d") return t("dashboard.trafficRange7d");
-  return t("dashboard.trafficRange30d");
+  return t(DASHBOARD_TRAFFIC_RANGE_DEFINITIONS[range].labelKey);
 }
 
 function formatSuccessfulAt(value: string) {

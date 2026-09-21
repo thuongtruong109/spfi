@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import type { DashboardTrafficPoint } from "~~/types/dashboard";
+import type {
+  DashboardTrafficGranularity,
+  DashboardTrafficPoint,
+} from "~~/types/dashboard";
 import { parseShopifyqlPeriod } from "~~/utils/shopifyql-period";
 
 const props = defineProps<{
   points: DashboardTrafficPoint[];
-  granularity: "hour" | "day";
+  granularity: DashboardTrafficGranularity;
 }>();
 
 const { locale, t } = useLocalization();
@@ -186,7 +189,9 @@ function formatPeriod(value: string, short = false) {
     timeZone: "UTC",
     ...(props.granularity === "hour"
       ? { hour: "2-digit", minute: "2-digit" }
-      : { month: short ? "short" : "long", day: "numeric" }),
+      : props.granularity === "month"
+        ? { month: short ? "short" : "long", year: "numeric" }
+        : { month: short ? "short" : "long", day: "numeric" }),
   }).format(date);
 }
 

@@ -9,23 +9,41 @@ import type {
   DashboardTrafficRange,
   DashboardTrafficRangeData,
 } from "~~/types/dashboard";
+import {
+  DASHBOARD_TRAFFIC_OVERVIEW_RANGES,
+  DASHBOARD_TRAFFIC_RANGES,
+  DASHBOARD_TRAFFIC_RANGE_DEFINITIONS,
+} from "~~/types/dashboard";
 
 const props = defineProps<{
   data: DashboardTrafficRangeData;
   points: DashboardTrafficPoint[] | null;
   rangeLabel: string;
   exportPending?: boolean;
+  extendedRanges?: boolean;
 }>();
 
 const range = defineModel<DashboardTrafficRange>({ required: true });
 const { t } = useLocalization();
 const { exportTraffic } = useTrafficExport();
 const isExporting = ref(false);
-const rangeOptions = [
-  { value: "24h" as const, label: "24H" },
-  { value: "7d" as const, label: "7D" },
-  { value: "30d" as const, label: "30D" },
-];
+const rangeOptions = computed(() =>
+  (props.extendedRanges
+    ? DASHBOARD_TRAFFIC_RANGES
+    : DASHBOARD_TRAFFIC_OVERVIEW_RANGES
+  ).map((value) => ({
+    value,
+    label: DASHBOARD_TRAFFIC_RANGE_DEFINITIONS[value].shortLabel,
+  })),
+);
+const rangeSelectOptions = computed(() =>
+  rangeOptions.value.map((option) => ({
+    value: option.value,
+    label: `${option.label} · ${t(
+      DASHBOARD_TRAFFIC_RANGE_DEFINITIONS[option.value].labelKey,
+    )}`,
+  })),
+);
 const exportOptions = computed<
   Array<{
     format: TrafficExportFormat;
@@ -70,11 +88,27 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
     isExporting.value = false;
   }
 }
+
+function selectRange(value: unknown) {
+  if (DASHBOARD_TRAFFIC_RANGES.includes(value as DashboardTrafficRange)) {
+    range.value = value as DashboardTrafficRange;
+  }
+}
 </script>
 
 <template>
   <aside class="traffic-controls">
+    <BaseSelect
+      v-if="extendedRanges"
+      class="traffic-range-select"
+      size="small"
+      :model-value="range"
+      :options="rangeSelectOptions"
+      :aria-label="t('dashboard.trafficRange')"
+      @update:model-value="selectRange"
+    />
     <div
+      v-else
       class="traffic-range-tabs"
       role="group"
       :aria-label="t('dashboard.trafficRange')"
@@ -161,6 +195,10 @@ async function handleExport(format: TrafficExportFormat, close: () => void) {
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--surface-low);
+}
+
+.traffic-range-select {
+  width: 196px;
 }
 
 .traffic-range-tabs button {

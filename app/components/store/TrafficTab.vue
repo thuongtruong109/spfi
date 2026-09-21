@@ -19,6 +19,11 @@ const isSelectedRangeLoading = computed(
     trafficStore.isLoadingAllInsights &&
     trafficStore.activeFullInsightRange === selectedRange.value,
 );
+const isSelectedRangeSummaryLoading = computed(
+  () =>
+    trafficStore.isLoadingRange &&
+    trafficStore.activeRangeSummary === selectedRange.value,
+);
 
 watch(
   () =>
@@ -31,7 +36,7 @@ watch(
       loadMode.value,
       selectedRange.value,
     ] as const,
-  ([
+  async ([
     activeStoreId,
     activeToken,
     hasFetched,
@@ -40,10 +45,7 @@ watch(
     mode,
     range,
   ]) => {
-    if (mode === "lazy") {
-      trafficStore.cancelTrafficDimensionRequests();
-      return;
-    }
+    if (mode === "lazy") trafficStore.cancelTrafficDimensionRequests();
     if (
       !activeStoreId ||
       !activeToken ||
@@ -54,6 +56,12 @@ watch(
     ) {
       return;
     }
+    const rangeLoaded = await trafficStore.fetchTrafficRange(
+      activeStoreId,
+      activeToken,
+      range,
+    );
+    if (!rangeLoaded || selectedRange.value !== range || mode === "lazy") return;
     void trafficStore.fetchTrafficRangeDimensions(activeStoreId, activeToken, range);
   },
   { immediate: true },
@@ -94,10 +102,12 @@ function loadInsightDimension(request: {
       :loading-insight-dimensions="trafficStore.loadingInsightDimensions"
       :store-count="1"
       :export-pending="
-        loadMode === 'full' &&
-        trafficStore.hasFetched &&
-        !selectedRangeProgress.complete
+        isSelectedRangeSummaryLoading ||
+        (loadMode === 'full' &&
+          trafficStore.hasFetched &&
+          !selectedRangeProgress.complete)
       "
+      :range-loading="isSelectedRangeSummaryLoading"
       :full-loading="isSelectedRangeLoading"
       :full-load-progress="selectedRangeProgress"
       :lazy-insight-loading="loadMode === 'lazy'"

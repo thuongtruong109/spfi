@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   DASHBOARD_TRAFFIC_QUERY,
   TRAFFIC_DIMENSION_QUERY,
+  TRAFFIC_RANGE_QUERY,
   buildTrafficDimensionQueryVariables,
   buildTrafficQueryVariables,
+  buildTrafficRangeQueryVariables,
   isDashboardTrafficDimensionKey,
   parseShopifyTrafficDimensionResponse,
+  parseShopifyTrafficRangeResponse,
   parseShopifyTrafficResponse,
 } from "~~/server/utils/shopify-traffic";
 
@@ -81,6 +84,71 @@ describe("Shopify traffic analytics", () => {
     expect(TRAFFIC_DIMENSION_QUERY).not.toContain("$daily");
     expect(isDashboardTrafficDimensionKey("campaign")).toBe(true);
     expect(isDashboardTrafficDimensionKey("source, session_country")).toBe(false);
+  });
+
+  it("builds long-range queries with bounded adaptive time buckets", () => {
+    const sixtyDays = buildTrafficRangeQueryVariables("60d", "Asia/Ho_Chi_Minh");
+    const ninetyDays = buildTrafficRangeQueryVariables("90d", "Etc/UTC");
+    const sixMonths = buildTrafficRangeQueryVariables("6m", "Etc/UTC");
+    const oneYear = buildTrafficRangeQueryVariables("1y", "Etc/UTC");
+
+    expect(sixtyDays.trend).toContain("TIMESERIES day");
+    expect(sixtyDays.trend).toContain("SINCE -59d UNTIL now");
+    expect(ninetyDays.trend).toContain("TIMESERIES week");
+    expect(ninetyDays.metrics).toContain("SINCE -89d UNTIL now");
+    expect(sixMonths.trend).toContain("TIMESERIES week");
+    expect(sixMonths.sources).toContain("SINCE -6m UNTIL now");
+    expect(oneYear.trend).toContain("TIMESERIES month");
+    expect(oneYear.devices).toContain("SINCE -1y UNTIL now");
+    expect(
+      [sixtyDays, ninetyDays, sixMonths, oneYear].every((queries) =>
+        Object.values(queries).every((query) =>
+          query.includes("human_or_bot_session = 'human'"),
+        ),
+      ),
+    ).toBe(true);
+    expect(TRAFFIC_RANGE_QUERY).toContain("$trend");
+  });
+
+  it("maps a requested long range without mixing overview data", () => {
+    const response = parseShopifyTrafficRangeResponse(
+      {
+        metrics: result([{ sessions: 900, online_store_visitors: 600 }]),
+        trend: result([
+          {
+            week: "2026-09-14",
+            sessions: 80,
+            online_store_visitors: 52,
+            pageviews: 140,
+          },
+        ]),
+        sources: result([
+          { referrer_source: "Search", sessions: 500, online_store_visitors: 350 },
+        ]),
+        countries: result([]),
+        devices: result([]),
+      },
+      "90d",
+      "Asia/Ho_Chi_Minh",
+      "2026-09-21T00:00:00.000Z",
+    );
+
+    expect(response.range).toBe("90d");
+    expect(response.timeZone).toBe("Asia/Ho_Chi_Minh");
+    expect(response.data.metrics?.sessions).toBe(900);
+    expect(response.data.trend?.[0]).toMatchObject({
+      period: "2026-09-14",
+      sessions: 80,
+      visitors: 52,
+    });
+    expect(response.data.sources?.[0]?.label).toBe("Search");
+    expect(response.data.availability).toEqual({
+      metrics: "available",
+      trend: "available",
+      sources: "available",
+      countries: "available",
+      devices: "available",
+    });
   });
 
   it("rejects an invalid timezone before interpolating ShopifyQL", () => {

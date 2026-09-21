@@ -4,6 +4,7 @@ import type {
   DashboardTrafficBreakdown,
   DashboardTrafficDimensionKey,
   DashboardTrafficDimensionRow,
+  DashboardTrafficGranularity,
   DashboardTrafficMetrics,
   DashboardTrafficOverviewAlias,
   DashboardTrafficPoint,
@@ -11,6 +12,11 @@ import type {
   TrafficAvailability,
   TrafficDimensionResponse,
   TrafficOverviewResponse,
+  TrafficRangeResponse,
+} from "~~/types/traffic";
+import {
+  DASHBOARD_TRAFFIC_RANGES,
+  DASHBOARD_TRAFFIC_RANGE_DEFINITIONS,
 } from "~~/types/traffic";
 import {
   createDashboardTrafficAvailability,
@@ -31,6 +37,7 @@ import { createRequestAbortSignal } from "./request-abort";
 import {
   buildTrafficDimensionCacheKey,
   buildTrafficOverviewCacheKey,
+  buildTrafficRangeCacheKey,
   TRAFFIC_DIMENSION_CACHE_POLICIES,
   TRAFFIC_OVERVIEW_CACHE_POLICY,
   trafficQueryCache,
@@ -71,6 +78,16 @@ interface TrafficOverviewQueryResponse {
 }
 
 type TrafficQueryVariables = Record<DashboardTrafficOverviewAlias, string>;
+
+interface TrafficRangeQueryResponse {
+  metrics?: OptionalShopifyqlResult;
+  trend?: OptionalShopifyqlResult;
+  sources?: OptionalShopifyqlResult;
+  countries?: OptionalShopifyqlResult;
+  devices?: OptionalShopifyqlResult;
+}
+
+type TrafficRangeQueryVariables = Record<keyof TrafficRangeQueryResponse, string>;
 
 const SHOPIFYQL_RESULT_FIELDS = `
   tableData {
@@ -126,13 +143,30 @@ export const TRAFFIC_DIMENSION_QUERY = `#graphql
   }
 `;
 
+export const TRAFFIC_RANGE_QUERY = `#graphql
+  query StoreTrafficRange(
+    $metrics: String!
+    $trend: String!
+    $sources: String!
+    $countries: String!
+    $devices: String!
+  ) {
+    metrics: shopifyqlQuery(query: $metrics) { ${SHOPIFYQL_RESULT_FIELDS} }
+    trend: shopifyqlQuery(query: $trend) { ${SHOPIFYQL_RESULT_FIELDS} }
+    sources: shopifyqlQuery(query: $sources) { ${SHOPIFYQL_RESULT_FIELDS} }
+    countries: shopifyqlQuery(query: $countries) { ${SHOPIFYQL_RESULT_FIELDS} }
+    devices: shopifyqlQuery(query: $devices) { ${SHOPIFYQL_RESULT_FIELDS} }
+  }
+`;
+
 const DIMENSION_ROW_LIMIT = 250;
 const HUMAN_FILTER = "WHERE human_or_bot_session = 'human'";
-const TRAFFIC_PERIODS: Record<DashboardTrafficRange, string> = {
-  "24h": "SINCE -24h UNTIL now",
-  "7d": "SINCE -6d UNTIL now",
-  "30d": "SINCE -29d UNTIL now",
-};
+const TRAFFIC_PERIODS = Object.fromEntries(
+  Object.entries(DASHBOARD_TRAFFIC_RANGE_DEFINITIONS).map(([range, definition]) => [
+    range,
+    definition.period,
+  ]),
+) as Record<DashboardTrafficRange, string>;
 const SUMMARY_METRICS = [
   "sessions",
   "online_store_visitors",
@@ -221,6 +255,31 @@ export async function fetchShopifyTrafficDimension(input: {
   }
 }
 
+export async function fetchShopifyTrafficRange(input: {
+  event: H3Event;
+  storeId: string;
+  token: string;
+  range: DashboardTrafficRange;
+  timeZone?: string;
+  refresh?: boolean;
+}): Promise<TrafficRangeResponse> {
+  const timeZone =
+    input.timeZone === undefined ? undefined : requireIanaTimeZone(input.timeZone);
+  const requestInput = { ...input, timeZone };
+  const requestAbort = createRequestAbortSignal(input.event);
+  try {
+    return await trafficQueryCache.resolve({
+      key: buildTrafficRangeCacheKey(input.storeId, input.token, input.range, timeZone),
+      policy: TRAFFIC_DIMENSION_CACHE_POLICIES[input.range],
+      signal: requestAbort.signal,
+      refresh: input.refresh,
+      load: (signal) => loadShopifyTrafficRange(requestInput, signal),
+    });
+  } finally {
+    requestAbort.dispose();
+  }
+}
+
 async function loadShopifyTraffic(
   input: {
     event: H3Event;
@@ -279,6 +338,33 @@ async function loadShopifyTrafficDimension(
   return parseShopifyTrafficDimensionResponse(response, input.range, input.dimension);
 }
 
+async function loadShopifyTrafficRange(
+  input: {
+    event: H3Event;
+    storeId: string;
+    token: string;
+    range: DashboardTrafficRange;
+    timeZone?: string;
+    refresh?: boolean;
+  },
+  signal: AbortSignal,
+): Promise<TrafficRangeResponse> {
+  const timeZone = await resolveShopifyTrafficTimeZone({ ...input, signal });
+  const response = await callShopifyGraphql<
+    TrafficRangeQueryResponse,
+    TrafficRangeQueryVariables
+  >({
+    ...input,
+    signal,
+    query: TRAFFIC_RANGE_QUERY,
+    operationName: "StoreTrafficRange",
+    variables: buildTrafficRangeQueryVariables(input.range, timeZone),
+    timeoutMs: 30_000,
+    allowPartialData: true,
+  });
+  return parseShopifyTrafficRangeResponse(response, input.range, timeZone);
+}
+
 export function parseShopifyTrafficDimensionResponse(
   response: { dimension?: OptionalShopifyqlResult },
   range: DashboardTrafficRange,
@@ -318,6 +404,70 @@ export function buildTrafficDimensionQueryVariables(
       TRAFFIC_PERIODS[range],
       timeZone,
     ),
+  };
+}
+
+export function buildTrafficRangeQueryVariables(
+  range: DashboardTrafficRange,
+  timeZone: string,
+): TrafficRangeQueryVariables {
+  const definition = DASHBOARD_TRAFFIC_RANGE_DEFINITIONS[range];
+  const period = definition.period;
+  return {
+    metrics: summaryQuery(period, timeZone),
+    trend: seriesQuery(definition.granularity, period, timeZone),
+    sources: breakdownQuery("referrer_source", period, timeZone),
+    countries: breakdownQuery("session_country", period, timeZone),
+    devices: breakdownQuery("session_device_type", period, timeZone),
+  };
+}
+
+export function parseShopifyTrafficRangeResponse(
+  input:
+    | TrafficRangeQueryResponse
+    | ShopifyGraphqlPartialResponse<TrafficRangeQueryResponse>,
+  range: DashboardTrafficRange,
+  timeZone = "Etc/UTC",
+  successfulAt = new Date().toISOString(),
+): TrafficRangeResponse {
+  const normalizedTimeZone = requireIanaTimeZone(timeZone);
+  const { response, graphqlAvailability } = unwrapPartialResponse(input);
+  const definition = DASHBOARD_TRAFFIC_RANGE_DEFINITIONS[range];
+  const availability = {
+    metrics: resolveTrafficAliasAvailability(
+      response.metrics,
+      graphqlAvailability?.metrics,
+    ),
+    trend: resolveTrafficAliasAvailability(response.trend, graphqlAvailability?.trend),
+    sources: resolveTrafficAliasAvailability(
+      response.sources,
+      graphqlAvailability?.sources,
+    ),
+    countries: resolveTrafficAliasAvailability(
+      response.countries,
+      graphqlAvailability?.countries,
+    ),
+    devices: resolveTrafficAliasAvailability(
+      response.devices,
+      graphqlAvailability?.devices,
+    ),
+  };
+
+  return {
+    range,
+    timeZone: normalizedTimeZone,
+    data: {
+      metrics: parseOptionalMetrics(response.metrics),
+      trend: parseOptionalPoints(response.trend, definition.granularity),
+      sources: parseOptionalRangeBreakdown(response.sources, "referrer_source"),
+      countries: parseOptionalRangeBreakdown(response.countries, "session_country"),
+      devices: parseOptionalRangeBreakdown(response.devices, "session_device_type"),
+      dimensions: {},
+      availability,
+    },
+    generatedAt: successfulAt,
+    cacheAge: 0,
+    isStale: false,
   };
 }
 
@@ -415,10 +565,31 @@ export function parseShopifyTrafficResponse(
     response.devices7Days,
     "session_device_type",
   );
+  const hourly = parseOptionalPoints(response.hourly, "hour");
+  const daily = parseOptionalPoints(response.daily, "day");
   const available = Object.values(availability).some((state) => state === "available");
-  const rangeData: TrafficOverviewResponse["rangeData"] = {
+  const unavailableRange = () => ({
+    metrics: null,
+    trend: null,
+    sources: null,
+    countries: null,
+    devices: null,
+    dimensions: {},
+    availability: {
+      metrics: "unknown" as const,
+      trend: "unknown" as const,
+      sources: "unknown" as const,
+      countries: "unknown" as const,
+      devices: "unknown" as const,
+    },
+  });
+  const rangeData = Object.fromEntries(
+    DASHBOARD_TRAFFIC_RANGES.map((range) => [range, unavailableRange()]),
+  ) as TrafficOverviewResponse["rangeData"];
+  Object.assign(rangeData, {
     "24h": {
       metrics: last24HoursResult,
+      trend: hourly,
       sources: sources24Hours,
       countries: countries24Hours,
       devices: devices24Hours,
@@ -433,6 +604,7 @@ export function parseShopifyTrafficResponse(
     },
     "7d": {
       metrics: last7DaysResult,
+      trend: daily?.slice(-7) || null,
       sources: sources7Days,
       countries: countries7Days,
       devices: devices7Days,
@@ -447,6 +619,7 @@ export function parseShopifyTrafficResponse(
     },
     "30d": {
       metrics: last30DaysResult,
+      trend: daily,
       sources,
       countries,
       devices,
@@ -459,7 +632,7 @@ export function parseShopifyTrafficResponse(
         devices: availability.devices,
       },
     },
-  };
+  });
   return {
     generatedAt: successfulAt,
     cacheAge: 0,
@@ -474,8 +647,8 @@ export function parseShopifyTrafficResponse(
     last24Hours: last24HoursResult,
     last7Days: last7DaysResult,
     last30Days: last30DaysResult,
-    hourly: parseOptionalPoints(response.hourly, "hour"),
-    daily: parseOptionalPoints(response.daily, "day"),
+    hourly,
+    daily,
     sources,
     countries,
     devices,
@@ -487,6 +660,21 @@ function unwrapTrafficResponse(
   input:
     | TrafficOverviewQueryResponse
     | ShopifyGraphqlPartialResponse<TrafficOverviewQueryResponse>,
+) {
+  if ("data" in input && "errors" in input && "availability" in input) {
+    return {
+      response: input.data,
+      graphqlAvailability: input.availability,
+    };
+  }
+  return {
+    response: input,
+    graphqlAvailability: undefined,
+  };
+}
+
+function unwrapPartialResponse<T extends object>(
+  input: T | ShopifyGraphqlPartialResponse<T>,
 ) {
   if ("data" in input && "errors" in input && "availability" in input) {
     return {
@@ -526,7 +714,11 @@ function summaryQuery(period: string, timeZone: string) {
   return `FROM sessions\nSHOW ${SUMMARY_METRICS}\n${HUMAN_FILTER}\nWITH ${shopifyqlTimeZoneModifier(timeZone)}\n${period}`;
 }
 
-function seriesQuery(dimension: "hour" | "day", period: string, timeZone: string) {
+function seriesQuery(
+  dimension: DashboardTrafficGranularity,
+  period: string,
+  timeZone: string,
+) {
   return `FROM sessions\nSHOW sessions, online_store_visitors, pageviews\n${HUMAN_FILTER}\nTIMESERIES ${dimension} WITH ${shopifyqlTimeZoneModifier(timeZone)}\n${period}\nORDER BY ${dimension} ASC`;
 }
 
@@ -558,7 +750,7 @@ function parseOptionalMetrics(
 
 function parseOptionalPoints(
   result: OptionalShopifyqlResult,
-  dimension: "hour" | "day",
+  dimension: DashboardTrafficGranularity,
 ): DashboardTrafficPoint[] | null {
   const rows = readOptionalRows(result);
   if (!rows) return null;

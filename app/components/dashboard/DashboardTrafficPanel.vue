@@ -9,6 +9,7 @@ import {
   ShoppingCart,
   UsersRound,
 } from "@lucide/vue";
+import ApiLoadingIcon from "~/components/ApiLoadingIcon.vue";
 import type {
   DashboardTrafficBlock,
   DashboardTrafficBreakdown,
@@ -17,6 +18,7 @@ import type {
   DashboardTrafficSummary,
   TrafficDimensionLoadProgress,
 } from "~~/types/dashboard";
+import { DASHBOARD_TRAFFIC_RANGE_DEFINITIONS } from "~~/types/dashboard";
 import { resolveDashboardTrafficRangeData } from "~~/utils/dashboard-traffic";
 
 const props = defineProps<{
@@ -29,6 +31,7 @@ const props = defineProps<{
   fullLoading?: boolean;
   fullLoadProgress?: TrafficDimensionLoadProgress;
   lazyInsightLoading?: boolean;
+  rangeLoading?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -53,26 +56,18 @@ const breakdownOptions = computed(() => [
   { value: "devices" as const, label: t("dashboard.trafficDevices") },
 ]);
 
-const rangeLabel = computed(() => {
-  if (range.value === "24h") return t("dashboard.trafficRange24h");
-  if (range.value === "7d") return t("dashboard.trafficRange7d");
-  return t("dashboard.trafficRange30d");
-});
+const rangeLabel = computed(() =>
+  t(DASHBOARD_TRAFFIC_RANGE_DEFINITIONS[range.value].labelKey),
+);
 const selectedRangeData = computed(() =>
   resolveDashboardTrafficRangeData(props.traffic, range.value),
 );
 
-const trendPoints = computed(() =>
-  range.value === "24h" ? props.traffic.hourly : props.traffic.daily,
+const trendPoints = computed(() => selectedRangeData.value.trend);
+const points = computed(() => trendPoints.value);
+const granularity = computed(
+  () => DASHBOARD_TRAFFIC_RANGE_DEFINITIONS[range.value].granularity,
 );
-const points = computed(() => {
-  const rows = trendPoints.value;
-  if (!rows) return null;
-  if (range.value === "24h") return rows;
-  const daily = rows;
-  return range.value === "7d" ? daily.slice(-7) : daily;
-});
-const granularity = computed(() => (range.value === "24h" ? "hour" : "day"));
 const selectedBreakdownData = computed(() => selectedRangeData.value[breakdown.value]);
 const breakdownRows = computed<DashboardTrafficBreakdown[]>(
   () => selectedBreakdownData.value || [],
@@ -231,6 +226,7 @@ function formatCoverage(reporting: number, total: number) {
             :points="points"
             :range-label="rangeLabel"
             :export-pending="exportPending"
+            :extended-ranges="showInsights"
           />
         </div>
       </template>
@@ -251,8 +247,11 @@ function formatCoverage(reporting: number, total: number) {
         t("dashboard.trafficPermissionHint")
       }}</span>
     </div>
-    <div v-else class="traffic-data-stage" :aria-busy="fullLoading">
-      <div class="traffic-data-content" :class="{ 'is-loading': fullLoading }">
+    <div v-else class="traffic-data-stage" :aria-busy="fullLoading || rangeLoading">
+      <div
+        class="traffic-data-content"
+        :class="{ 'is-loading': fullLoading || rangeLoading }"
+      >
         <div
           v-if="metricsFailed || metricsAvailability === 'partial'"
           class="traffic-query-warning"
@@ -432,8 +431,17 @@ function formatCoverage(reporting: number, total: number) {
           @dimension-change="emit('dimensionChange', { range, dimension: $event })"
         />
       </div>
+      <div
+        v-if="rangeLoading"
+        class="traffic-range-loading"
+        role="status"
+        aria-live="polite"
+      >
+        <ApiLoadingIcon :size="20" aria-hidden="true" />
+        <strong>{{ t("dashboard.trafficRangeLoading", { range: rangeLabel }) }}</strong>
+      </div>
       <DashboardTrafficLoadingOverlay
-        v-if="fullLoading && fullLoadProgress"
+        v-else-if="fullLoading && fullLoadProgress"
         :range-label="rangeLabel"
         :progress="fullLoadProgress"
       />
@@ -485,6 +493,24 @@ function formatCoverage(reporting: number, total: number) {
   user-select: none;
   opacity: 0.28;
   filter: saturate(0.45);
+}
+
+.traffic-range-loading {
+  position: absolute;
+  z-index: 4;
+  top: 48px;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--green) 30%, var(--border));
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-soft);
+  color: var(--green);
+  font-size: 11px;
+  transform: translateX(-50%);
 }
 
 .traffic-unavailable {

@@ -8,9 +8,11 @@ import type {
   TrafficDimensionLoadProgress,
   TrafficDimensionResponse,
   TrafficOverviewResponse,
+  TrafficRangeResponse,
 } from "~~/types/traffic";
 import {
   DASHBOARD_TRAFFIC_DIMENSION_KEYS,
+  DASHBOARD_TRAFFIC_OVERVIEW_RANGES,
   DASHBOARD_TRAFFIC_RANGES,
 } from "~~/types/traffic";
 import {
@@ -24,6 +26,7 @@ interface TrafficStoreCache {
   traffic: TrafficOverviewResponse;
   hasFetched: boolean;
   loadedInsightDimensions: string[];
+  loadedRanges: DashboardTrafficRange[];
 }
 
 const INSIGHT_DIMENSION_COUNT = DASHBOARD_TRAFFIC_DIMENSION_KEYS.length;
@@ -42,6 +45,11 @@ export const useTrafficStore = defineStore("traffic", () => {
   const isLoading = ref(false);
   const loadingInsightDimensions = ref<string[]>([]);
   const loadedInsightDimensions = ref<string[]>([]);
+  const loadedRanges = ref<DashboardTrafficRange[]>([
+    ...DASHBOARD_TRAFFIC_OVERVIEW_RANGES,
+  ]);
+  const isLoadingRange = ref(false);
+  const activeRangeSummary = ref<DashboardTrafficRange | null>(null);
   const isLoadingAllInsights = ref(false);
   const activeFullInsightRange = ref<DashboardTrafficRange | null>(null);
   const trafficInsightProgress = computed<
@@ -78,6 +86,12 @@ export const useTrafficStore = defineStore("traffic", () => {
     controller: AbortController;
     promise: Promise<boolean>;
   } | null = null;
+  let activeRangeRequest: {
+    storeId: string;
+    range: DashboardTrafficRange;
+    controller: AbortController;
+    promise: Promise<boolean>;
+  } | null = null;
   const activeInsightRequests = new Map<
     string,
     {
@@ -98,12 +112,21 @@ export const useTrafficStore = defineStore("traffic", () => {
       traffic: cloneDashboardTraffic(traffic.value),
       hasFetched: hasFetched.value,
       loadedInsightDimensions: [...loadedInsightDimensions.value],
+      loadedRanges: [...loadedRanges.value],
     }),
     restore: (snapshot) => {
       traffic.value = cloneDashboardTraffic(snapshot.traffic);
       hasFetched.value = snapshot.hasFetched;
       loadedInsightDimensions.value = [...(snapshot.loadedInsightDimensions || [])];
+      loadedRanges.value = [
+        ...new Set([
+          ...DASHBOARD_TRAFFIC_OVERVIEW_RANGES,
+          ...(snapshot.loadedRanges || []),
+        ]),
+      ];
       isLoading.value = false;
+      isLoadingRange.value = false;
+      activeRangeSummary.value = null;
       loadingInsightDimensions.value = [];
       abortInsightRequests();
       error.value = null;
@@ -132,6 +155,7 @@ export const useTrafficStore = defineStore("traffic", () => {
       activeOverviewRequest.controller.abort();
     }
 
+    abortRangeRequest();
     abortInsightRequests();
 
     const requestVersion = scopeVersion;
@@ -152,6 +176,7 @@ export const useTrafficStore = defineStore("traffic", () => {
         traffic.value = cloneDashboardTraffic(response);
         hasFetched.value = true;
         loadedInsightDimensions.value = [];
+        loadedRanges.value = [...DASHBOARD_TRAFFIC_OVERVIEW_RANGES];
         loadingInsightDimensions.value = [];
         cache.remember(storeId);
         return true;
@@ -174,6 +199,97 @@ export const useTrafficStore = defineStore("traffic", () => {
       }
     })();
     activeOverviewRequest = { storeId, controller, promise };
+    return promise;
+  }
+
+  async function fetchTrafficRange(
+    storeId: string,
+    token: string,
+    range: DashboardTrafficRange,
+    force = false,
+  ) {
+    if (!storeId || !token) return false;
+
+    cache.activate(storeId);
+    if (!hasFetched.value) return false;
+    if (loadedRanges.value.includes(range) && !force) return true;
+    if (activeRangeRequest) {
+      if (
+        activeRangeRequest.storeId === storeId &&
+        activeRangeRequest.range === range &&
+        !force
+      ) {
+        return activeRangeRequest.promise;
+      }
+      activeRangeRequest.controller.abort();
+    }
+
+    const requestVersion = scopeVersion;
+    const controller = new AbortController();
+    isLoadingRange.value = true;
+    activeRangeSummary.value = range;
+    insightError.value = null;
+
+    const promise = (async () => {
+      try {
+        const response = await $fetch<TrafficRangeResponse>("/api/traffic/range", {
+          method: "POST",
+          body: {
+            storeId,
+            token,
+            range,
+            timeZone: traffic.value.timeZone || undefined,
+            refresh: force,
+          },
+          signal: controller.signal,
+        });
+        if (
+          controller.signal.aborted ||
+          scopeVersion !== requestVersion ||
+          !cache.isActive(storeId)
+        ) {
+          return false;
+        }
+
+        const current = traffic.value.rangeData[response.range];
+        traffic.value = {
+          ...traffic.value,
+          timeZone: response.timeZone || traffic.value.timeZone,
+          rangeData: {
+            ...traffic.value.rangeData,
+            [response.range]: {
+              ...response.data,
+              dimensions: current?.dimensions || {},
+            },
+          },
+        };
+        loadedRanges.value = Array.from(
+          new Set([...loadedRanges.value, response.range]),
+        );
+        cache.remember(storeId);
+        return true;
+      } catch (requestError) {
+        if (
+          !controller.signal.aborted &&
+          scopeVersion === requestVersion &&
+          cache.isActive(storeId)
+        ) {
+          insightError.value = getAppErrorMessage(
+            requestError,
+            localizationStore.t("traffic.errorInsights"),
+          );
+        }
+        return false;
+      } finally {
+        if (activeRangeRequest?.controller === controller) {
+          activeRangeRequest = null;
+          isLoadingRange.value = false;
+          activeRangeSummary.value = null;
+        }
+      }
+    })();
+
+    activeRangeRequest = { storeId, range, controller, promise };
     return promise;
   }
 
@@ -394,6 +510,9 @@ export const useTrafficStore = defineStore("traffic", () => {
     isLoading.value = false;
     loadingInsightDimensions.value = [];
     loadedInsightDimensions.value = [];
+    loadedRanges.value = [...DASHBOARD_TRAFFIC_OVERVIEW_RANGES];
+    isLoadingRange.value = false;
+    activeRangeSummary.value = null;
     isLoadingAllInsights.value = false;
     activeFullInsightRange.value = null;
     activeInsightRequests.clear();
@@ -424,7 +543,15 @@ export const useTrafficStore = defineStore("traffic", () => {
   function abortAllRequests() {
     activeOverviewRequest?.controller.abort();
     activeOverviewRequest = null;
+    abortRangeRequest();
     abortInsightRequests();
+  }
+
+  function abortRangeRequest() {
+    activeRangeRequest?.controller.abort();
+    activeRangeRequest = null;
+    isLoadingRange.value = false;
+    activeRangeSummary.value = null;
   }
 
   return {
@@ -433,6 +560,9 @@ export const useTrafficStore = defineStore("traffic", () => {
     isLoading,
     loadingInsightDimensions,
     loadedInsightDimensions,
+    loadedRanges,
+    isLoadingRange,
+    activeRangeSummary,
     isLoadingAllInsights,
     activeFullInsightRange,
     trafficInsightProgress,
@@ -440,6 +570,7 @@ export const useTrafficStore = defineStore("traffic", () => {
     insightError,
     isStoreActive: cache.isActive,
     fetchTraffic,
+    fetchTrafficRange,
     fetchTrafficDimension,
     fetchTrafficRangeDimensions,
     cancelTrafficDimensionRequests: abortInsightRequests,

@@ -49,6 +49,10 @@ export const TRAFFIC_DIMENSION_CACHE_POLICIES: Record<
   // Day-level ranges are more stable, but still include the current day.
   "7d": { freshForMs: 5 * 60_000, staleForMs: 6 * 60 * 60_000 },
   "30d": { freshForMs: 15 * 60_000, staleForMs: 24 * 60 * 60_000 },
+  "60d": { freshForMs: 15 * 60_000, staleForMs: 24 * 60 * 60_000 },
+  "90d": { freshForMs: 30 * 60_000, staleForMs: 24 * 60 * 60_000 },
+  "6m": { freshForMs: 30 * 60_000, staleForMs: 24 * 60 * 60_000 },
+  "1y": { freshForMs: 60 * 60_000, staleForMs: 48 * 60 * 60_000 },
 };
 
 export class TrafficQueryCache {
@@ -192,6 +196,15 @@ export function buildTrafficDimensionCacheKey(
   timeZone?: string,
 ) {
   return `dimension:${credentialScope(storeId, token)}:${range}:${dimension}:${timeZone || "store"}`;
+}
+
+export function buildTrafficRangeCacheKey(
+  storeId: string,
+  token: string,
+  range: DashboardTrafficRange,
+  timeZone?: string,
+) {
+  return `range:${credentialScope(storeId, token)}:${range}:${timeZone || "store"}`;
 }
 
 function credentialScope(storeId: string, token: string) {
