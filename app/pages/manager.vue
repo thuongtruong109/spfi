@@ -3,9 +3,13 @@ import { ArrowDown, ArrowUp, Pencil, X } from "@lucide/vue";
 import { useCredentialVaultStore } from "~/stores/credentialVault";
 import { useFormStore } from "~/stores/form";
 import type { AddStoreMode } from "~/composables/useAddStoreConnection";
-import type { ShopifyAccessTokenResponse } from "~~/types/shopify";
 import { getAppErrorMessage } from "~~/utils/error";
 import { resolveTokenExpiresAt } from "~~/utils/token-lifecycle";
+import { requestShopifyAccessToken } from "~~/utils/token-request";
+import {
+  acquireTokenRotationLease,
+  releaseTokenRotationLease,
+} from "~~/utils/token-rotation-lease";
 
 definePageMeta({ layout: false });
 
@@ -231,16 +235,18 @@ async function rotateToken(id: string) {
     return;
   }
 
+  if (!acquireTokenRotationLease(id)) {
+    alert("Store này đang được rotate token. Vui lòng đợi thao tác hiện tại hoàn tất.");
+    return;
+  }
+
   rotatingIds.value[id] = true;
   try {
-    const res = await $fetch<ShopifyAccessTokenResponse>("/api/generate-token", {
-      method: "POST",
-      body: {
-        storeId: id,
-        clientId: data.clientId,
-        clientSecret: data.clientSecret,
-        sock: data.sock,
-      },
+    const res = await requestShopifyAccessToken({
+      storeId: id,
+      clientId: data.clientId,
+      clientSecret: data.clientSecret,
+      sock: data.sock,
     });
 
     if (res?.access_token) {
@@ -255,6 +261,7 @@ async function rotateToken(id: string) {
     alert("Rotate failed: " + toUserFriendlyMessage(e));
   } finally {
     rotatingIds.value[id] = false;
+    releaseTokenRotationLease(id);
   }
 }
 

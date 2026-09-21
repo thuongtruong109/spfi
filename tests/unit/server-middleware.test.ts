@@ -139,4 +139,21 @@ describe("rate-limit middleware", () => {
     expect(event.responseHeaders["x-ratelimit-limit"]).toBe("1");
     expect(event.responseHeaders["x-ratelimit-api-limit"]).toBe("20");
   });
+
+  it("uses only the app-wide quota when the token-specific limit is disabled", () => {
+    const event = createEvent({
+      url: "https://app.example/api/generate-token",
+      ip: `203.0.113.${Math.floor(Math.random() * 200) + 1}`,
+      config: {
+        apiRateLimitPerMinute: 20,
+        tokenRateLimitPerMinute: 0,
+        trustProxyHeaders: false,
+      },
+    });
+
+    rateLimitHandler(event as never);
+
+    expect(event.responseHeaders["x-ratelimit-limit"]).toBe("20");
+    expect(event.responseHeaders["x-ratelimit-remaining"]).toBe("19");
+  });
 });

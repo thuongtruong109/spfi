@@ -299,17 +299,19 @@ not repeat network requests. The page also supports store/currency filters,
 debounced search, interactive ranking controls, and CSV, TSV, JSON, or printable
 HTML exports of the current filtered view.
 
-The optional local per-IP limits are disabled by default so they don't reduce
-Shopify throughput. A deployment that exposes the server publicly can enable
-them without changing source code:
+The app-wide local per-IP limit remains enabled by default. The additional
+token-specific limit is disabled because Shopify does not publish a numeric
+limit for the OAuth token endpoint. A deployment can override either policy
+without changing source code:
 
 ```text
 NUXT_API_RATE_LIMIT_PER_MINUTE=600
-NUXT_TOKEN_RATE_LIMIT_PER_MINUTE=10
+NUXT_TOKEN_RATE_LIMIT_PER_MINUTE=0
 ```
 
-These fail-closed defaults apply even when the variables are omitted. Raise
-them deliberately for trusted high-volume deployments.
+Set the token limit to a positive integer only when the deployment needs an
+extra local quota. Token rotation still honors Shopify or local `429` responses
+and their `Retry-After` header.
 
 Forwarded client IP headers are ignored by default. Set
 `NUXT_TRUST_PROXY_HEADERS=true` only behind a trusted reverse proxy that
