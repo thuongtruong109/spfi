@@ -2,6 +2,10 @@ import { google } from "googleapis";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createApiErrorFromMessage } from "./callShopifyApi";
+import {
+  validateGoogleSheetRange,
+  validateGoogleSpreadsheetId,
+} from "./google-sheet-request";
 
 type ServiceAccountFile = {
   client_email?: string;
@@ -16,17 +20,11 @@ export const GOOGLE_SHEET_SCOPES = {
 } as const;
 
 export function requireSpreadsheetId(value?: string) {
-  const spreadsheetId = String(value || "").trim();
-
-  if (!spreadsheetId) {
-    throw createApiErrorFromMessage("Missing spreadsheetId.", 400);
-  }
-
-  return spreadsheetId;
+  return validateGoogleSpreadsheetId(value);
 }
 
 export function resolveSheetRange(value?: string) {
-  return String(value || "").trim() || "A:Z";
+  return validateGoogleSheetRange(value) || "A:Z";
 }
 
 export async function createGoogleSheetsClient(scopes: readonly string[]) {

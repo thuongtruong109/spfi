@@ -5,6 +5,7 @@ import {
   DEFAULT_TOKEN_RATE_LIMIT_PER_MINUTE,
 } from "./server/utils/rate-limit-policy";
 import { readFileSync } from "node:fs";
+import { DEFAULT_WEBHOOK_STREAM_LIMITS } from "./server/utils/webhook-stream-limiter";
 
 const desktopWebviewTargets = JSON.parse(
   readFileSync(
@@ -48,6 +49,10 @@ export default defineNuxtConfig({
     debugProxyAllowedHosts: "httpbin.org,api.ipify.org",
     webhookPublicUrl: "",
     webhookEncryptionKey: "",
+    webhookStreamMaxConnections: DEFAULT_WEBHOOK_STREAM_LIMITS.total,
+    webhookStreamMaxConnectionsPerIp: DEFAULT_WEBHOOK_STREAM_LIMITS.perIp,
+    webhookStreamMaxConnectionsPerShop: DEFAULT_WEBHOOK_STREAM_LIMITS.perShop,
+    webhookStreamMaxLifetimeSeconds: DEFAULT_WEBHOOK_STREAM_LIMITS.maxLifetimeSeconds,
     public: {
       sheetUrls: "",
       masterSheetUrl: "",

@@ -24,8 +24,9 @@ import {
   resolveShopifyWebhookTopic,
   verifyShopifyWebhookHmac,
 } from "~~/server/utils/webhook-verification";
+import { MAX_API_BODY_BYTES } from "~~/server/utils/request-body-limit";
 
-const MAX_WEBHOOK_BODY_BYTES = 2 * 1024 * 1024;
+const MAX_WEBHOOK_BODY_BYTES = MAX_API_BODY_BYTES;
 
 export default defineEventHandler(async (event) => {
   const contentLength = Number(getHeader(event, "content-length") || 0);
@@ -44,7 +45,13 @@ export default defineEventHandler(async (event) => {
   }
 
   const rawBody = await readRawBody(event, false);
-  if (!rawBody || rawBody.length > MAX_WEBHOOK_BODY_BYTES) {
+  if (rawBody && rawBody.length > MAX_WEBHOOK_BODY_BYTES) {
+    throw createError({
+      statusCode: 413,
+      statusMessage: "Webhook payload too large",
+    });
+  }
+  if (!rawBody) {
     throw createError({ statusCode: 400, statusMessage: "Invalid webhook payload" });
   }
 

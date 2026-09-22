@@ -225,6 +225,18 @@ returned as per-store diagnostics instead of generating a burst of development
 error pages; a failed synchronization remains retryable and does not prevent an
 already-registered store from connecting to the local notification stream.
 
+Each process accepts at most 100 live notification streams by default, with
+additional limits of 10 per client IP and 5 per shop. Streams are closed after
+30 minutes and the browser reconnects automatically. These safeguards can be
+tuned without disabling them:
+
+```text
+NUXT_WEBHOOK_STREAM_MAX_CONNECTIONS=100
+NUXT_WEBHOOK_STREAM_MAX_CONNECTIONS_PER_IP=10
+NUXT_WEBHOOK_STREAM_MAX_CONNECTIONS_PER_SHOP=5
+NUXT_WEBHOOK_STREAM_MAX_LIFETIME_SECONDS=1800
+```
+
 Expiring Shopify client-credential tokens rotate automatically in the browser.
 The scheduler derives each deadline from the saved `expiresTime`, refreshes
 before expiry with deterministic jitter, rechecks when the tab becomes visible,
@@ -320,6 +332,9 @@ and their `Retry-After` header.
 Forwarded client IP headers are ignored by default. Set
 `NUXT_TRUST_PROXY_HEADERS=true` only behind a trusted reverse proxy that
 overwrites `X-Forwarded-For`; the bundled nginx and Compose configuration do.
+API request bodies are capped at 2 MiB in both Nitro and the bundled nginx
+proxy. Oversized declared or chunked bodies receive HTTP `413` before route
+logic runs.
 
 Automatic tracking is configured from `/settings`. The app uses Tracktaco API
 v2 on `https://v2.tracktaco.com`: it searches candidate tracking numbers for
@@ -500,6 +515,11 @@ Sheets configuration**. The override is stored only in that browser and is
 used by both the Sheet viewer and Manager credential lookup; “Restore
 deployment defaults” removes it. Sheet IDs and tab names remain browser-visible
 configuration, not a place for secrets.
+
+Write requests are bounded before reaching Google: at most 100 ranges, 10,000
+rows, and 50,000 cells per request; ranges are limited to 512 characters and a
+single string cell to 50,000 characters. Requests above these limits return
+HTTP `413` instead of consuming Google API quota.
 
 Expected header aliases for store auto-fill:
 

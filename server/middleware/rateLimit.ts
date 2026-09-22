@@ -1,12 +1,6 @@
-import {
-  createError,
-  defineEventHandler,
-  getRequestIP,
-  getRequestURL,
-  setResponseHeader,
-  type H3Event,
-} from "h3";
+import { createError, defineEventHandler, getRequestURL, setResponseHeader } from "h3";
 import { useRuntimeConfig } from "#imports";
+import { resolveClientIp } from "../utils/client-ip";
 import { readRuntimeBoolean } from "../utils/runtime-config";
 import {
   classifyApiRateLimitPolicies,
@@ -40,14 +34,6 @@ const state: RateLimitState = {
   },
   lastCleanupAt: Date.now(),
 };
-
-function resolveClientIp(event: H3Event, trustProxyHeaders: boolean): string {
-  return (
-    getRequestIP(event, { xForwardedFor: trustProxyHeaders }) ||
-    event.node.req.socket.remoteAddress ||
-    "unknown"
-  );
-}
 
 function cleanupExpiredEntries(now: number) {
   if (now - state.lastCleanupAt < CLEANUP_INTERVAL_MS) return;

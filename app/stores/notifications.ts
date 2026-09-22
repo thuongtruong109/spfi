@@ -177,8 +177,14 @@ export const useNotificationStore = defineStore("notifications", () => {
         throw new Error(`Notification stream returned HTTP ${response.status}.`);
       }
 
-      await consumeStream(response.body, sequence);
+      const reconnectRequested = await consumeStream(response.body, sequence);
       if (sequence === synchronizationSequence && !streamController.signal.aborted) {
+        if (reconnectRequested) {
+          connectionState.value = "connecting";
+          connectionError.value = "";
+          scheduleStreamReconnect(sequence, 0);
+          return;
+        }
         throw new Error("Notification stream closed unexpectedly.");
       }
     } catch (error) {
@@ -194,6 +200,7 @@ export const useNotificationStore = defineStore("notifications", () => {
     const reader = stream.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let reconnectRequested = false;
 
     try {
       while (sequence === synchronizationSequence) {
@@ -210,12 +217,15 @@ export const useNotificationStore = defineStore("notifications", () => {
             connectionError.value = "";
           } else if (event.event === "notification") {
             receiveNotification(event.data);
+          } else if (event.event === "reconnect") {
+            reconnectRequested = true;
           }
         }
       }
     } finally {
       reader.releaseLock();
     }
+    return reconnectRequested;
   }
 
   function receiveNotification(serialized: string) {
@@ -279,9 +289,9 @@ export const useNotificationStore = defineStore("notifications", () => {
     persistNotifications();
   }
 
-  function scheduleStreamReconnect(sequence: number) {
+  function scheduleStreamReconnect(sequence: number, delayOverride?: number) {
     if (reconnectTimer) clearTimeout(reconnectTimer);
-    const delay = Math.min(30_000, 1_000 * 2 ** reconnectAttempt++);
+    const delay = delayOverride ?? Math.min(30_000, 1_000 * 2 ** reconnectAttempt++);
     reconnectTimer = setTimeout(() => void connectStream(sequence), delay);
   }
 
