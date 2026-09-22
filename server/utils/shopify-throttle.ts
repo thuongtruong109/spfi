@@ -1,9 +1,12 @@
 const SHOPIFY_RECOMMENDED_BACKOFF_MS = 1_000;
+const SHOPIFYQL_FALLBACK_BACKOFF_MS = 60_000;
+const SHOPIFYQL_RESET_BUFFER_MS = 250;
 const THROTTLE_STATE_TTL_MS = 5 * 60_000;
 const REST_BUCKET_DRAIN_SECONDS = 20;
 const REST_BACKOFF_THRESHOLD = 0.8;
 const REST_BACKOFF_TARGET = 0.75;
 export const MAX_SHOPIFY_THROTTLE_WAIT_MS = 30_000;
+export const MAX_SHOPIFYQL_THROTTLE_WAIT_MS = 5 * 60_000;
 
 interface ShopifyThrottleGate {
   blockedUntil: number;
@@ -22,33 +25,54 @@ interface ShopifyGraphqlCost {
   throttleStatus?: ShopifyGraphqlThrottleStatus;
 }
 
+interface ShopifyqlCost {
+  requestedQueryCost?: unknown;
+  maximumAvailable?: unknown;
+  currentlyAvailable?: unknown;
+  windowResetAt?: unknown;
+}
+
+interface ShopifyGraphqlThrottleError {
+  extensions?: Record<string, unknown>;
+}
+
+export interface ShopifyGraphqlThrottleDecision {
+  delayMs: number;
+  scope: "graphql" | "shopifyql";
+}
+
 export interface ShopifyGraphqlExtensions {
   cost?: ShopifyGraphqlCost;
+  shopifyqlCost?: ShopifyqlCost;
   [key: string]: unknown;
 }
 
 const throttleGates = new Map<string, ShopifyThrottleGate>();
 
 export function buildShopifyThrottleKey(
-  surface: "rest" | "graphql",
+  surface: "rest" | "graphql" | "shopifyql",
   domain: string,
   accessToken: string,
 ) {
   return `${surface}:${domain.toLowerCase()}:${accessToken}`;
 }
 
-export async function waitForShopifyThrottle(key: string) {
+export async function waitForShopifyThrottle(key: string, signal?: AbortSignal) {
+  const startedAt = Date.now();
+  let waited = false;
   while (true) {
+    signal?.throwIfAborted();
     const gate = throttleGates.get(key);
-    if (!gate) return;
+    if (!gate) return waited ? Math.max(1, Date.now() - startedAt) : 0;
 
     const delayMs = gate.blockedUntil - Date.now();
     if (delayMs <= 0) {
       throttleGates.delete(key);
-      return;
+      return waited ? Math.max(1, Date.now() - startedAt) : 0;
     }
 
-    await wait(delayMs);
+    waited = true;
+    await wait(delayMs, signal);
   }
 }
 
@@ -81,8 +105,11 @@ export function parseRetryAfterMs(value: unknown, now = Date.now()) {
   return Math.max(1, retryAt - now);
 }
 
-export function capShopifyThrottleDelayMs(delayMs: number) {
-  return Math.min(MAX_SHOPIFY_THROTTLE_WAIT_MS, Math.max(1, Math.ceil(delayMs)));
+export function capShopifyThrottleDelayMs(
+  delayMs: number,
+  maximumMs = MAX_SHOPIFY_THROTTLE_WAIT_MS,
+) {
+  return Math.min(maximumMs, Math.max(1, Math.ceil(delayMs)));
 }
 
 export function parseShopifyRestCallLimit(value: unknown) {
@@ -125,21 +152,74 @@ export function getGraphqlThrottleDelayMs(
   extensions?: ShopifyGraphqlExtensions,
   retryAfter?: unknown,
 ) {
-  const headerDelay = parseRetryAfterMs(retryAfter);
-  if (headerDelay !== null) return headerDelay;
+  return getGraphqlThrottleDecision({ extensions, retryAfter }).delayMs;
+}
 
-  const cost = extensions?.cost;
+export function getGraphqlThrottleDecision(input: {
+  extensions?: ShopifyGraphqlExtensions;
+  errors?: ShopifyGraphqlThrottleError[];
+  retryAfter?: unknown;
+  shopifyqlOperation?: boolean;
+  now?: number;
+}): ShopifyGraphqlThrottleDecision {
+  const now = input.now ?? Date.now();
+  const candidates: ShopifyGraphqlThrottleDecision[] = [];
+  const headerDelay = parseRetryAfterMs(input.retryAfter, now);
+  if (headerDelay !== null) {
+    candidates.push({
+      delayMs: headerDelay,
+      scope: input.shopifyqlOperation ? "shopifyql" : "graphql",
+    });
+  }
+
+  const shopifyqlDelay = getShopifyqlThrottleDelayMs(
+    input.extensions,
+    input.errors,
+    now,
+  );
+  if (shopifyqlDelay !== null) {
+    candidates.push({ delayMs: shopifyqlDelay, scope: "shopifyql" });
+  }
+
+  const cost = input.extensions?.cost;
   const status = cost?.throttleStatus;
   const requested = toFiniteNumber(cost?.requestedQueryCost);
   const available = toFiniteNumber(status?.currentlyAvailable);
   const restoreRate = toFiniteNumber(status?.restoreRate);
 
   if (restoreRate !== null && restoreRate > 0) {
-    const deficit = Math.max(1, (requested ?? 1) - (available ?? 0));
-    return Math.max(1, Math.ceil((deficit / restoreRate) * 1_000));
+    const deficit = (requested ?? 1) - (available ?? 0);
+    if (deficit > 0) {
+      candidates.push({
+        delayMs: Math.max(1, Math.ceil((deficit / restoreRate) * 1_000)),
+        scope: "graphql",
+      });
+    }
   }
 
-  return SHOPIFY_RECOMMENDED_BACKOFF_MS;
+  if (!candidates.length) {
+    return input.shopifyqlOperation
+      ? { delayMs: SHOPIFYQL_FALLBACK_BACKOFF_MS, scope: "shopifyql" }
+      : { delayMs: SHOPIFY_RECOMMENDED_BACKOFF_MS, scope: "graphql" };
+  }
+
+  return candidates.reduce((longest, candidate) =>
+    candidate.delayMs > longest.delayMs ? candidate : longest,
+  );
+}
+
+export function getShopifyqlBudgetDelayMs(
+  extensions?: ShopifyGraphqlExtensions,
+  now = Date.now(),
+) {
+  const cost = extensions?.shopifyqlCost;
+  if (!cost) return null;
+
+  const requested = toFiniteNumber(cost.requestedQueryCost);
+  const available = toFiniteNumber(cost.currentlyAvailable);
+  if (requested === null || available === null || available >= requested) return null;
+
+  return getShopifyqlWindowResetDelayMs(cost, now);
 }
 
 export function isGraphqlThrottled(
@@ -173,6 +253,19 @@ export function getGraphqlCostSummary(extensions?: ShopifyGraphqlExtensions) {
   };
 }
 
+export function getShopifyqlCostSummary(extensions?: ShopifyGraphqlExtensions) {
+  const cost = extensions?.shopifyqlCost;
+  if (!cost) return null;
+
+  const windowResetAt = String(cost.windowResetAt || "").trim();
+  return {
+    requestedQueryCost: toFiniteNumber(cost.requestedQueryCost),
+    maximumAvailable: toFiniteNumber(cost.maximumAvailable),
+    currentlyAvailable: toFiniteNumber(cost.currentlyAvailable),
+    windowResetAt: windowResetAt || null,
+  };
+}
+
 function cleanupThrottleGates(now: number) {
   for (const [key, gate] of throttleGates) {
     if (gate.blockedUntil <= now && now - gate.touchedAt >= THROTTLE_STATE_TTL_MS) {
@@ -181,11 +274,55 @@ function cleanupThrottleGates(now: number) {
   }
 }
 
+function getShopifyqlThrottleDelayMs(
+  extensions: ShopifyGraphqlExtensions | undefined,
+  errors: ShopifyGraphqlThrottleError[] | undefined,
+  now: number,
+) {
+  const costs: ShopifyqlCost[] = [];
+  if (extensions?.shopifyqlCost) costs.push(extensions.shopifyqlCost);
+
+  for (const error of errors || []) {
+    const errorCost = error.extensions?.cost;
+    if (isRecord(errorCost) && "windowResetAt" in errorCost) {
+      costs.push(errorCost);
+    }
+  }
+
+  const delays = costs
+    .map((cost) => getShopifyqlWindowResetDelayMs(cost, now))
+    .filter((delay): delay is number => delay !== null);
+  return delays.length ? Math.max(...delays) : null;
+}
+
+function getShopifyqlWindowResetDelayMs(cost: ShopifyqlCost, now: number) {
+  const resetAt = Date.parse(String(cost.windowResetAt || "").trim());
+  if (!Number.isFinite(resetAt)) return null;
+  return Math.max(1, resetAt - now + SHOPIFYQL_RESET_BUFFER_MS);
+}
+
 function toFiniteNumber(value: unknown) {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : null;
 }
 
-function wait(delayMs: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function wait(delayMs: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(finish, delayMs);
+    const abort = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+      reject(signal?.reason || new DOMException("Aborted", "AbortError"));
+    };
+    function finish() {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }
+
+    signal?.addEventListener("abort", abort, { once: true });
+  });
 }

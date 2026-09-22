@@ -96,6 +96,28 @@ describe("rate limit store", () => {
     expect(store.graphqlCosts["shop-19"]).toBeDefined();
   });
 
+  it("tracks cache reuse, throttle queue latency, and API error rate", () => {
+    const store = useRateLimitStore();
+    store.recordOperationalResponse(
+      new Headers({
+        "x-spf-cache-status": "miss",
+        "x-spf-shopify-queue-latency-ms": "120",
+      }),
+      false,
+    );
+    store.recordOperationalResponse(
+      new Headers({
+        "x-spf-cache-status": "hit",
+        "x-spf-shopify-queue-latency-ms": "80",
+      }),
+      true,
+    );
+
+    expect(store.cacheHitRatio).toBe(50);
+    expect(store.averageQueueLatencyMs).toBe(100);
+    expect(store.errorRate).toBe(50);
+  });
+
   it("shows a compact request row and opens both quota meters in a popover", async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
@@ -107,6 +129,13 @@ describe("rate limit store", () => {
       Date.now() + 1_000,
       "shop-a",
       1,
+    );
+    store.recordOperationalResponse(
+      new Headers({
+        "x-spf-cache-status": "hit",
+        "x-spf-shopify-queue-latency-ms": "25",
+      }),
+      false,
     );
 
     const wrapper = mount(RateLimitQuota, {
@@ -132,6 +161,9 @@ describe("rate limit store", () => {
     expect(detail?.textContent).toContain("300 / 600 requests");
     expect(detail?.textContent).toContain("GraphQL cost");
     expect(detail?.textContent).toContain("500 / 1,000 points");
+    expect(detail?.textContent).toContain("Cache hit ratio");
+    expect(detail?.textContent).toContain("100%");
+    expect(detail?.textContent).toContain("25 ms");
     expect(detail?.querySelectorAll(".quota-progress")).toHaveLength(2);
 
     await wrapper.setProps({ collapsed: true });

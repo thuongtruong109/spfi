@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Boxes, Globe2 } from "@lucide/vue";
+import { ChartLine, Globe2 } from "@lucide/vue";
 import type { StoreTab } from "~~/types/store";
 
 defineProps<{
@@ -38,6 +38,17 @@ function selectTab(tab: StoreTab) {
     </button>
     <button
       class="tab-btn"
+      :class="{ active: activeTab === 'traffic' }"
+      type="button"
+      role="tab"
+      :aria-selected="activeTab === 'traffic'"
+      @click="selectTab('traffic')"
+    >
+      <ChartLine />
+      {{ t("store.tabTraffic") }}
+    </button>
+    <button
+      class="tab-btn"
       :class="{ active: activeTab === 'transactions' }"
       type="button"
       role="tab"
@@ -58,7 +69,7 @@ function selectTab(tab: StoreTab) {
       <IconsRefresh />
       {{ t("store.tabPayouts") }}
     </button>
-    <!-- <button
+    <button
       class="tab-btn"
       :class="{ active: activeTab === 'disputes' }"
       type="button"
@@ -68,7 +79,7 @@ function selectTab(tab: StoreTab) {
     >
       <IconsCheck />
       {{ t("store.tabDisputes") }}
-    </button> -->
+    </button>
     <button
       class="tab-btn"
       :class="{ active: activeTab === 'orders' }"
@@ -90,17 +101,6 @@ function selectTab(tab: StoreTab) {
     >
       <IconsBulking />
       {{ t("store.tabProducts") }}
-    </button>
-    <button
-      class="tab-btn"
-      :class="{ active: activeTab === 'collections' }"
-      type="button"
-      role="tab"
-      :aria-selected="activeTab === 'collections'"
-      @click="selectTab('collections')"
-    >
-      <Boxes aria-hidden="true" />
-      {{ t("store.tabCollections") }}
     </button>
     <button
       class="tab-btn"
@@ -143,9 +143,8 @@ function selectTab(tab: StoreTab) {
 .table-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
-  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
   background: linear-gradient(180deg, var(--surface), var(--surface-low));
 }

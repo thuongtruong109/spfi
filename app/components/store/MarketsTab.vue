@@ -3,7 +3,6 @@ import {
   ArrowUpRight,
   CircleDollarSign,
   Globe2,
-  LoaderCircle,
   MapPinned,
   Plus,
   Search,
@@ -13,6 +12,7 @@ import {
   Truck,
 } from "@lucide/vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import ApiLoadingIcon from "~/components/ApiLoadingIcon.vue";
 import { useActiveShopAuth } from "~/composables/useActiveShopAuth";
 import { useMarketStore } from "~/stores/market";
 import MarketCreateModal from "./MarketCreateModal.vue";
@@ -426,7 +426,8 @@ async function removeMarket(market: ShopifyMarketSummary) {
         @update:model-value="conditionFilter = $event as ConditionFilter"
       />
       <span v-if="marketStore.isFiltering" class="markets-filter-progress">
-        <LoaderCircle class="spin" /> {{ t("markets.filtering") }}
+        <ApiLoadingIcon variant="section" aria-hidden="true" />
+        {{ t("markets.filtering") }}
       </span>
     </div>
 
@@ -442,7 +443,7 @@ async function removeMarket(market: ShopifyMarketSummary) {
       class="markets-empty"
       aria-live="polite"
     >
-      <LoaderCircle class="spin" />
+      <ApiLoadingIcon variant="section" aria-hidden="true" />
       {{ t("common.loading") }}
     </div>
     <div
@@ -538,9 +539,9 @@ async function removeMarket(market: ShopifyMarketSummary) {
         <details @toggle="handleMarketDetailsToggle($event, market.id)">
           <summary>
             {{ t("markets.details") }}
-            <LoaderCircle
+            <ApiLoadingIcon
               v-if="marketStore.loadingMarketDetails.includes(market.id)"
-              class="spin"
+              variant="section"
               aria-hidden="true"
             />
           </summary>
@@ -561,7 +562,7 @@ async function removeMarket(market: ShopifyMarketSummary) {
             class="market-detail-message"
             role="status"
           >
-            <LoaderCircle class="spin" aria-hidden="true" />
+            <ApiLoadingIcon variant="section" aria-hidden="true" />
             {{ t("common.loading") }}
           </div>
           <div v-else class="market-detail-grid">

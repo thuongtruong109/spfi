@@ -28,6 +28,7 @@ export function useDashboardExport() {
               userCount: dashboard.userCount,
               pendingFulfillmentCount: dashboard.pendingFulfillmentCount,
               payments: dashboard.payments,
+              traffic: dashboard.traffic,
             },
             stores: dashboard.stores,
             failures: dashboard.failures,
@@ -85,6 +86,13 @@ function buildStoreRows(dashboard: DashboardAggregate) {
     month_transactions: store.payments.transactions.count,
     pending_payouts: store.payments.payouts.pendingCount,
     users: store.users.length,
+    sessions_today: store.traffic.today?.sessions ?? null,
+    visitors_today: store.traffic.today?.visitors ?? null,
+    pageviews_today: store.traffic.today?.pageviews ?? null,
+    sessions_7_days: store.traffic.last7Days?.sessions ?? null,
+    visitors_7_days: store.traffic.last7Days?.visitors ?? null,
+    sessions_30_days: store.traffic.last30Days?.sessions ?? null,
+    visitors_30_days: store.traffic.last30Days?.visitors ?? null,
     warnings: store.warnings.map((warning) => warning.message).join(" | "),
     generated_at: store.generatedAt,
   }));
@@ -105,6 +113,8 @@ function buildHtmlReport(
         <td>${row.month_orders}</td>
         <td>${row.pending_fulfillments}</td>
         <td>${row.customers}</td>
+        <td>${row.sessions_today}</td>
+        <td>${row.visitors_today}</td>
         <td>${escapeHtml(row.payment_balance)}</td>
         <td>${row.users}</td>
       </tr>`,
@@ -133,9 +143,9 @@ function buildHtmlReport(
     <div class="metric"><span>Revenue today</span><strong>${escapeHtml(moneyText(dashboard.revenue.today))}</strong></div>
     <div class="metric"><span>Revenue month</span><strong>${escapeHtml(moneyText(dashboard.revenue.month))}</strong></div>
     <div class="metric"><span>Pending fulfillment</span><strong>${dashboard.pendingFulfillmentCount}</strong></div>
-    <div class="metric"><span>Customers</span><strong>${dashboard.customerCount}</strong></div>
+    <div class="metric"><span>Sessions today</span><strong>${dashboard.traffic.today?.sessions ?? "—"}</strong></div>
   </section>
-  <table><thead><tr><th>Store</th><th>Today</th><th>Month</th><th>Orders</th><th>Pending</th><th>Customers</th><th>Balance</th><th>Users</th></tr></thead><tbody>${tableRows}</tbody></table>
+  <table><thead><tr><th>Store</th><th>Today</th><th>Month</th><th>Orders</th><th>Pending</th><th>Customers</th><th>Sessions</th><th>Visitors</th><th>Balance</th><th>Users</th></tr></thead><tbody>${tableRows}</tbody></table>
 </main></body></html>`;
 }
 

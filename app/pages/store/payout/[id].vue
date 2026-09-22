@@ -1,8 +1,12 @@
 <template>
   <NuxtLayout name="shop">
     <template #title>
-      <div v-if="currentPayout" class="breadcrumb">
-        <NuxtLink to="/store" class="breadcrumb-back">
+      <div v-if="currentPayout && canDisplayPayout" class="breadcrumb">
+        <NuxtLink
+          :to="payoutsRoute"
+          class="breadcrumb-back"
+          :aria-label="t('payment.payouts')"
+        >
           <svg
             width="16"
             height="16"
@@ -10,24 +14,20 @@
             fill="none"
             stroke="currentColor"
             stroke-width="2.5"
+            aria-hidden="true"
           >
             <path d="M13 4l-6 6 6 6" />
           </svg>
         </NuxtLink>
         <span class="page-title">{{ t("payment.payoutDetails") }}</span>
-        <span
-          class="badge"
-          :class="currentPayout.status === 'paid' ? 'badge-paid' : ''"
-        >
-          {{
-            currentPayout.status === "paid"
-              ? t("payment.deposited")
-              : formatPaymentLabel(currentPayout.status)
-          }}
-        </span>
+        <PaymentStatusBadge :status="currentPayout.status" />
       </div>
       <div v-else class="breadcrumb">
-        <NuxtLink to="/store" class="breadcrumb-back">
+        <NuxtLink
+          :to="payoutsRoute"
+          class="breadcrumb-back"
+          :aria-label="t('payment.payouts')"
+        >
           <svg
             width="16"
             height="16"
@@ -35,6 +35,7 @@
             fill="none"
             stroke="currentColor"
             stroke-width="2.5"
+            aria-hidden="true"
           >
             <path d="M13 4l-6 6 6 6" />
           </svg>
@@ -44,22 +45,61 @@
     </template>
 
     <section class="page">
-      <div v-if="paymentStore.isLoading" class="empty">
+      <div
+        v-if="
+          payoutDetailState.status === 'idle' ||
+          (payoutDetailState.status === 'loading' && !currentPayout)
+        "
+        class="empty"
+        role="status"
+      >
         {{ t("payment.loadingPayoutDetails") }}
       </div>
-      <div v-else-if="!currentPayout" class="empty">
-        {{ t("payment.payoutNotFound") }}
-      </div>
+      <PayoutDataIssue
+        v-else-if="payoutDetailState.status === 'not-found'"
+        :title="t('payment.payoutNotFound')"
+        :retryable="false"
+      />
+      <PayoutDataIssue
+        v-else-if="payoutDetailState.status === 'unauthorized'"
+        :title="t('payment.payoutUnauthorizedTitle')"
+        :message="
+          payoutDetailState.detailError || t('payment.payoutUnauthorizedDescription')
+        "
+        :loading="paymentStore.isLoadingPayoutDetail"
+        @retry="retryPayoutDetail"
+      />
+      <PayoutDataIssue
+        v-else-if="payoutDetailState.status === 'error' || !currentPayout"
+        :title="t('payment.payoutLoadFailedTitle')"
+        :message="
+          payoutDetailState.detailError || t('payment.payoutLoadFailedDescription')
+        "
+        :loading="paymentStore.isLoadingPayoutDetail"
+        @retry="retryPayoutDetail"
+      />
       <div v-else class="screen">
         <div class="page-header" style="justify-content: flex-end">
-          <button class="btn btn-secondary" type="button" @click="exportTransactions">
-            <Download />
-            {{ t("payment.export") }}
-          </button>
+          <CsvExportButton
+            resource="payments"
+            :filters="{ payout_id: payoutId }"
+            :label="t('payment.export')"
+          />
         </div>
 
         <!-- Overview Card -->
         <div class="card">
+          <PayoutDataIssue
+            v-if="payoutDetailState.metadataError"
+            compact
+            :title="t('payment.payoutMetadataFailedTitle')"
+            :message="
+              payoutDetailState.metadataError ||
+              t('payment.payoutMetadataFailedDescription')
+            "
+            :loading="paymentStore.isLoadingPayoutDetail"
+            @retry="retryPayoutDetail"
+          />
           <div class="overview-card">
             <div class="overview-left">
               <div class="overview-label">{{ t("payment.total") }}</div>
@@ -114,7 +154,6 @@
               >
                 <span class="summary-label">
                   {{ row.label }}
-                  <span v-if="row.chevron" class="chevron-icon">▾</span>
                 </span>
                 <span class="summary-value" :class="{ neg: row.neg }">{{
                   row.value
@@ -139,100 +178,130 @@
               {{ option.label }}
             </button>
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th aria-sort="descending">{{ t("payment.date") }}</th>
-                <th>{{ t("payment.order") }}</th>
-                <th>{{ t("payment.type") }}</th>
-                <th>{{ t("payment.paymentMethod") }}</th>
-                <th class="right">{{ t("payment.amount") }}</th>
-                <th class="right">{{ t("payment.fee") }}</th>
-                <th class="right">{{ t("payment.net") }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="tx in displayedPayoutTransactions" :key="tx.id">
-                <td class="td-date">{{ fmtDate(tx.processed_at) }}</td>
-                <td class="td-order">
-                  <NuxtLink
-                    v-if="tx.source_order_id"
-                    class="link"
-                    :to="`/order/${tx.source_order_id}`"
-                  >
-                    {{ getOrderName(tx) }}
-                  </NuxtLink>
-                  <span v-else>—</span>
-                </td>
-                <td class="td-type">
-                  <strong>{{ formatPaymentLabel(tx.type) }}</strong>
-                  <small v-if="tx.source_type">
-                    {{
-                      t("payment.source", {
-                        type: formatPaymentLabel(tx.source_type),
-                      })
-                    }}
-                  </small>
-                  <details
-                    v-if="tx.adjustment_order_transactions.length"
-                    class="adjustment-orders"
-                  >
-                    <summary>
+          <PayoutDataIssue
+            v-if="payoutDetailState.transactionsError"
+            compact
+            :title="t('payment.payoutTransactionsFailedTitle')"
+            :message="
+              payoutDetailState.transactionsError ||
+              t('payment.payoutTransactionsFailedDescription')
+            "
+            :loading="paymentStore.isLoadingPayoutDetail"
+            @retry="retryPayoutTransactions"
+          />
+          <PaymentTableScroll :label="t('payment.transactions')">
+            <table>
+              <thead>
+                <tr>
+                  <th aria-sort="descending">{{ t("payment.date") }}</th>
+                  <th>{{ t("payment.order") }}</th>
+                  <th>{{ t("payment.type") }}</th>
+                  <th>{{ t("payment.paymentMethod") }}</th>
+                  <th class="right">{{ t("payment.amount") }}</th>
+                  <th class="right">{{ t("payment.fee") }}</th>
+                  <th class="right">{{ t("payment.net") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="tx in displayedPayoutTransactions" :key="tx.id">
+                  <td class="td-date">{{ fmtDate(tx.processed_at) }}</td>
+                  <td class="td-order">
+                    <NuxtLink
+                      v-if="tx.source_order_id"
+                      class="link"
+                      :to="`/order/${tx.source_order_id}`"
+                    >
+                      {{ getOrderName(tx) }}
+                    </NuxtLink>
+                    <span v-else>—</span>
+                  </td>
+                  <td class="td-type">
+                    <strong>{{ formatPaymentLabel(tx.type) }}</strong>
+                    <small v-if="tx.source_type">
                       {{
-                        t("payment.adjustedOrders", {
-                          count: tx.adjustment_order_transactions.length,
-                          label:
-                            tx.adjustment_order_transactions.length === 1
-                              ? t("payment.orderSingular")
-                              : t("payment.orderPlural"),
+                        t("payment.source", {
+                          type: formatPaymentLabel(tx.source_type),
                         })
                       }}
-                    </summary>
-                    <div
-                      v-for="adjustment in tx.adjustment_order_transactions"
-                      :key="adjustment.id"
+                    </small>
+                    <details
+                      v-if="getAdjustmentOrderTransactions(tx).length"
+                      class="adjustment-orders"
                     >
-                      <NuxtLink
-                        v-if="adjustment.order.id"
-                        :to="`/order/${adjustment.order.id}`"
+                      <summary>
+                        {{
+                          t("payment.adjustedOrders", {
+                            count: getAdjustmentOrderTransactions(tx).length,
+                            label:
+                              getAdjustmentOrderTransactions(tx).length === 1
+                                ? t("payment.orderSingular")
+                                : t("payment.orderPlural"),
+                          })
+                        }}
+                      </summary>
+                      <div
+                        v-for="adjustment in getAdjustmentOrderTransactions(tx)"
+                        :key="adjustment.id"
                       >
-                        {{ adjustment.order.name }}
-                      </NuxtLink>
-                      <span v-else>{{ adjustment.order.name }}</span>
-                    </div>
-                  </details>
-                </td>
-                <td>
-                  <span class="payment-method">
-                    <span class="card-brand">{{
-                      tx.type === "charge" ? t("payment.card") : "—"
-                    }}</span>
-                  </span>
-                </td>
-                <td class="right td-amount">
-                  {{ formatMoney(tx.amount, tx.currency) }}
-                  <span class="chevron-sm">▾</span>
-                </td>
-                <td class="right td-fee">
-                  <template v-if="parseFloat(tx.fee)">
-                    {{ formatMoney(tx.fee, tx.currency) }}
-                    <span class="chevron-sm">▾</span>
-                  </template>
-                  <template v-else>—</template>
-                </td>
-                <td class="right td-net">
-                  {{ formatMoney(tx.net, tx.currency) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div v-if="displayedPayoutTransactions.length === 0" class="empty">
+                        <NuxtLink
+                          v-if="adjustment.order.id"
+                          :to="`/order/${adjustment.order.id}`"
+                        >
+                          {{ adjustment.order.name }}
+                        </NuxtLink>
+                        <span v-else>{{ adjustment.order.name }}</span>
+                      </div>
+                    </details>
+                  </td>
+                  <td>
+                    <span>—</span>
+                  </td>
+                  <td class="right td-amount">
+                    {{ formatMoney(tx.amount, tx.currency) }}
+                  </td>
+                  <td class="right td-fee">
+                    <template v-if="hasNonZeroAmount(tx.fee)">
+                      {{ formatMoney(tx.fee, tx.currency) }}
+                    </template>
+                    <template v-else>—</template>
+                  </td>
+                  <td class="right td-net">
+                    {{ formatMoney(tx.net, tx.currency) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </PaymentTableScroll>
+          <div
+            v-if="
+              displayedPayoutTransactions.length === 0 &&
+              paymentStore.isLoadingPayoutDetail
+            "
+            class="empty"
+            role="status"
+          >
+            {{ t("payment.loadingPayoutTransactions") }}
+          </div>
+          <div
+            v-else-if="
+              displayedPayoutTransactions.length === 0 &&
+              !payoutDetailState.transactionsError
+            "
+            class="empty"
+          >
             {{ t("payment.noTransactionsForPayout") }}
           </div>
-          <div class="pagination">
-            <button class="pag-btn" disabled>&#8592;</button>
-            <button class="pag-btn" disabled>&#8594;</button>
-          </div>
+          <PaginationControls
+            v-if="currentPayoutTransactions.length || payoutPageInfo.hasNextPage"
+            :page="currentPage"
+            :page-size="pageSize"
+            :total-items="filteredPayoutTransactions.length"
+            :has-next-page="currentPage < totalPages || payoutPageInfo.hasNextPage"
+            :loading="paymentStore.isLoadingPayoutDetail"
+            :item-label="t('payment.transactions')"
+            @update:page="changePage"
+            @update:page-size="updatePageSize"
+          />
         </div>
       </div>
     </section>
@@ -240,70 +309,111 @@
 </template>
 
 <script setup lang="ts">
-import { Download } from "@lucide/vue";
-import { computed, onMounted, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import PaymentStatusBadge from "~/components/payment/StatusBadge.vue";
+import PaymentTableScroll from "~/components/payment/TableScroll.vue";
+import { useActiveShopAuth } from "~/composables/useActiveShopAuth";
 import { useLocalization } from "~/composables/useLocalization";
-import { useStoreFeedback } from "~/composables/useStoreFeedback";
-import { useCredentialVaultStore } from "~/stores/credentialVault";
-import { useFormStore } from "../../../stores/form";
+import type { MessageKey } from "~/locales/messages";
+import { buildPayoutsRoute } from "~/utils/payment-routes";
 import type { Transaction } from "../../../stores/payment";
 import { usePaymentStore } from "../../../stores/payment";
-import { resolveStoreAccessToken } from "~~/utils/shop-auth";
+import type { PayoutDetailLoadState } from "~~/types/shopify-payment";
+import { compareDecimalStrings } from "~~/utils/decimal-string";
+import { getAdjustmentOrderTransactions } from "~~/utils/payment-transactions";
+import {
+  buildPayoutSummaryContributions,
+  type PayoutSummaryCategory,
+} from "~~/utils/payout-summary";
 
 definePageMeta({ layout: false });
 
 const route = useRoute();
-const formStore = useFormStore();
 const paymentStore = usePaymentStore();
-const credentialVault = useCredentialVaultStore();
-const feedback = useStoreFeedback();
+const { storeId, token } = useActiveShopAuth();
 const { locale, t } = useLocalization();
 const { formatPaymentLabel } = useShopifyPaymentLabel();
 const transactionTypeFilter = ref<"all" | "charge">("all");
+const currentPage = ref(1);
+const pageSize = ref(50);
 
-const payoutId = String(
-  Array.isArray(route.params.id) ? route.params.id[0] : route.params.id || "",
-).trim();
+const payoutId = computed(() =>
+  String(
+    Array.isArray(route.params.id) ? route.params.id[0] : route.params.id || "",
+  ).trim(),
+);
+const payoutsRoute = computed(() => buildPayoutsRoute(route.query));
 
-onMounted(() => {
-  if (formStore.storeId && payoutId) {
-    const token = resolveToken(formStore.storeId);
-    if (token) {
-      paymentStore.fetchPayoutDetail(formStore.storeId, token, payoutId, false);
-      paymentStore.fetchPaymentsAccount(formStore.storeId, token);
-    }
-  }
-});
-
-function resolveToken(sid: string): string | null {
-  return resolveStoreAccessToken(credentialVault.getStoreData(sid)) || null;
-}
+const payoutDetailState = computed<PayoutDetailLoadState>(
+  () =>
+    paymentStore.payoutDetailStates[payoutId.value] || {
+      status: "idle",
+      detailError: null,
+      metadataError: null,
+      transactionsError: null,
+    },
+);
 
 const currentPayout = computed(
   () =>
-    paymentStore.payoutDetails[String(payoutId)] ||
-    paymentStore.payouts.find((p) => String(p.id) === payoutId) ||
+    paymentStore.payoutDetails[payoutId.value] ||
+    paymentStore.payouts.find((p) => String(p.id) === payoutId.value) ||
     null,
 );
 
+const canDisplayPayout = computed(
+  () =>
+    Boolean(currentPayout.value) &&
+    ["loading", "success", "partial"].includes(payoutDetailState.value.status),
+);
+
 const currentPayoutMetadata = computed(
-  () => paymentStore.payoutMetadata[String(payoutId)] || null,
+  () => paymentStore.payoutMetadata[payoutId.value] || null,
 );
 
 const currentPayoutTransactions = computed(() => {
-  if (!payoutId) return [];
+  if (!payoutId.value) return [];
   return paymentStore
-    .getTransactionsForPayout(payoutId)
+    .getTransactionsForPayout(payoutId.value)
     .filter((t) => t.type !== "payout");
 });
 
-const displayedPayoutTransactions = computed(() =>
+const filteredPayoutTransactions = computed(() =>
   transactionTypeFilter.value === "charge"
     ? currentPayoutTransactions.value.filter(
         (transaction) => transaction.type === "charge",
       )
     : currentPayoutTransactions.value,
+);
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(filteredPayoutTransactions.value.length / pageSize.value)),
+);
+const displayedPayoutTransactions = computed(() => {
+  const safePage = Math.min(currentPage.value, totalPages.value);
+  const start = (safePage - 1) * pageSize.value;
+  return filteredPayoutTransactions.value.slice(start, start + pageSize.value);
+});
+const payoutPageInfo = computed(
+  () =>
+    paymentStore.payoutDetailPageInfo[payoutId.value] || {
+      hasNextPage: false,
+      hasPreviousPage: false,
+      nextCursor: null,
+      previousCursor: null,
+    },
+);
+
+// Fetching is owned by the shop layout after it synchronizes the selected shop.
+// Invalidate pending pagination even if navigation later returns to the same ID.
+let paginationVersion = 0;
+watch(
+  [payoutId, storeId, transactionTypeFilter, pageSize],
+  () => {
+    paginationVersion += 1;
+    currentPage.value = 1;
+  },
+  { flush: "sync" },
 );
 
 const transactionFilterOptions = computed<
@@ -313,53 +423,29 @@ const transactionFilterOptions = computed<
   { label: t("payment.charge"), value: "charge" },
 ]);
 
+const payoutSummaryLabels = {
+  charges: "payment.charges",
+  refunds: "payment.refunds",
+  adjustments: "payment.adjustments",
+  advances: "payment.advances",
+  reservedFunds: "payment.reservedFunds",
+  retriedPayouts: "payment.retriedPayouts",
+  usdcRebateCredit: "payment.usdcRebateCredit",
+  fees: "payment.fee",
+} as const satisfies Record<PayoutSummaryCategory, MessageKey>;
+
 const currentPayoutSummaryRows = computed<
-  Array<{ label: string; value: string; neg: boolean; chevron?: boolean }>
+  Array<{ label: string; value: string; neg: boolean }>
 >(() => {
   if (!currentPayout.value || !currentPayout.value.summary) return [];
-  const s = currentPayout.value.summary;
   const currency = currentPayout.value.currency;
-
-  const charges = parseFloat(s.charges_gross_amount || "0");
-  const refunds = parseFloat(s.refunds_gross_amount || "0");
-  const adjustments = parseFloat(s.adjustments_gross_amount || "0");
-
-  const fees =
-    parseFloat(s.charges_fee_amount || "0") +
-    parseFloat(s.refunds_fee_amount || "0") +
-    parseFloat(s.adjustments_fee_amount || "0");
-
-  const rows = [];
-  if (charges) {
-    rows.push({
-      label: t("payment.charges"),
-      value: formatMoney(String(charges), currency),
-      neg: false,
-    });
-  }
-  if (refunds) {
-    rows.push({
-      label: t("payment.refunds"),
-      value: formatMoney(String(-Math.abs(refunds)), currency),
-      neg: true,
-    });
-  }
-  if (adjustments) {
-    rows.push({
-      label: t("payment.adjustments"),
-      value: formatMoney(String(adjustments), currency),
-      neg: adjustments < 0,
-    });
-  }
-  if (fees) {
-    rows.push({
-      label: t("payment.fee"),
-      value: formatMoney(String(-Math.abs(fees)), currency),
-      neg: true,
-      chevron: true,
-    });
-  }
-  return rows;
+  return buildPayoutSummaryContributions(currentPayout.value.summary).map(
+    (contribution) => ({
+      label: t(payoutSummaryLabels[contribution.category]),
+      value: formatMoney(contribution.amount, currency),
+      neg: contribution.negative,
+    }),
+  );
 });
 
 // ── Helpers ──────────────────────────────────────────────
@@ -379,361 +465,63 @@ function getOrderName(tx: Transaction) {
   return `#${tx.source_order_id}`;
 }
 
-function exportTransactions() {
-  if (!currentPayout.value) {
-    feedback.warning(t("payment.payoutExportNotReady"));
-    return;
-  }
-
-  const rows = displayedPayoutTransactions.value.map((transaction) => [
-    transaction.id,
-    transaction.processed_at,
-    getOrderName(transaction) || "",
-    transaction.type,
-    transaction.currency,
-    transaction.amount,
-    transaction.fee,
-    transaction.net,
-  ]);
-  const csv = [
-    ["id", "processed_at", "order", "type", "currency", "amount", "fee", "net"],
-    ...rows,
-  ]
-    .map((row) => row.map(formatCsvCell).join(","))
-    .join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `payout-${currentPayout.value.id}-transactions.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-  feedback.success(t("payment.payoutTransactionsExported"));
+function hasNonZeroAmount(amount: string) {
+  return compareDecimalStrings(amount || "0", "0") !== 0;
 }
 
-function formatCsvCell(value: unknown) {
-  const text = String(value ?? "");
-  const safeText = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
-  return `"${safeText.replace(/"/g, '""')}"`;
+function updatePageSize(size: number) {
+  pageSize.value = size;
+  currentPage.value = 1;
+}
+
+async function changePage(page: number) {
+  if (page <= totalPages.value) {
+    currentPage.value = Math.max(1, page);
+    return;
+  }
+  if (!payoutPageInfo.value.hasNextPage || !payoutId.value) return;
+  const requestVersion = paginationVersion;
+  await paymentStore.fetchMorePayoutTransactions(
+    storeId.value,
+    token.value,
+    payoutId.value,
+  );
+  if (requestVersion !== paginationVersion) return;
+  if (!payoutDetailState.value.transactionsError) {
+    currentPage.value = Math.min(page, totalPages.value);
+  }
+}
+
+function retryPayoutDetail() {
+  if (!payoutId.value) return;
+  return paymentStore.fetchPayoutDetail(
+    storeId.value,
+    token.value,
+    payoutId.value,
+    true,
+  );
+}
+
+function retryPayoutTransactions() {
+  if (!payoutId.value) return;
+  return paymentStore.retryPayoutTransactions(
+    storeId.value,
+    token.value,
+    payoutId.value,
+  );
 }
 
 function formatMoney(amount: string, currency: string) {
-  const numericAmount = Number(amount || 0);
+  const numericAmount = (amount || "0") as `${number}`;
   try {
     return new Intl.NumberFormat(locale.value, {
       style: "currency",
       currency,
     }).format(numericAmount);
   } catch {
-    return `${numericAmount.toFixed(2)} ${currency}`;
+    return `${numericAmount} ${currency}`;
   }
 }
 </script>
 
-<style scoped>
-.screen {
-  display: block;
-  animation: fadeIn 0.18s ease;
-}
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.breadcrumb-back {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  background: var(--surface, #fff);
-  border: 1px solid var(--border, #e5e5e5);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.15s;
-  color: var(--text-primary, #1a1a1a);
-}
-.breadcrumb-back:hover {
-  background: var(--surface-soft);
-}
-.page-title {
-  font-size: 1.2rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.6;
-}
-.badge-deposited,
-.badge-paid {
-  background: var(--green-soft);
-  color: var(--green);
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  transition: all 0.15s;
-}
-.btn svg {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 15px;
-}
-.btn-secondary {
-  background: var(--surface, #fff);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-}
-.btn-secondary:hover {
-  background: var(--surface-soft);
-}
-
-.card {
-  background: var(--surface, #fff);
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
-  margin-bottom: 16px;
-}
-
-.overview-card {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-.overview-left {
-  padding: 20px 24px;
-  border-right: 1px solid var(--border, #e5e5e5);
-}
-.overview-right {
-  padding: 20px 24px;
-}
-.overview-label {
-  font-size: 13px;
-  color: var(--text-sub);
-  margin-bottom: 4px;
-}
-.overview-amount {
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.5px;
-  color: var(--text);
-}
-.overview-currency {
-  font-size: 28px;
-  font-weight: 300;
-  color: var(--text-sub);
-  margin-left: 4px;
-}
-.overview-provider {
-  font-size: 13px;
-  color: var(--text-sub);
-  margin-top: 6px;
-}
-.overview-meta {
-  display: flex;
-  gap: 40px;
-  margin-top: 16px;
-}
-.meta-item label {
-  font-size: 11px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  display: block;
-  margin-bottom: 2px;
-  font-weight: 400;
-}
-.meta-item span {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-}
-.trace-id {
-  overflow-wrap: anywhere;
-  font-family: var(--font-mono);
-  font-size: 11px !important;
-}
-.text-muted {
-  color: var(--text-muted) !important;
-}
-
-.summary-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-sub);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 12px;
-}
-.summary-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 0;
-  font-size: 14px;
-}
-.summary-row:not(:last-child) {
-  border-bottom: 1px solid var(--border);
-}
-.summary-label {
-  color: var(--text-sub);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.summary-value {
-  font-weight: 600;
-  color: var(--text);
-}
-.summary-value.neg {
-  color: var(--red);
-}
-
-.table-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border, #e5e5e5);
-}
-.tab-btn {
-  padding: 5px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  background: transparent;
-  color: var(--text-sub);
-}
-.tab-btn.active {
-  background: var(--surface-soft);
-  color: var(--text);
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-thead th {
-  padding: 10px 16px;
-  text-align: left;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-sub);
-  border-bottom: 1px solid var(--border, #e5e5e5);
-}
-thead th.right {
-  text-align: right;
-}
-tbody tr {
-  border-bottom: 1px solid var(--border, #e5e5e5);
-  transition: background 0.12s;
-}
-tbody tr:hover {
-  background: var(--surface-soft);
-}
-td {
-  padding: 12px 16px;
-  font-size: 13px;
-  color: var(--text);
-}
-td.right {
-  text-align: right;
-}
-.td-date {
-  color: var(--text-sub);
-}
-.td-type strong,
-.td-type small {
-  display: block;
-}
-.td-type small {
-  margin-top: 2px;
-  color: var(--text-sub);
-  font-size: 10px;
-}
-.adjustment-orders {
-  margin-top: 5px;
-  font-size: 10px;
-}
-.adjustment-orders summary {
-  color: var(--text-link);
-  cursor: pointer;
-}
-.td-order a {
-  color: var(--text-link);
-  font-weight: 500;
-}
-.card-brand {
-  display: inline-flex;
-  align-items: center;
-  background: var(--blue);
-  color: var(--on-accent) !important;
-  font-size: 9px;
-  font-weight: 600;
-  padding: 2px 5px;
-  border-radius: 3px;
-  text-transform: uppercase;
-}
-.td-fee {
-  color: var(--red);
-}
-.empty {
-  text-align: center;
-  padding: 32px;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-.pagination {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--border, #e5e5e5);
-}
-.pag-btn {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  border: 1px solid var(--border, #e5e5e5);
-  background: transparent;
-  color: var(--text-sub);
-}
-</style>
+<style scoped src="../../../assets/styles/pages/payout-detail.css"></style>

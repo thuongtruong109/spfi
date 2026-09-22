@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { AlertTriangle, Home, RotateCcw } from "@lucide/vue";
+import type { Pinia } from "pinia";
+import { computed, getCurrentInstance } from "vue";
+import { defaultMessages, type MessageKey } from "~/locales/messages";
+import { useLocalizationStore } from "~/stores/localization";
 
 const props = defineProps<{
   error?: {
@@ -14,7 +18,11 @@ defineEmits<{
   home: [];
 }>();
 
-const { t } = useLocalization();
+// This component must also render when app initialization fails before Pinia exists.
+const pinia = getCurrentInstance()?.appContext.config.globalProperties.$pinia as
+  Pinia | undefined;
+const localization = pinia ? useLocalizationStore(pinia) : null;
+const t = (key: MessageKey) => localization?.t(key) || defaultMessages[key] || key;
 const statusCode = computed(() => Number(props.error?.statusCode) || 500);
 const message = computed(() => {
   const publicMessage = String(props.error?.statusMessage || "").trim();

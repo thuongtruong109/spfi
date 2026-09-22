@@ -26,10 +26,11 @@ const { t } = useLocalization();
         store.loadingResources.includes('abandonedCheckouts') &&
         !store.abandonedCheckouts.length
       "
-      class="ops-empty"
+      class="ops-empty is-loading"
       role="status"
     >
-      {{ t("operations.checkout.loading") }}
+      <ApiLoadingIcon variant="section" aria-hidden="true" />
+      <span>{{ t("operations.checkout.loading") }}</span>
     </div>
     <div v-else-if="store.abandonedCheckouts.length" class="ops-table-scroll">
       <table class="ops-table">

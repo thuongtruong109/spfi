@@ -1,11 +1,15 @@
 <script lang="ts" setup>
-import { ArrowDown, ArrowUp, X } from "@lucide/vue";
+import { ArrowDown, ArrowUp, Pencil, X } from "@lucide/vue";
 import { useCredentialVaultStore } from "~/stores/credentialVault";
 import { useFormStore } from "~/stores/form";
 import type { AddStoreMode } from "~/composables/useAddStoreConnection";
-import type { ShopifyAccessTokenResponse } from "~~/types/shopify";
 import { getAppErrorMessage } from "~~/utils/error";
 import { resolveTokenExpiresAt } from "~~/utils/token-lifecycle";
+import { requestShopifyAccessToken } from "~~/utils/token-request";
+import {
+  acquireTokenRotationLease,
+  releaseTokenRotationLease,
+} from "~~/utils/token-rotation-lease";
 
 definePageMeta({ layout: false });
 
@@ -31,10 +35,6 @@ const proxyResults = ref<
   Record<string, { success: boolean; ip?: string; duration?: number; error?: string }>
 >({});
 const addStoreMode = ref<AddStoreMode>("single");
-
-function setAddStoreMode(mode: AddStoreMode) {
-  addStoreMode.value = mode;
-}
 
 // ── Search and Sort state ──────────────────────────────────────────────────
 const searchQuery = ref("");
@@ -168,8 +168,7 @@ async function deleteStore(id: string) {
     return;
   }
 
-  formStore.removeKnownStore(id);
-  credentialVault.removeStoreData(id);
+  await formStore.removeKnownStore(id);
 }
 
 // ── Edit store ───────────────────────────────────────────────────────────────
@@ -188,7 +187,8 @@ function openEditModal(id: string) {
   editDomain.value = data.domain || "";
   editSock.value = data.sock || "";
   editClientId.value = data.clientId || "";
-  editClientSecret.value = data.clientSecret || "";
+  // Never inject an existing secret into the DOM. A blank value keeps it unchanged.
+  editClientSecret.value = "";
   editError.value = "";
   showEditModal.value = true;
 }
@@ -209,7 +209,8 @@ async function saveEditedStore() {
   const id = editingStoreId.value;
   const previous = credentialVault.getStoreData(id);
 
-  if (!editClientId.value.trim() || !editClientSecret.value.trim()) {
+  const nextClientSecret = editClientSecret.value.trim();
+  if (!editClientId.value.trim() || (!nextClientSecret && !previous.clientSecret)) {
     editError.value = "Client ID và Client Secret không được để trống.";
     return;
   }
@@ -219,7 +220,7 @@ async function saveEditedStore() {
     domain: editDomain.value.trim(),
     sock: editSock.value.trim(),
     clientId: editClientId.value.trim(),
-    clientSecret: editClientSecret.value.trim(),
+    clientSecret: nextClientSecret || previous.clientSecret,
   });
 
   feedback.success(`Store \"${id}\" updated successfully.`);
@@ -235,16 +236,18 @@ async function rotateToken(id: string) {
     return;
   }
 
+  if (!acquireTokenRotationLease(id)) {
+    alert("Store này đang được rotate token. Vui lòng đợi thao tác hiện tại hoàn tất.");
+    return;
+  }
+
   rotatingIds.value[id] = true;
   try {
-    const res = await $fetch<ShopifyAccessTokenResponse>("/api/generate-token", {
-      method: "POST",
-      body: {
-        storeId: id,
-        clientId: data.clientId,
-        clientSecret: data.clientSecret,
-        sock: data.sock,
-      },
+    const res = await requestShopifyAccessToken({
+      storeId: id,
+      clientId: data.clientId,
+      clientSecret: data.clientSecret,
+      sock: data.sock,
     });
 
     if (res?.access_token) {
@@ -259,6 +262,7 @@ async function rotateToken(id: string) {
     alert("Rotate failed: " + toUserFriendlyMessage(e));
   } finally {
     rotatingIds.value[id] = false;
+    releaseTokenRotationLease(id);
   }
 }
 
@@ -319,28 +323,7 @@ function getProxyCheckErrorMessage(error?: ProxyCheckError) {
       <IconsBulking />
     </template>
     <template #actions>
-      <div class="mode-toggle" role="group" :aria-label="t('store.addMode')">
-        <BaseButton
-          :variant="addStoreMode === 'single' ? 'secondary' : 'ghost'"
-          class="toggle-btn"
-          :class="{ active: addStoreMode === 'single' }"
-          :aria-pressed="addStoreMode === 'single'"
-          @click="setAddStoreMode('single')"
-        >
-          <template #icon><IconsCheck /></template>
-          {{ t("store.single") }}
-        </BaseButton>
-        <BaseButton
-          :variant="addStoreMode === 'bulking' ? 'secondary' : 'ghost'"
-          class="toggle-btn"
-          :class="{ active: addStoreMode === 'bulking' }"
-          :aria-pressed="addStoreMode === 'bulking'"
-          @click="setAddStoreMode('bulking')"
-        >
-          <template #icon><IconsBulking /></template>
-          {{ t("store.bulk") }}
-        </BaseButton>
-      </div>
+      <StoreAddModeToggle v-model="addStoreMode" />
     </template>
     <div class="token-page">
       <!-- ── Add new store ── -->
@@ -469,29 +452,50 @@ function getProxyCheckErrorMessage(error?: ProxyCheckError) {
           </div>
           <div class="store-actions">
             <BaseButton
+              class="store-action-button"
               :disabled="testingProxies[store.id]"
+              :aria-label="testingProxies[store.id] ? 'Testing proxy' : 'Check proxy'"
+              :title="testingProxies[store.id] ? 'Testing proxy' : 'Check proxy'"
               @click="testProxy(store.id)"
             >
               <template #icon>
                 <IconsSync v-if="testingProxies[store.id]" />
                 <IconsCheck v-else />
               </template>
-              {{ testingProxies[store.id] ? "Testing…" : "Check" }}
+              <span class="store-action-label">
+                {{ testingProxies[store.id] ? "Testing…" : "Check" }}
+              </span>
             </BaseButton>
             <BaseButton
+              class="store-action-button"
               :disabled="rotatingIds[store.id]"
+              :aria-label="rotatingIds[store.id] ? 'Rotating token' : 'Rotate token'"
+              :title="rotatingIds[store.id] ? 'Rotating token' : 'Rotate token'"
               @click="rotateToken(store.id)"
             >
               <template #icon><IconsSync /></template>
-              {{ rotatingIds[store.id] ? "Rotating…" : "Rotate" }}
+              <span class="store-action-label">
+                {{ rotatingIds[store.id] ? "Rotating…" : "Rotate" }}
+              </span>
             </BaseButton>
-            <BaseButton @click="openEditModal(store.id)">
-              <template #icon><IconsMore /></template>
-              Edit
+            <BaseButton
+              class="store-action-button"
+              aria-label="Edit store"
+              title="Edit store"
+              @click="openEditModal(store.id)"
+            >
+              <template #icon><Pencil aria-hidden="true" /></template>
+              <span class="store-action-label">Edit</span>
             </BaseButton>
-            <BaseButton variant="danger-ghost" @click="deleteStore(store.id)">
+            <BaseButton
+              class="store-action-button"
+              variant="danger-ghost"
+              aria-label="Delete store"
+              title="Delete store"
+              @click="deleteStore(store.id)"
+            >
               <template #icon><IconsDelete /></template>
-              Delete
+              <span class="store-action-label">Delete</span>
             </BaseButton>
           </div>
         </div>
@@ -542,7 +546,10 @@ function getProxyCheckErrorMessage(error?: ProxyCheckError) {
             </div>
             <div class="field field-1">
               <label class="field-label">Client Secret</label>
-              <input v-model="editClientSecret" type="text" class="inp" />
+              <BaseSecretInput
+                v-model="editClientSecret"
+                placeholder="Leave blank to keep the existing secret"
+              />
             </div>
           </div>
 

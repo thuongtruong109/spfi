@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import { Filter, RotateCcw } from "@lucide/vue";
 import { computed, ref, watch } from "vue";
+import PaymentStatusBadge from "~/components/payment/StatusBadge.vue";
+import PaymentTableScroll from "~/components/payment/TableScroll.vue";
 import { useActiveShopAuth } from "~/composables/useActiveShopAuth";
 import { useLocalization } from "~/composables/useLocalization";
 import { useStoreFeedback } from "~/composables/useStoreFeedback";
 import { usePaymentStore } from "~/stores/payment";
+import { buildPayoutDetailRoute } from "~/utils/payment-routes";
 import type {
   ShopifyPayoutFilters,
   ShopifyPayoutStatus,
 } from "~~/types/shopify-payment";
-import { capitalize, fmtDate } from "~~/helpers";
+import { fmtDate } from "~~/helpers";
 
 const paymentStore = usePaymentStore();
-const router = useRouter();
+const route = useRoute();
 const { storeId, token, isReady } = useActiveShopAuth();
 const feedback = useStoreFeedback();
 const { locale, t } = useLocalization();
@@ -82,16 +85,11 @@ async function applyFilters(
     feedback.warning(t("payment.credentialsRequired"));
     return;
   }
-  const filters: ShopifyPayoutFilters = {
-    ...(status.value ? { status: status.value } : {}),
-    ...(date.value ? { date: date.value } : {}),
-    ...(dateMin.value ? { date_min: dateMin.value } : {}),
-    ...(dateMax.value ? { date_max: dateMax.value } : {}),
-    ...(sinceId.value ? { since_id: sinceId.value } : {}),
-    ...(lastId.value ? { last_id: lastId.value } : {}),
-  };
+  const filters = buildFilters();
   currentPage.value = 1;
-  await paymentStore.fetchPayouts(storeId.value, token.value, filters);
+  await paymentStore.fetchPayouts(storeId.value, token.value, filters, {
+    force: true,
+  });
   feedback.requestResult({
     errorMessage: paymentStore.error,
     successMessage,
@@ -99,6 +97,17 @@ async function applyFilters(
       resource: t("payment.payouts"),
     }),
   });
+}
+
+function buildFilters(): ShopifyPayoutFilters {
+  return {
+    ...(status.value ? { status: status.value } : {}),
+    ...(date.value ? { date: date.value } : {}),
+    ...(dateMin.value ? { date_min: dateMin.value } : {}),
+    ...(dateMax.value ? { date_max: dateMax.value } : {}),
+    ...(sinceId.value ? { since_id: sinceId.value } : {}),
+    ...(lastId.value ? { last_id: lastId.value } : {}),
+  };
 }
 
 async function resetFilters() {
@@ -115,20 +124,8 @@ async function resetFilters() {
   );
 }
 
-function getPayoutProcessedDate(payoutId: string | number) {
-  const transactions = paymentStore.transactionsByPayout[String(payoutId)] || [];
-  const charge = transactions.find((transaction) => transaction.type === "charge");
-  return charge ? fmtDate(charge.processed_at) : "—";
-}
-
 function getPayoutMetadata(payoutId: string | number) {
   return paymentStore.payoutMetadata[String(payoutId)] || null;
-}
-
-function statusBadge(statusValue: string) {
-  if (statusValue === "paid") return "badge-paid";
-  if (statusValue === "in_transit") return "badge-in-transit";
-  return "badge-pending";
 }
 
 function formatMoney(amount: string, currency: string) {
@@ -143,13 +140,19 @@ function formatMoney(amount: string, currency: string) {
   }
 }
 
-function openPayoutDetail(payoutId: string | number) {
-  router.push(`/store/payout/${payoutId}`);
-}
-
 function updatePageSize(size: number) {
   pageSize.value = size;
   currentPage.value = 1;
+}
+
+async function changePage(page: number) {
+  if (page <= totalPages.value) {
+    currentPage.value = Math.max(1, page);
+    return;
+  }
+  if (!paymentStore.payoutPageInfo.hasNextPage) return;
+  await paymentStore.fetchMorePayouts(storeId.value, token.value, buildFilters());
+  if (!paymentStore.error) currentPage.value = Math.min(page, totalPages.value);
 }
 </script>
 
@@ -219,60 +222,62 @@ function updatePageSize(size: number) {
       </template>
     </PaymentFilterPanel>
 
-    <table>
-      <thead>
-        <tr>
-          <th aria-sort="descending">{{ t("payment.payoutDate") }}</th>
-          <th>{{ t("payment.status") }}</th>
-          <th>{{ t("payment.direction") }}</th>
-          <th>{{ t("payment.businessEntity") }}</th>
-          <th>{{ t("payment.bankTrace") }}</th>
-          <th>{{ t("payment.transactionDate") }}</th>
-          <th class="right">{{ t("payment.amount") }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          v-for="payout in paginatedPayouts"
-          :key="payout.id"
-          @click="openPayoutDetail(payout.id)"
-        >
-          <td class="td-date">{{ fmtDate(payout.date) }}</td>
-          <td>
-            <span class="badge" :class="statusBadge(payout.status)">
+    <PaymentTableScroll :label="t('payment.payouts')">
+      <table>
+        <thead>
+          <tr>
+            <th aria-sort="descending">{{ t("payment.payoutDate") }}</th>
+            <th>{{ t("payment.status") }}</th>
+            <th>{{ t("payment.direction") }}</th>
+            <th>{{ t("payment.businessEntity") }}</th>
+            <th>{{ t("payment.bankTrace") }}</th>
+            <th class="right">{{ t("payment.amount") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="payout in paginatedPayouts" :key="payout.id">
+            <td class="td-date">
+              <NuxtLink
+                class="payout-link"
+                :to="buildPayoutDetailRoute(payout.id, route.query, storeId)"
+                :aria-label="`${t('payment.payoutDetails')} #${payout.id}, ${fmtDate(payout.date)}`"
+              >
+                {{ fmtDate(payout.date) }}
+              </NuxtLink>
+            </td>
+            <td>
+              <PaymentStatusBadge :status="payout.status" />
+            </td>
+            <td>
               {{
-                payout.status === "paid"
-                  ? t("payment.deposited")
-                  : capitalize(payout.status)
+                formatPaymentLabel(getPayoutMetadata(payout.id)?.transactionType) || "—"
               }}
-            </span>
-          </td>
-          <td>
-            {{
-              formatPaymentLabel(getPayoutMetadata(payout.id)?.transactionType) || "—"
-            }}
-          </td>
-          <td>
-            {{ getPayoutMetadata(payout.id)?.businessEntity.displayName || "—" }}
-          </td>
-          <td class="trace-id">
-            {{ getPayoutMetadata(payout.id)?.externalTraceId || "—" }}
-          </td>
-          <td class="td-date">{{ getPayoutProcessedDate(payout.id) }}</td>
-          <td class="right td-net">
-            {{ formatMoney(payout.amount, payout.currency) }}
-          </td>
-        </tr>
-      </tbody>
-    </table>
+            </td>
+            <td>
+              {{ getPayoutMetadata(payout.id)?.businessEntity.displayName || "—" }}
+            </td>
+            <td class="trace-id">
+              {{ getPayoutMetadata(payout.id)?.externalTraceId || "—" }}
+            </td>
+            <td class="right td-net">
+              {{ formatMoney(payout.amount, payout.currency) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </PaymentTableScroll>
 
     <PaginationControls
-      v-if="sortedPayouts.length"
+      v-if="sortedPayouts.length || paymentStore.payoutPageInfo.hasNextPage"
       :page="currentPage"
       :page-size="pageSize"
       :total-items="sortedPayouts.length"
+      :has-next-page="
+        currentPage < totalPages || paymentStore.payoutPageInfo.hasNextPage
+      "
+      :loading="paymentStore.isLoadingPayouts"
       :item-label="t('payment.payouts')"
-      @update:page="currentPage = $event"
+      @update:page="changePage"
       @update:page-size="updatePageSize"
     />
     <div v-else class="empty">{{ t("payment.noPayouts") }}</div>
@@ -280,6 +285,32 @@ function updatePageSize(size: number) {
 </template>
 
 <style scoped>
+.payouts-tab {
+  min-width: 0;
+}
+
+.payouts-tab tbody tr {
+  cursor: default;
+}
+
+.payout-link {
+  display: inline-block;
+  padding: 4px 0;
+  color: var(--text-link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.payout-link:focus-visible {
+  outline: 2px solid var(--text-link);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.payouts-tab tbody tr:focus-within {
+  background: var(--surface-soft);
+}
+
 .td-date {
   color: var(--text-secondary);
   white-space: nowrap;

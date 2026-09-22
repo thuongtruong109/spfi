@@ -1,32 +1,33 @@
 <script lang="ts" setup>
 import { ArrowLeftToLine, ArrowRightToLine, Search, X } from "@lucide/vue";
+import type { AddStoreMode } from "~/composables/useAddStoreConnection";
 import { useStoreTabData } from "~/composables/useStoreTabData";
 import { useCredentialVaultStore } from "~/stores/credentialVault";
-import { useCollectionStore } from "~/stores/collection";
 import { useMarketStore } from "~/stores/market";
 import { resolveStoreTab } from "~~/types/store";
 import { resolveStoreAccessToken } from "~~/utils/shop-auth";
 import { useLoading } from "../composables/useLoading";
-import { useCustomerStore } from "../stores/customers";
 import { useCommerceOpsStore } from "../stores/commerceOps";
+import { useCustomerStore } from "../stores/customers";
 import { useFormStore } from "../stores/form";
 import { useOrderStore } from "../stores/order";
 import { usePaymentStore } from "../stores/payment";
 import { useProductStore } from "../stores/product";
 import { useShopProfileStore } from "../stores/shopProfile";
+import { useTrafficStore } from "../stores/traffic";
 
 const formStore = useFormStore();
 const { t } = useLocalization();
 const { requestConfirmation } = useConfirmDialog();
 const credentialVault = useCredentialVaultStore();
 const customerStore = useCustomerStore();
-const collectionStore = useCollectionStore();
 const marketStore = useMarketStore();
 const commerceOpsStore = useCommerceOpsStore();
 const paymentStore = usePaymentStore(); // Moved up and ensured it's available
 const orderStore = useOrderStore();
 const productStore = useProductStore();
 const shopProfileStore = useShopProfileStore();
+const trafficStore = useTrafficStore();
 const route = useRoute();
 const router = useRouter();
 const { hydrateStoreData, loadStoreTabData } = useStoreTabData();
@@ -35,6 +36,7 @@ const { loading: globalLoading } = useLoading();
 const isLayoutActive = ref(true);
 const hasSkippedInitialActivation = ref(false);
 const isSidebarCollapsed = ref(false);
+const addStoreMode = ref<AddStoreMode>("single");
 
 onMounted(() => {
   isSidebarCollapsed.value = localStorage.getItem("spf-sidebar-collapsed") === "true";
@@ -74,19 +76,10 @@ const isFetching = computed(() => {
     if (route.query.tab === "markets") {
       return marketStore.isLoading || marketStore.isMutating || marketStore.isResolving;
     }
+    if (route.query.tab === "traffic") return trafficStore.isLoading;
     if (route.query.tab === "profile") {
       return (
         shopProfileStore.isLoading || paymentStore.isLoading || orderStore.isLoading
-      );
-    }
-    if (
-      route.query.tab === "collections" ||
-      (route.query.tab === "products" && route.query.resource === "collections")
-    ) {
-      return (
-        collectionStore.isLoading ||
-        collectionStore.isLoadingDetail ||
-        collectionStore.isMutating
       );
     }
     if (route.query.tab === "products") return productStore.isLoading;
@@ -104,23 +97,6 @@ const isFetching = computed(() => {
 
 const noStores = computed(() => formStore.knownStores.length === 0);
 
-// Auto-fetch when switching between Order/Payment tabs
-watch(
-  () => route.path,
-  (newPath) => {
-    if (!isLayoutActive.value) return;
-
-    if (
-      newPath.startsWith("/order") ||
-      newPath.startsWith("/store") ||
-      newPath === "/customer" ||
-      newPath === "/profile"
-    ) {
-      fetchCurrent();
-    }
-  },
-);
-
 watch(
   isFetching,
   (val) => {
@@ -134,15 +110,12 @@ watch(
   { immediate: false },
 );
 
-// Sync shop from URL query changes (e.g. forward/backward or manual entry)
-watch(
-  () => route.query.shop,
-  () => {
-    if (!isLayoutActive.value) return;
+// Own route-scoped fetching so shop selection is synchronized before a request starts.
+watch([() => route.path, () => getRouteShop()], () => {
+  if (!isLayoutActive.value) return;
 
-    syncShopFromRoute(true);
-  },
-);
+  syncShopFromRoute(true);
+});
 
 // ── Shop selector ────────────────────────────────────────────────────────────
 function getRouteShop() {
@@ -161,14 +134,18 @@ function syncShopFromRoute(shouldFetch = false) {
   if (!queryShop) {
     queryShop = formStore.storeId || "";
     if (!queryShop) return;
-    router.replace({ query: { ...route.query, shop: queryShop } });
   }
 
   const didChangeShop = formStore.storeId !== queryShop;
-  formStore.setActiveStore(queryShop);
-
   if (didChangeShop) {
+    // Prepare every scoped cache before synchronous store-id watchers can fetch.
     hydrateStoreData(queryShop);
+  }
+  void formStore.setActiveStore(queryShop).catch(reportVaultError);
+
+  if (!getRouteShop()) {
+    void router.replace({ query: { ...route.query, shop: queryShop } });
+    return;
   }
 
   if (shouldFetch) {
@@ -184,13 +161,12 @@ function onSelectStore(id: string) {
     return;
   }
 
-  formStore.setActiveStore(id);
+  // Prepare scoped caches before synchronous store-id watchers can fetch.
+  hydrateStoreData(id);
+  void formStore.setActiveStore(id).catch(reportVaultError);
 
   // Sync URL query param
   router.replace({ query: { ...route.query, shop: id } });
-
-  // Hydrate cached data for quick switch, fallback to reset
-  hydrateStoreData(id);
 }
 
 // ── Resolve valid token for current storeId ──────────────────────────────────
@@ -206,11 +182,7 @@ function fetchCurrent(force = false) {
 
   if (route.path === "/store") {
     if (force) {
-      void loadStoreTabData(
-        resolveStoreTab(route.query.tab, route.query.resource),
-        sid,
-        true,
-      );
+      void loadStoreTabData(resolveStoreTab(route.query.tab), sid, true);
     }
     return;
   }
@@ -220,7 +192,13 @@ function fetchCurrent(force = false) {
   if (!token) {
     const msg = "Token expired or missing. Please go to Token page.";
     if (route.path === "/order") orderStore.error = msg;
-    if (route.path.startsWith("/store")) paymentStore.error = msg;
+    if (route.path.startsWith("/store")) {
+      paymentStore.error = msg;
+      const payoutMatch = route.path.match(/\/store\/payout\/(\d+)/);
+      if (payoutMatch?.[1]) {
+        void paymentStore.fetchPayoutDetail(sid, "", payoutMatch[1]);
+      }
+    }
     if (route.path === "/customer") customerStore.error = msg;
     if (route.path === "/profile") shopProfileStore.error = msg;
     return;
@@ -243,7 +221,7 @@ function fetchCurrent(force = false) {
   } else if (route.path.startsWith("/store/payout/")) {
     const idMatch = route.path.match(/\/store\/payout\/(\d+)/);
     if (idMatch && idMatch[1]) {
-      paymentStore.fetchPayoutDetail(sid, token, idMatch[1], force);
+      void paymentStore.fetchPayoutDetail(sid, token, idMatch[1], force);
     }
   } else if (route.path === "/customer") {
     if (force || !customerStore.hasFetchedAll) {
@@ -299,8 +277,15 @@ async function deleteStoreOption(id: string) {
   ) {
     return;
   }
-  formStore.removeKnownStore(id);
-  credentialVault.removeStoreData(id);
+  await formStore.removeKnownStore(id);
+}
+
+function reportVaultError(error: unknown) {
+  console.error(
+    error instanceof Error
+      ? error.message
+      : "The encrypted credential vault could not be updated.",
+  );
 }
 </script>
 
@@ -326,6 +311,16 @@ async function deleteStoreOption(id: string) {
           </span>
         </div>
         <div class="sidebar-overview-actions">
+          <BaseButton
+            class="sidebar-add-store"
+            variant="secondary"
+            icon-only
+            aria-label="Add new store"
+            title="Add new store"
+            @click="isAddModalOpen = true"
+          >
+            <template #icon><IconsAdd /></template>
+          </BaseButton>
           <BaseButton
             class="sidebar-toggle"
             variant="ghost"
@@ -434,13 +429,14 @@ async function deleteStoreOption(id: string) {
             title="Refresh data for current store"
             :loading="isFetching"
             @click="fetchCurrent(true)"
-            iconOnly
           >
             <template #icon>
               <IconsRefresh />
             </template>
+            {{ isFetching ? t("common.loading") : t("common.refresh") }}
           </BaseButton>
           <BaseButton
+            v-if="noStores"
             variant="primary"
             title="Add new store"
             @click="isAddModalOpen = true"
@@ -466,12 +462,10 @@ async function deleteStoreOption(id: string) {
         class="modal-card add-store-modal"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="add-store-modal-title"
+        :aria-label="t('store.connectNew')"
       >
         <div class="modal-head add-store-modal-head">
-          <h3 id="add-store-modal-title" class="modal-title">
-            {{ t("store.connectNew") }}
-          </h3>
+          <StoreAddModeToggle v-model="addStoreMode" />
           <BaseButton
             variant="ghost"
             icon-only
@@ -484,7 +478,9 @@ async function deleteStoreOption(id: string) {
         </div>
         <div class="modal-body add-store-modal-body">
           <StoreAddStoreForm
+            v-model:mode="addStoreMode"
             show-cancel
+            :show-mode-toggle="false"
             @cancel="isAddModalOpen = false"
             @connected="isAddModalOpen = false"
           />

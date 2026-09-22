@@ -106,7 +106,8 @@ onMounted(() => {
             }}</BaseButton>
           </template>
           <template v-else>
-            <IconsSync class="spin" />{{ t("markets.editor.loadingWorkspace") }}
+            <ApiLoadingIcon variant="section" aria-hidden="true" />
+            {{ t("markets.editor.loadingWorkspace") }}
           </template>
         </div>
         <div v-else class="market-editor-layout">
@@ -145,7 +146,8 @@ onMounted(() => {
               >
             </div>
             <div v-else-if="!context" class="market-editor-loading">
-              <IconsSync class="spin" />{{ t("markets.editor.loadingWorkspace") }}
+              <ApiLoadingIcon variant="section" aria-hidden="true" />
+              {{ t("markets.editor.loadingWorkspace") }}
             </div>
             <template v-else>
               <div v-if="isSubdivisionMarket" class="market-callout is-warning">

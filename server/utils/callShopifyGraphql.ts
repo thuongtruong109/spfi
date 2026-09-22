@@ -20,20 +20,31 @@ import {
   buildShopifyThrottleKey,
   capShopifyThrottleDelayMs,
   getGraphqlCostSummary,
-  getGraphqlThrottleDelayMs,
+  getGraphqlThrottleDecision,
   getGraphqlThrottleStatus,
+  getShopifyqlBudgetDelayMs,
+  getShopifyqlCostSummary,
   isGraphqlThrottled,
-  parseRetryAfterMs,
   waitForShopifyThrottle,
   type ShopifyGraphqlExtensions,
+  MAX_SHOPIFYQL_THROTTLE_WAIT_MS,
 } from "./shopify-throttle";
 import { resolveShopifyGraphqlTransportRetry } from "./shopify-transport-retry";
 import { buildShopifyGid } from "./shopify-gid.ts";
+import { recordShopifyQueueLatency } from "./request-observability";
 
-interface ShopifyGraphqlError {
+export interface ShopifyGraphqlError {
   message: string;
   path?: Array<string | number>;
   extensions?: Record<string, unknown>;
+}
+
+export type ShopifyGraphqlFieldAvailability = "available" | "failed";
+
+export interface ShopifyGraphqlPartialResponse<TData> {
+  data: TData;
+  errors: ShopifyGraphqlError[];
+  availability: Record<string, ShopifyGraphqlFieldAvailability>;
 }
 
 interface ShopifyGraphqlEnvelope<TData> {
@@ -52,7 +63,10 @@ interface CallShopifyGraphqlOptions<TVariables> {
   timeoutMs?: number;
   /** Defaults to true for read-only documents and false for mutations. */
   retryTransport?: boolean;
+  /** Return usable fields when Shopify responds with both data and field errors. */
+  allowPartialData?: boolean;
   maxThrottleRetries?: number;
+  signal?: AbortSignal;
 }
 
 interface ShopifyGraphqlRequest<TVariables> {
@@ -64,6 +78,20 @@ interface ShopifyGraphqlRequest<TVariables> {
 const DEFAULT_GRAPHQL_TIMEOUT_MS = 15000;
 const DEFAULT_MAX_GRAPHQL_THROTTLE_RETRIES = 5;
 
+export function callShopifyGraphql<
+  TData,
+  TVariables extends Record<string, unknown> = Record<string, unknown>,
+>(
+  options: CallShopifyGraphqlOptions<TVariables> & { allowPartialData: true },
+): Promise<ShopifyGraphqlPartialResponse<TData>>;
+export function callShopifyGraphql<
+  TData,
+  TVariables extends Record<string, unknown> = Record<string, unknown>,
+>(
+  options: CallShopifyGraphqlOptions<TVariables> & {
+    allowPartialData?: false;
+  },
+): Promise<TData>;
 export async function callShopifyGraphql<
   TData,
   TVariables extends Record<string, unknown> = Record<string, unknown>,
@@ -76,8 +104,12 @@ export async function callShopifyGraphql<
   operationName,
   timeoutMs = DEFAULT_GRAPHQL_TIMEOUT_MS,
   retryTransport,
+  allowPartialData = false,
   maxThrottleRetries = DEFAULT_MAX_GRAPHQL_THROTTLE_RETRIES,
-}: CallShopifyGraphqlOptions<TVariables>): Promise<TData> {
+  signal,
+}: CallShopifyGraphqlOptions<TVariables>): Promise<
+  TData | ShopifyGraphqlPartialResponse<TData>
+> {
   setResponseHeader(event, "x-spf-field-convention", "app-camel-case");
   if (!storeId) {
     throw createApiErrorFromMessage("Store ID is required.", 400);
@@ -100,6 +132,10 @@ export async function callShopifyGraphql<
   const domain = resolveStoreAdminDomain(storeId, storeCookie?.domain);
   const endpoint = `https://${domain}/${getShopifyAdminApiBase(event)}/graphql.json`;
   const throttleKey = buildShopifyThrottleKey("graphql", domain, accessToken);
+  const isShopifyqlOperation = /\bshopifyqlQuery\b/.test(query);
+  const shopifyqlThrottleKey = isShopifyqlOperation
+    ? buildShopifyThrottleKey("shopifyql", domain, accessToken)
+    : null;
   const requestBody: ShopifyGraphqlRequest<TVariables> = {
     query,
     ...(variables ? { variables } : {}),
@@ -110,8 +146,12 @@ export async function callShopifyGraphql<
     retryTransport,
   );
   let lastTransportError: unknown;
+  signal?.throwIfAborted();
+  const proxyVariants = await resolveShopifyProxyVariants(event, sock);
+  signal?.throwIfAborted();
 
-  for (const proxyUrl of await resolveShopifyProxyVariants(event, sock)) {
+  for (const proxyUrl of proxyVariants) {
+    signal?.throwIfAborted();
     const agent = createProxyAgent(proxyUrl);
     const config: AxiosRequestConfig<ShopifyGraphqlRequest<TVariables>> = {
       url: endpoint,
@@ -126,33 +166,68 @@ export async function callShopifyGraphql<
       proxy: false,
       timeout: timeoutMs,
       transformResponse: [parseJsonPreservingUnsafeIntegers],
+      signal,
     };
     let envelope: ShopifyGraphqlEnvelope<TData> | null = null;
     let throttleRetryCount = 0;
 
     while (true) {
-      await waitForShopifyThrottle(throttleKey);
+      recordShopifyQueueLatency(
+        event,
+        await waitForShopifyThrottle(throttleKey, signal),
+      );
+      if (shopifyqlThrottleKey) {
+        recordShopifyQueueLatency(
+          event,
+          await waitForShopifyThrottle(shopifyqlThrottleKey, signal),
+        );
+      }
 
       try {
         const response = await axios.request<ShopifyGraphqlEnvelope<TData>>(config);
         envelope = response.data;
         forwardGraphqlThrottleHeaders(event, response.headers, envelope.extensions);
-      } catch (error) {
-        if (axios.isAxiosError(error) && error.response?.status === 429) {
-          const retryDelayMs = parseRetryAfterMs(
-            getAxiosHeaderValue(error.response.headers, "retry-after"),
+        const budgetDelayMs = getShopifyqlBudgetDelayMs(envelope.extensions);
+        if (shopifyqlThrottleKey && budgetDelayMs !== null) {
+          blockShopifyThrottle(
+            shopifyqlThrottleKey,
+            capShopifyThrottleDelayMs(budgetDelayMs, MAX_SHOPIFYQL_THROTTLE_WAIT_MS),
           );
-          if (retryDelayMs !== null) {
-            if (throttleRetryCount >= normalizeMaxThrottleRetries(maxThrottleRetries)) {
-              throw createApiError(
-                error,
-                "Shopify GraphQL remained rate limited after retrying.",
-              );
-            }
-            throttleRetryCount += 1;
-            blockShopifyThrottle(throttleKey, capShopifyThrottleDelayMs(retryDelayMs));
-            continue;
+        }
+      } catch (error) {
+        if (signal?.aborted) throw signal.reason || error;
+        if (axios.isAxiosError(error) && error.response?.status === 429) {
+          const errorEnvelope = asGraphqlEnvelope<TData>(error.response.data);
+          forwardGraphqlThrottleHeaders(
+            event,
+            error.response.headers,
+            errorEnvelope?.extensions,
+          );
+          if (throttleRetryCount >= normalizeMaxThrottleRetries(maxThrottleRetries)) {
+            throw createApiError(
+              error,
+              "Shopify GraphQL remained rate limited after retrying.",
+            );
           }
+          throttleRetryCount += 1;
+          const decision = getGraphqlThrottleDecision({
+            extensions: errorEnvelope?.extensions,
+            errors: errorEnvelope?.errors,
+            retryAfter: getAxiosHeaderValue(error.response.headers, "retry-after"),
+            shopifyqlOperation: isShopifyqlOperation,
+          });
+          blockShopifyThrottle(
+            decision.scope === "shopifyql" && shopifyqlThrottleKey
+              ? shopifyqlThrottleKey
+              : throttleKey,
+            capShopifyThrottleDelayMs(
+              decision.delayMs,
+              decision.scope === "shopifyql"
+                ? MAX_SHOPIFYQL_THROTTLE_WAIT_MS
+                : undefined,
+            ),
+          );
+          continue;
         }
 
         if (axios.isAxiosError(error) && error.response) {
@@ -175,9 +250,19 @@ export async function callShopifyGraphql<
           );
         }
         throttleRetryCount += 1;
+        const decision = getGraphqlThrottleDecision({
+          extensions: envelope.extensions,
+          errors: envelope.errors,
+          shopifyqlOperation: isShopifyqlOperation,
+        });
         blockShopifyThrottle(
-          throttleKey,
-          capShopifyThrottleDelayMs(getGraphqlThrottleDelayMs(envelope.extensions)),
+          decision.scope === "shopifyql" && shopifyqlThrottleKey
+            ? shopifyqlThrottleKey
+            : throttleKey,
+          capShopifyThrottleDelayMs(
+            decision.delayMs,
+            decision.scope === "shopifyql" ? MAX_SHOPIFYQL_THROTTLE_WAIT_MS : undefined,
+          ),
         );
         envelope = null;
         continue;
@@ -188,7 +273,7 @@ export async function callShopifyGraphql<
 
     if (!envelope) continue;
 
-    if (envelope.errors?.length) {
+    if (envelope.errors?.length && !(allowPartialData && envelope.data)) {
       throw createApiErrorFromMessage(
         envelope.errors.map((error) => error.message).join("; "),
         422,
@@ -202,10 +287,55 @@ export async function callShopifyGraphql<
       );
     }
 
+    if (allowPartialData) {
+      const partialResponse = createShopifyGraphqlPartialResponse(
+        envelope.data,
+        envelope.errors,
+      );
+      if (!partialResponse) {
+        throw createApiErrorFromMessage(
+          "Shopify GraphQL returned partial errors without an attributable field path.",
+          422,
+          envelope.errors,
+        );
+      }
+      return partialResponse;
+    }
+
     return envelope.data;
   }
 
   throw createApiError(lastTransportError, "Shopify GraphQL request failed.");
+}
+
+export function createShopifyGraphqlPartialResponse<TData>(
+  data: TData,
+  errors: ShopifyGraphqlError[] | undefined,
+): ShopifyGraphqlPartialResponse<TData> | null {
+  const dataRecord = isRecord(data) ? data : {};
+  const availability: Record<string, ShopifyGraphqlFieldAvailability> = {};
+  for (const alias of Object.keys(dataRecord)) availability[alias] = "available";
+
+  const unattributedErrors: ShopifyGraphqlError[] = [];
+  for (const error of errors || []) {
+    const alias = typeof error.path?.[0] === "string" ? error.path[0] : "";
+    if (alias) availability[alias] = "failed";
+    else unattributedErrors.push(error);
+  }
+
+  if (unattributedErrors.length) {
+    const nullAliases = Object.entries(dataRecord)
+      .filter(([, value]) => value === null)
+      .map(([alias]) => alias);
+    if (!nullAliases.length) return null;
+    for (const alias of nullAliases) availability[alias] = "failed";
+  }
+
+  return {
+    data,
+    errors: [...(errors || [])],
+    availability,
+  };
 }
 
 function normalizeMaxThrottleRetries(value: number) {
@@ -240,6 +370,19 @@ function forwardGraphqlThrottleHeaders(
     );
   }
 
+  const shopifyqlCost = getShopifyqlCostSummary(extensions);
+  const shopifyqlHeaders = {
+    "x-shopifyql-requested-cost": shopifyqlCost?.requestedQueryCost,
+    "x-shopifyql-maximum-available": shopifyqlCost?.maximumAvailable,
+    "x-shopifyql-currently-available": shopifyqlCost?.currentlyAvailable,
+    "x-shopifyql-window-reset-at": shopifyqlCost?.windowResetAt,
+  };
+  for (const [name, value] of Object.entries(shopifyqlHeaders)) {
+    if (value !== null && value !== undefined) {
+      setResponseHeader(event, name, String(value));
+    }
+  }
+
   const status = getGraphqlThrottleStatus(extensions);
   if (!status) return;
 
@@ -268,4 +411,12 @@ export function assertNoGraphqlUserErrors(
     422,
     errors,
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function asGraphqlEnvelope<TData>(value: unknown) {
+  return isRecord(value) ? (value as ShopifyGraphqlEnvelope<TData>) : null;
 }

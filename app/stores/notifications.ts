@@ -3,7 +3,6 @@ import { defineStore } from "pinia";
 import { useCredentialVaultStore } from "~/stores/credentialVault";
 import { useDashboardStore } from "~/stores/dashboard";
 import { useFormStore } from "~/stores/form";
-import { useProductStore } from "~/stores/product";
 import type {
   ClientWebhookNotification,
   WebhookNotification,
@@ -15,7 +14,6 @@ import { getAppErrorMessage } from "~~/utils/error";
 import { mapSettledWithConcurrency } from "~~/utils/promise-concurrency";
 import { getStoreTokenState, resolveStoreAccessToken } from "~~/utils/shop-auth";
 import { extractServerSentEvents } from "~~/utils/sse";
-import { forgetStoreResource } from "~~/utils/store-resource-cache";
 
 const NOTIFICATION_STORAGE_KEY = "spf_webhook_notifications";
 const MAX_CLIENT_NOTIFICATIONS = 100;
@@ -25,7 +23,6 @@ type ConnectionState = "idle" | "registering" | "connecting" | "connected" | "er
 
 export const useNotificationStore = defineStore("notifications", () => {
   const formStore = useFormStore();
-  const productStore = useProductStore();
   const credentialVault = useCredentialVaultStore();
   const dashboardStore = useDashboardStore();
   const notifications = ref<ClientWebhookNotification[]>([]);
@@ -180,8 +177,14 @@ export const useNotificationStore = defineStore("notifications", () => {
         throw new Error(`Notification stream returned HTTP ${response.status}.`);
       }
 
-      await consumeStream(response.body, sequence);
+      const reconnectRequested = await consumeStream(response.body, sequence);
       if (sequence === synchronizationSequence && !streamController.signal.aborted) {
+        if (reconnectRequested) {
+          connectionState.value = "connecting";
+          connectionError.value = "";
+          scheduleStreamReconnect(sequence, 0);
+          return;
+        }
         throw new Error("Notification stream closed unexpectedly.");
       }
     } catch (error) {
@@ -197,6 +200,7 @@ export const useNotificationStore = defineStore("notifications", () => {
     const reader = stream.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let reconnectRequested = false;
 
     try {
       while (sequence === synchronizationSequence) {
@@ -213,12 +217,15 @@ export const useNotificationStore = defineStore("notifications", () => {
             connectionError.value = "";
           } else if (event.event === "notification") {
             receiveNotification(event.data);
+          } else if (event.event === "reconnect") {
+            reconnectRequested = true;
           }
         }
       }
     } finally {
       reader.releaseLock();
     }
+    return reconnectRequested;
   }
 
   function receiveNotification(serialized: string) {
@@ -236,28 +243,18 @@ export const useNotificationStore = defineStore("notifications", () => {
     }
 
     if (notification.topic === "APP_UNINSTALLED") {
-      credentialVault.removeStoreData(notification.storeId);
-      formStore.removeKnownStore(notification.storeId);
+      void formStore.removeKnownStore(notification.storeId).catch((error) => {
+        console.error(
+          error instanceof Error
+            ? error.message
+            : "The uninstalled store could not be removed from the credential vault.",
+        );
+      });
       registrationsByStore.delete(notification.storeId);
       notifications.value = notifications.value.filter(
         (item) => item.storeId !== notification.storeId,
       );
       scheduleSynchronization();
-    }
-
-    if (
-      notification.kind === "collection" ||
-      notification.topic === "PRODUCTS_CREATE" ||
-      notification.topic === "PRODUCTS_UPDATE" ||
-      notification.topic === "PRODUCTS_DELETE"
-    ) {
-      // Flexible collection memberships can change when either a collection
-      // source or a matching product changes. The webhook payload does not
-      // contain the 2026-07 source state, so force a GraphQL requery next load.
-      forgetStoreResource(notification.storeId, "collections");
-    }
-    if (notification.kind === "collection") {
-      productStore.invalidateManagementContext(notification.storeId);
     }
 
     notifications.value = [
@@ -297,9 +294,9 @@ export const useNotificationStore = defineStore("notifications", () => {
     persistNotifications();
   }
 
-  function scheduleStreamReconnect(sequence: number) {
+  function scheduleStreamReconnect(sequence: number, delayOverride?: number) {
     if (reconnectTimer) clearTimeout(reconnectTimer);
-    const delay = Math.min(30_000, 1_000 * 2 ** reconnectAttempt++);
+    const delay = delayOverride ?? Math.min(30_000, 1_000 * 2 ** reconnectAttempt++);
     reconnectTimer = setTimeout(() => void connectStream(sequence), delay);
   }
 

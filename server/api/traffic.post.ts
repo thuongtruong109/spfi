@@ -1,0 +1,32 @@
+import { defineEventHandler, readBody, setResponseHeader } from "h3";
+import { requireShopifyCredentials } from "~~/server/utils/shopify-admin-request";
+import { isRequestAbortError } from "~~/server/utils/request-abort";
+import { fetchShopifyTraffic } from "~~/server/utils/shopify-traffic";
+import { setTrafficDiagnosticsHeaders } from "~~/server/utils/traffic-response";
+
+interface TrafficBody {
+  storeId?: string;
+  token?: string;
+  refresh?: boolean;
+}
+
+export default defineEventHandler(async (event) => {
+  const body = (await readBody<TrafficBody>(event)) || {};
+  const { storeId, token } = requireShopifyCredentials(body);
+
+  setResponseHeader(event, "cache-control", "private, no-store");
+  try {
+    const traffic = await fetchShopifyTraffic({
+      event,
+      storeId,
+      token,
+      refresh: body.refresh === true,
+    });
+    setTrafficDiagnosticsHeaders(event, traffic);
+    setResponseHeader(event, "x-spf-field-convention", "app-camel-case");
+    return traffic;
+  } catch (error) {
+    if (isRequestAbortError(error)) return;
+    throw error;
+  }
+});

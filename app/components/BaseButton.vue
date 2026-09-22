@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LoaderCircle } from "@lucide/vue";
+import ApiLoadingIcon from "~/components/ApiLoadingIcon.vue";
 
 withDefaults(
   defineProps<{
@@ -30,7 +30,7 @@ withDefaults(
     :aria-busy="loading"
   >
     <span v-if="loading || $slots.icon" class="button-icon" aria-hidden="true">
-      <LoaderCircle v-if="loading" class="spinner" :size="15" />
+      <ApiLoadingIcon v-if="loading" :size="15" />
       <slot v-else name="icon" />
     </span>
     <span v-if="!iconOnly" class="button-label"><slot /></span>
@@ -139,15 +139,5 @@ withDefaults(
 .button-label {
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.spinner {
-  animation: button-spin 0.8s linear infinite;
-}
-
-@keyframes button-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

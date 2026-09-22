@@ -45,10 +45,11 @@ function changePageSize(pageSize: number) {
 
     <div
       v-if="orderStore.isLoading && !orderStore.orders.length"
-      class="empty"
+      class="empty is-loading"
       role="status"
     >
-      {{ t("order.loadingOrders") }}
+      <ApiLoadingIcon variant="section" aria-hidden="true" />
+      <span>{{ t("order.loadingOrders") }}</span>
     </div>
     <div v-else-if="orderStore.error" class="empty error-state" role="alert">
       {{ orderStore.error }}
@@ -142,5 +143,12 @@ function changePageSize(pageSize: number) {
 
 .error-state {
   color: var(--red);
+}
+
+.empty.is-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 </style>

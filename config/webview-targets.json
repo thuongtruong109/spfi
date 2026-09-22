@@ -1,0 +1,10 @@
+[
+  {
+    "label": "Local dev",
+    "url": "http://localhost:3000"
+  },
+  {
+    "label": "Production",
+    "url": "https://spfi.netlify.app"
+  }
+]

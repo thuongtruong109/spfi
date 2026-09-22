@@ -66,10 +66,11 @@ async function runAction(draft: DraftOrderSummary, action: DraftOrderAction) {
       v-else-if="
         store.loadingResources.includes('draftOrders') && !store.draftOrders.length
       "
-      class="ops-empty"
+      class="ops-empty is-loading"
       role="status"
     >
-      {{ t("operations.draft.loading") }}
+      <ApiLoadingIcon variant="section" aria-hidden="true" />
+      <span>{{ t("operations.draft.loading") }}</span>
     </div>
     <div v-else-if="store.draftOrders.length" class="ops-table-scroll">
       <table class="ops-table">

@@ -1,3 +1,38 @@
+import type { TrafficOverviewResponse } from "./traffic.ts";
+
+export * from "./traffic.ts";
+
+export const DASHBOARD_SERVICES = [
+  "profile",
+  "orders",
+  "customers",
+  "products",
+  "payments",
+  "users",
+  "traffic",
+] as const;
+
+export type DashboardService = (typeof DASHBOARD_SERVICES)[number];
+
+export type DashboardResourceState =
+  "available" | "partial" | "unavailable" | "failed" | "stale";
+
+export interface DashboardResourceFreshness {
+  state: DashboardResourceState;
+  dataAsOf: string | null;
+}
+
+export interface DashboardResourceSummary extends DashboardResourceFreshness {
+  resource: DashboardService;
+  reporting: number;
+  total: number;
+}
+
+export interface DashboardLoadOptions {
+  storeIds?: string[];
+  services?: DashboardService[];
+}
+
 export interface DashboardMoney {
   currency: string;
   amount: number;
@@ -94,6 +129,20 @@ export interface DashboardRecentTransaction {
   orderName: string | null;
 }
 
+export interface DashboardReconciliationRow {
+  currency: string;
+  orderTotal: number;
+  paymentGross: number;
+  difference: number;
+  status: "matched" | "mismatch";
+}
+
+export interface DashboardReconciliation {
+  available: boolean;
+  dataAsOf: string | null;
+  rows: DashboardReconciliationRow[];
+}
+
 export interface DashboardUser {
   id: string;
   name: string;
@@ -110,7 +159,8 @@ export interface DashboardWarning {
     | "products"
     | "payments"
     | "profile"
-    | "users";
+    | "users"
+    | "traffic";
   message: string;
 }
 
@@ -123,6 +173,7 @@ export interface StoreDashboardSnapshot {
   email: string;
   plan: string;
   generatedAt: string;
+  resources?: Partial<Record<DashboardService, DashboardResourceFreshness>>;
   revenue: DashboardRevenueSummary;
   fulfillmentBreakdown: DashboardFulfillmentBreakdown;
   pendingFulfillments: {
@@ -140,6 +191,8 @@ export interface StoreDashboardSnapshot {
     payouts: DashboardPayoutSummary;
     transactions: DashboardTransactionSummary;
   };
+  reconciliation: DashboardReconciliation;
+  traffic: TrafficOverviewResponse;
   users: DashboardUser[];
   warnings: DashboardWarning[];
 }
@@ -171,4 +224,6 @@ export interface DashboardAggregate {
     payouts: DashboardPayoutSummary;
     transactions: DashboardTransactionSummary;
   };
+  reconciliation: DashboardReconciliation;
+  traffic: TrafficOverviewResponse;
 }

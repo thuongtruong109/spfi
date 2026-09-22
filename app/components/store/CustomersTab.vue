@@ -40,8 +40,13 @@
 
     <StoreCustomerManagementPanel />
 
-    <div v-if="isLoading && !customers.length" class="state-message">
-      Loading customers…
+    <div
+      v-if="isLoading && !customers.length"
+      class="state-message is-loading"
+      role="status"
+    >
+      <ApiLoadingIcon variant="section" aria-hidden="true" />
+      <span>Loading customers…</span>
     </div>
     <div v-else-if="error && !customers.length" class="state-message is-error">
       {{ error }}
@@ -125,8 +130,9 @@
         class="card detail-card"
         aria-live="polite"
       >
-        <div v-if="isLoadingDetail" class="state-message">
-          Loading customer detail and orders…
+        <div v-if="isLoadingDetail" class="state-message is-loading" role="status">
+          <ApiLoadingIcon variant="section" aria-hidden="true" />
+          <span>Loading customer detail and orders…</span>
         </div>
         <template v-else-if="selectedCustomer">
           <header class="detail-header">
@@ -480,6 +486,13 @@ function formatOrderTotal(value: string, currency = "USD") {
 .state-message.is-error,
 .inline-error {
   color: var(--red);
+}
+
+.state-message.is-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .inline-error {

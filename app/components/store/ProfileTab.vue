@@ -25,11 +25,7 @@
       :title="t('profile.loadingTitle')"
       :description="t('profile.loadingDescription')"
       loading
-    >
-      <template #icon>
-        <IconsSync />
-      </template>
-    </ShopEmptyState>
+    />
 
     <div v-else class="profile-stack">
       <section class="profile-hero">
@@ -196,11 +192,9 @@
               </div>
               <div class="credential-field is-third">
                 <label>{{ t("store.clientSecret") }}</label>
-                <input
+                <BaseSecretInput
                   v-model="editClientSecret"
-                  class="credential-input"
-                  type="text"
-                  :placeholder="t('store.clientSecret')"
+                  :placeholder="t('profile.secretUnchangedPlaceholder')"
                 />
               </div>
             </div>
@@ -333,7 +327,8 @@ function openCredentialModal() {
   editDomain.value = data.domain || "";
   editSock.value = data.sock || "";
   editClientId.value = data.clientId || "";
-  editClientSecret.value = data.clientSecret || "";
+  // Keep the stored secret out of the DOM until the operator enters a replacement.
+  editClientSecret.value = "";
   editError.value = "";
   showCredentialModal.value = true;
 }
@@ -347,12 +342,12 @@ async function saveCredentialEdits() {
   const storeId = formStore.storeId;
   if (!storeId) return;
 
-  if (!editClientId.value.trim() || !editClientSecret.value.trim()) {
+  const previous = credentialVault.getStoreData(storeId);
+  const nextClientSecret = editClientSecret.value.trim();
+  if (!editClientId.value.trim() || (!nextClientSecret && !previous.clientSecret)) {
     editError.value = t("profile.credentialsRequired");
     return;
   }
-
-  const previous = credentialVault.getStoreData(storeId);
 
   try {
     await credentialVault.saveStoreData(storeId, {
@@ -360,7 +355,7 @@ async function saveCredentialEdits() {
       domain: editDomain.value.trim(),
       sock: editSock.value.trim(),
       clientId: editClientId.value.trim(),
-      clientSecret: editClientSecret.value.trim(),
+      clientSecret: nextClientSecret || previous.clientSecret,
     });
     closeCredentialModal();
   } catch (error) {
@@ -414,7 +409,7 @@ const connectionRows = computed<ProfileFieldRow[]>(() => [
   {
     key: "clientSecret",
     label: t("store.clientSecret"),
-    value: currentStoreData.value.clientSecret || "-",
+    value: currentStoreData.value.clientSecret ? "••••••••" : "-",
   },
   {
     key: "proxy",

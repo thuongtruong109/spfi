@@ -136,6 +136,19 @@ test("order analytics include authorized revenue and subtract line discounts", (
   assert.deepEqual(result.topProducts[0]?.revenue, [{ currency: "USD", amount: 15 }]);
 });
 
+test("financial aggregation avoids binary floating-point drift", () => {
+  const period = createDashboardPeriod(new Date("2026-08-10T10:00:00.000Z"), 0);
+  const result = aggregateOrderAnalytics(
+    [
+      order({ id: 1, total_price: "0.1", current_total_price: "0.1" }),
+      order({ id: 2, total_price: "0.2", current_total_price: "0.2" }),
+    ],
+    period,
+  );
+
+  assert.deepEqual(result.revenue.month, [{ currency: "USD", amount: 0.3 }]);
+});
+
 test("payment analytics exclude tests and transfer rows", () => {
   const payouts: ShopifyPayout[] = [
     {

@@ -9,6 +9,7 @@ const credentialVault = useCredentialVaultStore();
 const notificationStore = useNotificationStore();
 const { t } = useLocalization();
 const confirmDialog = useConfirmDialog();
+const { isDesktopApp } = useDesktopWindow();
 
 function clearPageError(clearError: () => void) {
   loading.value = false;
@@ -28,7 +29,8 @@ useTokenRotation();
 </script>
 
 <template>
-  <div class="app-root">
+  <div class="app-root" :class="{ 'has-desktop-titlebar': isDesktopApp }">
+    <DesktopTitleBar />
     <a class="skip-link" href="#main-content">
       {{ t("a11y.skipToContent") }}
     </a>
@@ -47,7 +49,7 @@ useTokenRotation();
       @confirm="confirmDialog.resolveConfirmation(true)"
       @cancel="confirmDialog.resolveConfirmation(false)"
     />
-    <Nav />
+    <Nav v-if="!isDesktopApp" />
     <div id="main-content" tabindex="-1">
       <NuxtLayout>
         <NuxtErrorBoundary>
@@ -76,6 +78,7 @@ useTokenRotation();
 
 :root {
   color-scheme: light;
+  --desktop-titlebar-height: 38px;
   --footer-height: 36px;
   --app-content-max-width: 1520px;
   --app-shell-max-width: 1560px;
@@ -139,6 +142,10 @@ useTokenRotation();
   --text-primary: var(--text);
   --text-secondary: var(--muted);
   --text-muted: #8b9991;
+}
+
+.app-root.has-desktop-titlebar {
+  padding-top: var(--desktop-titlebar-height);
 }
 
 html[data-theme="dark"] {
@@ -305,8 +312,7 @@ input[type="checkbox"]:disabled {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--green) 45%, transparent)
-    color-mix(in srgb, var(--line) 45%, transparent);
+  scrollbar-color: color-mix(in srgb, var(--muted) 30%, transparent) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -315,22 +321,50 @@ input[type="checkbox"]:disabled {
 }
 
 *::-webkit-scrollbar-track {
-  background: color-mix(in srgb, var(--line) 55%, transparent);
+  background: transparent;
   border-radius: 999px;
 }
 
 *::-webkit-scrollbar-thumb {
-  border: 2px solid var(--bg);
+  border: 2px solid transparent;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(31, 122, 77, 0.72), rgba(39, 92, 145, 0.66));
+  background: color-mix(in srgb, var(--muted) 30%, transparent);
+  background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(31, 122, 77, 0.88), rgba(39, 92, 145, 0.82));
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+  background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+html,
+body,
+.page-content {
+  scrollbar-color: color-mix(in srgb, var(--green) 45%, transparent)
+    color-mix(in srgb, var(--line) 45%, transparent);
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
+.page-content::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--line) 55%, transparent);
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
+.page-content::-webkit-scrollbar-thumb {
+  border-color: var(--bg);
+  background: linear-gradient(180deg, rgba(31, 122, 77, 0.72), rgba(39, 92, 145, 0.66));
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover,
+.page-content::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(31, 122, 77, 0.88), rgba(39, 92, 145, 0.82));
 }
 
 .app-root {

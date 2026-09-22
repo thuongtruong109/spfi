@@ -217,13 +217,18 @@ async function createFulfillment() {
           </div>
         </div>
 
-        <FulfillmentTrackingFields
-          v-model:number="trackingNumber"
-          v-model:company="trackingCompany"
-          v-model:url="trackingUrl"
-          v-model:notify-customer="notifyCustomer"
-          bordered
-        />
+        <div class="tracking-grid">
+          <label><span>Tracking number</span><input v-model="trackingNumber" /></label>
+          <label><span>Carrier</span><input v-model="trackingCompany" /></label>
+          <label class="full"
+            ><span>Tracking URL (optional)</span
+            ><input v-model="trackingUrl" type="url"
+          /></label>
+          <label class="check-row">
+            <input v-model="notifyCustomer" type="checkbox" />
+            <span>Notify customer</span>
+          </label>
+        </div>
         <div class="actions">
           <BaseButton
             variant="primary"
@@ -322,6 +327,13 @@ header p {
   flex: 0 0 90px;
   gap: 4px;
 }
+.tracking-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+}
 label {
   display: grid;
   gap: 5px;
@@ -346,6 +358,18 @@ input:focus {
   border-color: var(--green);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 20%, transparent);
 }
+.full {
+  grid-column: 1 / -1;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.check-row input {
+  width: 16px;
+  min-height: 16px;
+}
 .actions {
   display: flex;
   justify-content: flex-end;
@@ -369,6 +393,12 @@ input:focus {
   header {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .tracking-grid {
+    grid-template-columns: 1fr;
+  }
+  .full {
+    grid-column: auto;
   }
 }
 </style>

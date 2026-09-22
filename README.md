@@ -5,7 +5,7 @@
 <h1 align="center">SPFI</h1>
 
 <p align="center">
-  A compact Shopify operations console for setup, token rotation, Google Sheets lookup, payments, orders, products, and storefront status checks.
+  A focused Shopify operations console for multi-store setup, token rotation, dashboard intelligence, order/product workflows, payments, Google Sheets lookup, webhooks, and storefront diagnostics.
 </p>
 
 <p align="center">
@@ -17,53 +17,107 @@
   <img alt="Node 24" src="https://img.shields.io/badge/Node.js-24-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" />
 </p>
 
-## Highlights
+## 🧭 Contents
 
-- One desk for Shopify setup, profile management, product operations, payments, order inspection, sheet lookup, and storefront checks.
-- Nitro server routes keep Shopify, proxy, status, and Google Sheets calls behind the app surface.
-- Proxy-aware status checking supports direct, shared proxy, and per-row proxy modes.
-- Local-first shop profile workflows help reduce repeated credential and token handling.
-- Store Operations groups draft orders, discounts, abandoned checkout recovery, and returns into one per-store queue.
-- Shopify Markets auditing covers buyer conditions, currency and price inclusion, catalogs, localized URLs, market-driven shipping, and country resolution.
-- Automatic tracking uses Tracktaco API v2's search-and-reveal workflow, then submits the revealed tracking number to Shopify fulfillment.
+- [Highlights](#-highlights)
+- [Product Surface](#-product-surface)
+- [Core Workflows](#-core-workflows)
+- [Tech Stack](#-tech-stack)
+- [Quick Start](#-quick-start)
+- [Configuration](#-configuration)
+- [Production](#-production)
+- [Docker Compose + Nginx](#-docker-compose--nginx)
+- [Security Notes](#-security-notes)
+- [Scripts](#-scripts)
 
-## Core Workflows
+## ✨ Highlights
 
-| Route        | Workflow        | What it does                                                                                                                       |
-| ------------ | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `/setup`     | Setup Guide     | Documents the Shopify custom app setup flow and required access scopes.                                                            |
-| `/manager`   | Shop Management | Stores Shopify credentials locally, tests proxies, and generates or rotates access tokens.                                         |
-| `/store`     | Store Console   | Opens one saved store profile with tabs for transactions, payouts, disputes, orders, products, customers, markets, and operations. |
-| `/dashboard` | Dashboard       | Aggregates month-to-date revenue, fulfillment, customer, product, and payment signals across saved stores.                         |
-| `/payment`   | Payments        | Reads Shopify Payments payouts, balance transactions, orders, and related product data through server APIs.                        |
-| `/status`    | Status Checker  | Batch-checks Shopify storefront availability with direct, common-proxy, or per-row proxy modes.                                    |
-| `/settings`  | Settings        | Manages Tracktaco, Google Sheets, cache retention, and per-store Shopify webhook diagnostics.                                      |
+- 🏬 **Multi-store operator desk** — connect shops, select stores, refresh dashboard data, and keep credentials local to the browser.
+- 📊 **On-demand dashboard loading** — choose all or selected stores, all or selected services, then aggregate revenue, traffic, fulfillment, product, customer, payment, and staff signals.
+- 🔐 **Server-backed Shopify access** — Nitro routes keep Shopify, proxy, status, webhook, and Google Sheets calls behind a controlled app surface.
+- 🌐 **Proxy-aware diagnostics** — run direct, shared proxy, or per-row proxy storefront checks with actionable per-row feedback.
+- 🧾 **Store operations queue** — manage draft orders, discounts, abandoned checkout recovery, returns, products, customers, markets, and fulfillment-adjacent tasks.
+- 💸 **Payments workspace** — inspect Shopify Payments payouts, balance transactions, disputes, payout detail, and exports with normalized API contracts.
+- 🚚 **Tracktaco automation** — use Tracktaco API v2 search-and-reveal, then submit the revealed tracking number into Shopify fulfillment.
+- 🔔 **Live webhook diagnostics** — register Shopify webhooks per store, verify receiver health, test the pipeline, and rotate stream tokens from Settings.
 
-## Tech Stack
+## 🧩 Product Surface
 
-- Nuxt 4, Vue 3, and TypeScript for the application shell.
-- Nitro server routes for Shopify, proxy, status, and Google Sheets APIs.
-- Pinia for app stores and shared operational state.
-- Google Sheets API via `googleapis`.
-- SOCKS/HTTP proxy support via `socks-proxy-agent` and `https-proxy-agent`.
+| Area           | Icon | Purpose                                                                                                  |
+| -------------- | ---- | -------------------------------------------------------------------------------------------------------- |
+| Store Manager  | 🏪   | Add stores, test proxies, hydrate credentials from Sheets, and rotate Shopify tokens.                    |
+| Dashboard      | 📈   | Load scoped cross-store metrics with operator-selected stores and data services.                         |
+| Store Console  | 🧰   | Work one store at a time across payments, orders, products, customers, markets, traffic, and operations. |
+| Payments       | 💳   | Review balance transactions, payouts, disputes, metadata, and payout exports.                            |
+| Status Checker | 🛰️   | Batch-check storefront reachability through direct or proxy modes.                                       |
+| Settings       | ⚙️   | Configure Tracktaco, Google Sheets, cache retention, and Shopify webhook diagnostics.                    |
 
-## Quick Start
+## 🗺️ Core Workflows
 
-Install dependencies:
+| Route        | Icon | Workflow        | What it does                                                                                                                       |
+| ------------ | ---- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `/setup`     | 🧭   | Setup Guide     | Documents the Shopify custom app setup flow and required access scopes.                                                            |
+| `/manager`   | 🏪   | Shop Management | Stores Shopify credentials locally, tests proxies, and generates or rotates access tokens.                                         |
+| `/store`     | 🧰   | Store Console   | Opens one saved store profile with tabs for transactions, payouts, disputes, orders, products, customers, markets, and operations. |
+| `/dashboard` | 📊   | Dashboard       | Aggregates revenue, traffic, fulfillment, customer, product, and payment signals across saved stores.                              |
+| `/payment`   | 💳   | Payments        | Reads Shopify Payments payouts, balance transactions, orders, and related product data through server APIs.                        |
+| `/status`    | 🛰️   | Status Checker  | Batch-checks Shopify storefront availability with direct, common-proxy, or per-row proxy modes.                                    |
+| `/settings`  | ⚙️   | Settings        | Manages Tracktaco, Google Sheets, cache retention, and per-store Shopify webhook diagnostics.                                      |
+
+## 🛠️ Tech Stack
+
+| Layer          | Tools                                                              |
+| -------------- | ------------------------------------------------------------------ |
+| App shell      | Nuxt 4, Vue 3, TypeScript                                          |
+| Server runtime | Nitro server routes and runtime config                             |
+| State          | Pinia stores and composables                                       |
+| Shopify access | Admin REST, Admin GraphQL, ShopifyQL analytics, webhook receiver   |
+| Integrations   | Google Sheets API via `googleapis`, Tracktaco API v2               |
+| Networking     | `socks-proxy-agent`, `https-proxy-agent`, proxy validation helpers |
+| Quality        | Node test runner, Vitest, Nuxt typecheck, ESLint, Prettier         |
+
+## ⚡ Quick Start
+
+1. Install dependencies:
 
 ```bash
 npm install
 ```
 
-Start the development server:
+2. Start the development server:
 
 ```bash
 npm run dev
 ```
 
-The app runs at `http://localhost:3000` by default.
+3. Open `http://localhost:3000`.
 
-## Configuration
+4. Add local configuration as needed:
+
+```bash
+cp .env.example .env
+```
+
+5. For Sheets workflows, place the Google service account at:
+
+```text
+server/service_account.json
+```
+
+## ✅ Quality Gates
+
+Run the main verification suite before shipping changes:
+
+```bash
+npm test
+npm run typecheck
+npm run lint
+```
+
+Use Prettier on changed files before committing when you touch Markdown, CSS, or
+TypeScript.
+
+## ⚙️ Configuration
 
 ### Browser origin policy
 
@@ -171,6 +225,18 @@ returned as per-store diagnostics instead of generating a burst of development
 error pages; a failed synchronization remains retryable and does not prevent an
 already-registered store from connecting to the local notification stream.
 
+Each process accepts at most 100 live notification streams by default, with
+additional limits of 10 per client IP and 5 per shop. Streams are closed after
+30 minutes and the browser reconnects automatically. These safeguards can be
+tuned without disabling them:
+
+```text
+NUXT_WEBHOOK_STREAM_MAX_CONNECTIONS=100
+NUXT_WEBHOOK_STREAM_MAX_CONNECTIONS_PER_IP=10
+NUXT_WEBHOOK_STREAM_MAX_CONNECTIONS_PER_SHOP=5
+NUXT_WEBHOOK_STREAM_MAX_LIFETIME_SECONDS=1800
+```
+
 Expiring Shopify client-credential tokens rotate automatically in the browser.
 The scheduler derives each deadline from the saved `expiresTime`, refreshes
 before expiry with deterministic jitter, rechecks when the tab becomes visible,
@@ -211,11 +277,33 @@ non-200 response; the completed file is then streamed and removed. CSV values
 are protected against spreadsheet formula injection. The store UI exposes the
 same exports through reusable buttons.
 
-`/dashboard` is an all-store operational view. The browser loads saved stores
-with a concurrency limit and calls `POST /api/dashboard` once per store. Each
+`/dashboard` is an all-store operational view. The browser waits for the user to
+confirm loading, then loads saved stores with a concurrency limit and calls
+`POST /api/dashboard` once per store. Each
 response aggregates the current calendar month's orders, daily revenue, top
 products, pending fulfillments, customer and product totals, Shopify Payments,
-and staff access. Totals remain separated by currency, date boundaries follow
+staff access, and ShopifyQL traffic analytics. Traffic includes human sessions,
+unique visitors, pageviews, 24-hour and 30-day trends, plus source, country, and
+device breakdowns. It requires `read_reports`, Level 2 protected customer data
+access, and Admin GraphQL API `2025-10` or newer. Traffic permission failures
+degrade to a per-store warning and do not hide the other metrics. See
+`docs/shopify-traffic-analytics.md` for the query and metric semantics.
+
+The same Shopify Analytics report is available for the currently selected shop
+from `/store?tab=traffic`. Traffic snapshots are cached independently per shop,
+so switching the store selector never mixes traffic between stores and Refresh
+reloads only the active shop.
+The per-shop tab also includes a 30-day conversion funnel plus traffic type,
+referring platform, AI referral, landing page, UTM campaign, and browser
+breakdowns. These extended queries are not run for every shop on the aggregate
+dashboard.
+The top 250 aggregated 30-day session combinations are folded into focused
+acquisition, audience, technology, and content/campaign dashboard cards. Each
+card combines a distribution chart with a compact expandable metric table for
+geography, browser and OS versions, device, channel, landing page, UTM fields,
+and conversion performance.
+
+Financial totals remain separated by currency, date boundaries follow
 the viewer's timezone, and restricted resources degrade independently instead
 of hiding the rest of a store's dashboard. Dashboard snapshots live in Pinia and
 respect the configurable data-retention lifetime, so keep-alive navigation does
@@ -223,21 +311,38 @@ not repeat network requests. The page also supports store/currency filters,
 debounced search, interactive ranking controls, and CSV, TSV, JSON, or printable
 HTML exports of the current filtered view.
 
-The optional local per-IP limits are disabled by default so they don't reduce
-Shopify throughput. A deployment that exposes the server publicly can enable
-them without changing source code:
+The app-wide local per-IP limit remains enabled by default. Dashboard/traffic
+analytics and export routes also consume stricter route-specific buckets, so a
+costly request cannot exhaust the ordinary API allowance. The additional
+token-specific limit is disabled because Shopify does not publish a numeric
+limit for the OAuth token endpoint. A deployment can override each policy
+without changing source code:
 
 ```text
 NUXT_API_RATE_LIMIT_PER_MINUTE=600
-NUXT_TOKEN_RATE_LIMIT_PER_MINUTE=10
+NUXT_ANALYTICS_RATE_LIMIT_PER_MINUTE=120
+NUXT_EXPORT_RATE_LIMIT_PER_MINUTE=20
+NUXT_TOKEN_RATE_LIMIT_PER_MINUTE=0
 ```
 
-These fail-closed defaults apply even when the variables are omitted. Raise
-them deliberately for trusted high-volume deployments.
+Set the token limit to a positive integer only when the deployment needs an
+extra local quota. Token rotation still honors Shopify or local `429` responses
+and their `Retry-After` header.
 
 Forwarded client IP headers are ignored by default. Set
 `NUXT_TRUST_PROXY_HEADERS=true` only behind a trusted reverse proxy that
 overwrites `X-Forwarded-For`; the bundled nginx and Compose configuration do.
+API request bodies are capped at 2 MiB in both Nitro and the bundled nginx
+proxy. Oversized declared or chunked bodies receive HTTP `413` before route
+logic runs.
+The bundled nginx also bounds slow clients with a 10-second header timeout,
+30-second body/send timeouts, a 30-second keep-alive timeout, and a maximum of
+256 concurrent in-flight requests. The connection cap is server-wide rather
+than keyed by the direct peer address, so deployments behind a TLS reverse
+proxy do not accidentally treat every downstream user as one client.
+The desktop webview target list lives in `config/webview-targets.json`, outside
+the Docker-ignored Tauri wrapper, because both the Nuxt build and the desktop
+wrapper consume that shared configuration.
 
 Automatic tracking is configured from `/settings`. The app uses Tracktaco API
 v2 on `https://v2.tracktaco.com`: it searches candidate tracking numbers for
@@ -252,7 +357,7 @@ Pinia. Presets range from no cache through one day to the default session mode,
 which keeps data until the browser page is refreshed. Only this preference is
 persisted; the Shopify response data remains in memory.
 
-### Store Operations
+### 🧾 Store Operations
 
 The store page's Operations tab exposes one scoped queue for work that lives
 outside a single order detail page:
@@ -268,7 +373,7 @@ outside a single order detail page:
 
 See `docs/shopify-commerce-operations.md` for endpoint and scope details.
 
-### Shopify Markets
+### 🌍 Shopify Markets
 
 The Markets tab uses the Admin GraphQL 2026-07 Markets model. It reads
 country/subdivision buyer conditions from the non-deprecated conditions tree,
@@ -279,7 +384,7 @@ confirmed Active/Draft status change.
 See `docs/shopify-markets-api.md` for the endpoint matrix, deprecation audit,
 scope requirements, and recommended next-phase editors.
 
-## Production
+## 🚀 Production
 
 Build the application:
 
@@ -299,7 +404,7 @@ For a Node deployment, ship the Nuxt output and start the Nitro server:
 node .output/server/index.mjs
 ```
 
-## Docker Compose + Nginx
+## 🐳 Docker Compose + Nginx
 
 The production stack runs Nuxt behind Nginx. Nginx is the only public
 service; the Nuxt port is available only on the internal Compose network.
@@ -379,7 +484,7 @@ unless the repository or organization has restricted package publishing. The
 token needs `contents: read` and `packages: write`, which are already declared
 in the workflow.
 
-## Proxy Formats
+## 🌐 Proxy Formats
 
 Proxy fields accept SOCKS5H remote-DNS shorthand or full proxy URLs:
 
@@ -395,7 +500,7 @@ The status checker supports three modes:
 - **Common proxy**: applies one SOCKS5 proxy to every target.
 - **Separate proxy**: parses each row as `proxy target`, `proxy|target`, `proxy,target`, or `proxy<TAB>target`.
 
-## Google Sheets
+## 📄 Google Sheets
 
 Sheet routes are backed by `server/service_account.json` and default to the `A:Z` range unless a specific range or tab is selected.
 
@@ -419,6 +524,11 @@ used by both the Sheet viewer and Manager credential lookup; “Restore
 deployment defaults” removes it. Sheet IDs and tab names remain browser-visible
 configuration, not a place for secrets.
 
+Write requests are bounded before reaching Google: at most 100 ranges, 10,000
+rows, and 50,000 cells per request; ranges are limited to 512 characters and a
+single string cell to 50,000 characters. Requests above these limits return
+HTTP `413` instead of consuming Google API quota.
+
 Expected header aliases for store auto-fill:
 
 - Store ID: `store id`, `store_id`, `storeId`, `id`
@@ -426,7 +536,7 @@ Expected header aliases for store auto-fill:
 - Domain: `domain`, `shop_domain`
 - Proxy URL: `proxy`, `proxy_url`
 
-## Security Notes
+## 🔒 Security Notes
 
 ### API response contracts
 
@@ -440,6 +550,8 @@ routes expose app `camelCase` fields. Shopify responses also send
 
 - Do not commit `server/service_account.json`, `.env` files, logs, or generated build output.
 - Store credentials and proxy details should be treated as sensitive operational data.
+- Browser-side store IDs, proxy credentials, client credentials, access tokens, the active store, and tracking credentials are persisted in one AES-GCM encrypted vault. Existing plaintext records are migrated automatically and removed only after the encrypted write succeeds. The device key is stored as a non-exportable Web Crypto key in IndexedDB when the browser supports it.
+- Client-side encryption limits accidental disclosure from direct localStorage inspection or export; it does not protect secrets from code already executing with the app's origin. Continue to prevent XSS and restrict operator/device access.
 - Browser API calls are same-origin unless explicitly listed in `NUXT_ALLOWED_ORIGINS`.
 - Shopify access tokens for GET and DELETE routes must use the `X-Shopify-Access-Token` header; query-string tokens are rejected.
 - CORS is a browser boundary, not user authentication. Keep deployments on localhost, a trusted network, or behind a VPN/reverse proxy when public access is not intended.
@@ -448,7 +560,7 @@ routes expose app `camelCase` fields. Shopify responses also send
 - Store status targets and every redirect are restricted to public HTTPS port 443; direct connections use the validated DNS address to reduce DNS-rebinding risk.
 - Production environments must allow outbound HTTPS requests to Shopify, Google APIs, and any proxy endpoints used by status checks.
 
-## Scripts
+## 📜 Scripts
 
 | Command               | Description                                          |
 | --------------------- | ---------------------------------------------------- |

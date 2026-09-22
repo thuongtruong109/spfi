@@ -56,7 +56,11 @@ export interface ShopifyPaymentsAccount {
 
 export interface ShopifyPaymentsAccountResponse {
   account: ShopifyPaymentsAccount | null;
-  payouts: ShopifyPaymentsPayoutMetadata[];
+}
+
+export interface ShopifyConnectionPageInfo {
+  hasNextPage: boolean;
+  endCursor: string | null;
 }
 
 export const SHOPIFY_PAYMENTS_DISPUTE_STATUSES = [
@@ -100,6 +104,7 @@ export interface ShopifyPaymentsDisputeFilters {
 
 export interface ShopifyPaymentsDisputesResponse {
   disputes: ShopifyPaymentsDispute[];
+  pageInfo: ShopifyConnectionPageInfo;
 }
 
 export interface ShopifyPaymentsBalanceTransactionSearchFilters {
@@ -121,4 +126,5 @@ export interface ShopifyPaymentsBalanceTransactionSearchFilters {
 
 export interface ShopifyPaymentsGraphqlTransactionsResponse {
   transactions: ShopifyBalanceTransaction[];
+  pageInfo: ShopifyConnectionPageInfo;
 }

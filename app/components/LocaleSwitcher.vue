@@ -237,7 +237,7 @@ onBeforeUnmount(() => {
   inset-inline-end: 0;
   z-index: 1000;
   display: grid;
-  width: 220px;
+  width: 200px;
   gap: 3px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -252,14 +252,14 @@ onBeforeUnmount(() => {
   grid-template-columns: auto minmax(0, 1fr) 12px;
   align-items: center;
   gap: 10px;
-  min-height: 46px;
+  min-height: 40px;
   border: 0;
   border-radius: 7px;
   background: transparent;
   color: var(--text);
   cursor: pointer;
   font: inherit;
-  padding: 7px 9px;
+  padding: 5px 9px;
   text-align: start;
 }
 
@@ -295,7 +295,7 @@ onBeforeUnmount(() => {
 
 .locale-option-copy small {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 

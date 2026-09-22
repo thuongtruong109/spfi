@@ -1,9 +1,13 @@
 <template>
-  <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16">
-    <path d="M0 0h16v16H0z" fill="none" />
+  <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
+    <path d="M0 0h24v24H0z" fill="none" />
     <path
-      fill="currentColor"
-      d="M3.502 11h5a.5.5 0 0 1 .09.992l-.09.008h-5a.5.5 0 0 1-.09-.992zh5zm1.646-5.854a.5.5 0 0 1 .638-.057l.07.058l3.998 4a.5.5 0 0 1-.638.764l-.07-.058l-3.998-4a.5.5 0 0 1 0-.707M11.502 3a.5.5 0 0 1 .491.41l.009.09v5a.5.5 0 0 1-.992.09l-.008-.09v-5a.5.5 0 0 1 .5-.5"
+      fill="none"
+      stroke="currentColor"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      d="M6 12h6m0 0h6m-6 0v6m0-6V6"
     />
   </svg>
 </template>

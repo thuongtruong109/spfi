@@ -1,7 +1,18 @@
 import {
+  DEFAULT_ANALYTICS_RATE_LIMIT_PER_MINUTE,
   DEFAULT_API_RATE_LIMIT_PER_MINUTE,
+  DEFAULT_EXPORT_RATE_LIMIT_PER_MINUTE,
   DEFAULT_TOKEN_RATE_LIMIT_PER_MINUTE,
 } from "./server/utils/rate-limit-policy";
+import { readFileSync } from "node:fs";
+import { DEFAULT_WEBHOOK_STREAM_LIMITS } from "./server/utils/webhook-stream-limiter";
+
+const desktopWebviewTargets = JSON.parse(
+  readFileSync(new URL("./config/webview-targets.json", import.meta.url), "utf8"),
+) as Array<{ label: string; url: string }>;
+const desktopWebviewUrls = desktopWebviewTargets
+  .map(({ label, url }) => `${label}|${url}`)
+  .join(",");
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -35,13 +46,20 @@ export default defineNuxtConfig({
     debugProxyAllowedHosts: "httpbin.org,api.ipify.org",
     webhookPublicUrl: "",
     webhookEncryptionKey: "",
+    webhookStreamMaxConnections: DEFAULT_WEBHOOK_STREAM_LIMITS.total,
+    webhookStreamMaxConnectionsPerIp: DEFAULT_WEBHOOK_STREAM_LIMITS.perIp,
+    webhookStreamMaxConnectionsPerShop: DEFAULT_WEBHOOK_STREAM_LIMITS.perShop,
+    webhookStreamMaxLifetimeSeconds: DEFAULT_WEBHOOK_STREAM_LIMITS.maxLifetimeSeconds,
     public: {
       sheetUrls: "",
       masterSheetUrl: "",
       masterSheetTabs: "",
+      desktopWebviewUrls,
     },
     // Fail closed when no deployment-specific limits are configured.
     apiRateLimitPerMinute: DEFAULT_API_RATE_LIMIT_PER_MINUTE,
+    analyticsRateLimitPerMinute: DEFAULT_ANALYTICS_RATE_LIMIT_PER_MINUTE,
+    exportRateLimitPerMinute: DEFAULT_EXPORT_RATE_LIMIT_PER_MINUTE,
     tokenRateLimitPerMinute: DEFAULT_TOKEN_RATE_LIMIT_PER_MINUTE,
   },
   nitro: {

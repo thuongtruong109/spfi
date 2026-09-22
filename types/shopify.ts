@@ -379,6 +379,8 @@ export interface ShopifyProduct extends ShopifyProductInput {
 export interface ShopifyPayoutSummary {
   adjustments_fee_amount: string;
   adjustments_gross_amount: string;
+  advance_fees_amount?: string;
+  advance_gross_amount?: string;
   charges_fee_amount: string;
   charges_gross_amount: string;
   refunds_fee_amount: string;
@@ -387,6 +389,7 @@ export interface ShopifyPayoutSummary {
   reserved_funds_gross_amount: string;
   retried_payouts_fee_amount: string;
   retried_payouts_gross_amount: string;
+  usdc_rebate_credit_amount?: string;
 }
 
 export interface ShopifyPayout {
@@ -652,9 +655,34 @@ export type PaymentsOverviewResponse = import("./api-contract").ApiSuccessRespon
 
 export interface PayoutsResponse {
   payouts: ShopifyPayout[];
+  metadata: import("./shopify-payments-graphql").ShopifyPaymentsPayoutMetadata[];
+  pageInfo: import("./shopify-payments-graphql").ShopifyConnectionPageInfo;
+}
+
+export interface ShopifyRestPageInfo {
+  nextCursor: string | null;
+  previousCursor: string | null;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+export interface PayoutDetailIssue {
+  message: string;
+  statusCode: number;
 }
 
 export interface PayoutDetailResponse {
   payout: ShopifyPayout | null;
+  metadata: import("./shopify-payments-graphql").ShopifyPaymentsPayoutMetadata | null;
   transactions: ShopifyBalanceTransaction[];
+  pageInfo: ShopifyRestPageInfo;
+  issues?: {
+    metadata?: PayoutDetailIssue;
+    transactions?: PayoutDetailIssue;
+  };
+}
+
+export interface PayoutTransactionsPageResponse {
+  transactions: ShopifyBalanceTransaction[];
+  pageInfo: ShopifyRestPageInfo;
 }

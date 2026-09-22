@@ -67,15 +67,6 @@ function notificationTitle(notification: ClientWebhookNotification) {
     PRODUCTS_CREATE: "notification.productCreated",
     PRODUCTS_UPDATE: "notification.productUpdated",
     PRODUCTS_DELETE: "notification.productDeleted",
-    COLLECTIONS_CREATE: "notification.collectionCreated",
-    COLLECTIONS_UPDATE: "notification.collectionUpdated",
-    COLLECTIONS_DELETE: "notification.collectionDeleted",
-    COLLECTION_LISTINGS_ADD: "notification.collectionUpdated",
-    COLLECTION_LISTINGS_REMOVE: "notification.collectionUpdated",
-    COLLECTION_LISTINGS_UPDATE: "notification.collectionUpdated",
-    COLLECTION_PUBLICATIONS_CREATE: "notification.collectionUpdated",
-    COLLECTION_PUBLICATIONS_UPDATE: "notification.collectionUpdated",
-    COLLECTION_PUBLICATIONS_DELETE: "notification.collectionUpdated",
     INVENTORY_LEVELS_UPDATE: "notification.inventoryUpdated",
     CUSTOMERS_CREATE: "notification.customerCreated",
     CUSTOMERS_DELETE: "notification.customerDeleted",
@@ -106,16 +97,6 @@ function notificationLink(notification: ClientWebhookNotification) {
   if (notification.kind === "dispute") return { path: "/payment" };
   if (["product", "inventory"].includes(notification.kind)) {
     return { path: "/product" };
-  }
-  if (notification.kind === "collection") {
-    return {
-      path: "/store",
-      query: {
-        shop: notification.storeId,
-        tab: "collections",
-        collection: notification.resourceId,
-      },
-    };
   }
   if (notification.kind === "customer") return { path: "/customer" };
   return { path: "/dashboard" };
@@ -237,7 +218,6 @@ onBeforeUnmount(() => {
               />
               <Boxes v-else-if="notification.kind === 'inventory'" />
               <PackageOpen v-else-if="notification.kind === 'product'" />
-              <Boxes v-else-if="notification.kind === 'collection'" />
               <UserRound v-else-if="notification.kind === 'customer'" />
               <Bell v-else-if="['app', 'shop'].includes(notification.kind)" />
               <ShoppingBag v-else />

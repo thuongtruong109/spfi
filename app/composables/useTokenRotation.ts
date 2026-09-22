@@ -1,7 +1,15 @@
 import { useFormStore } from "~/stores/form";
 import { useCredentialVaultStore } from "~/stores/credentialVault";
-import type { ShopifyAccessTokenResponse } from "~~/types/shopify";
+import { mapSettledWithConcurrency } from "~~/utils/promise-concurrency";
 import { resolveTokenExpiresAt } from "~~/utils/token-lifecycle";
+import { requestShopifyAccessToken } from "~~/utils/token-request";
+import {
+  acquireTokenRotationLease,
+  releaseTokenRotationLease,
+  renewTokenRotationLease,
+  TOKEN_ROTATION_SWEEP_LEASE_ID,
+} from "~~/utils/token-rotation-lease";
+import { CREDENTIAL_VAULT_STORAGE_KEY } from "~~/utils/credential-vault-storage";
 
 type IdleDeadlineLike = {
   didTimeout: boolean;
@@ -22,8 +30,8 @@ const TOKEN_ROTATION_JITTER_MS = 5 * 60 * 1000;
 const TOKEN_ROTATION_MAX_DELAY_MS = 60 * 60 * 1000;
 const TOKEN_ROTATION_IDLE_TIMEOUT_MS = 30 * 1000;
 const TOKEN_ROTATION_RETRY_DELAY_MS = 60 * 1000;
-const TOKEN_ROTATION_LEASE_MS = 2 * 60 * 1000;
-const TOKEN_ROTATION_LEASE_PREFIX = "spf_token_rotation_lease:";
+const TOKEN_ROTATION_SWEEP_RETRY_DELAY_MS = 1_000;
+const TOKEN_ROTATION_CONCURRENCY = 8;
 
 export function useTokenRotation() {
   const formStore = useFormStore();
@@ -32,6 +40,7 @@ export function useTokenRotation() {
   let rotationTimer: ReturnType<typeof setTimeout> | null = null;
   let idleCallbackHandle: number | null = null;
   let stopKnownStoresWatch: (() => void) | null = null;
+  let isRotationCheckRunning = false;
   let isDisposed = false;
 
   async function rotateToken(id: string) {
@@ -42,19 +51,16 @@ export function useTokenRotation() {
       return;
     }
 
-    if (rotatingIds.value[id] || !acquireRotationLease(id)) return;
+    if (rotatingIds.value[id] || !acquireTokenRotationLease(id)) return false;
 
     rotatingIds.value[id] = true;
     try {
       console.log(`Rotating token for store: ${id}`);
-      const res = await $fetch<ShopifyAccessTokenResponse>("/api/generate-token", {
-        method: "POST",
-        body: {
-          storeId: id,
-          clientId: data.clientId,
-          clientSecret: data.clientSecret,
-          sock: data.sock,
-        },
+      const res = await requestShopifyAccessToken({
+        storeId: id,
+        clientId: data.clientId,
+        clientSecret: data.clientSecret,
+        sock: data.sock,
       });
 
       if (res?.access_token) {
@@ -70,8 +76,10 @@ export function useTokenRotation() {
       console.error(`Rotate failed for store ${id}:`, e);
     } finally {
       rotatingIds.value[id] = false;
-      releaseRotationLease(id);
+      releaseTokenRotationLease(id);
     }
+
+    return true;
   }
 
   function isDocumentVisible() {
@@ -165,38 +173,70 @@ export function useTokenRotation() {
   async function checkAndRotate() {
     if (typeof window === "undefined") return;
     if (!isDocumentVisible()) return;
+    if (isRotationCheckRunning) return;
+    if (!acquireTokenRotationLease(TOKEN_ROTATION_SWEEP_LEASE_ID)) {
+      scheduleNextCheck(TOKEN_ROTATION_SWEEP_RETRY_DELAY_MS);
+      return;
+    }
+
+    isRotationCheckRunning = true;
+
+    try {
+      await rotateDueTokens();
+    } finally {
+      isRotationCheckRunning = false;
+      releaseTokenRotationLease(TOKEN_ROTATION_SWEEP_LEASE_ID);
+    }
+  }
+
+  async function rotateDueTokens() {
+    if (typeof window === "undefined") return;
 
     if (formStore.knownStores.length === 0) {
       formStore.loadKnownStores();
     }
 
     const now = Date.now();
-    const rotationTasks: Promise<void>[] = [];
+    const dueStoreIds: string[] = [];
 
     formStore.knownStores.forEach((id) => {
-      const data = credentialVault.getStoreData(id);
-
-      if (data && typeof data === "object" && data.accessToken) {
-        const expired = data.expiresTime
-          ? now >=
-            data.expiresTime - TOKEN_ROTATION_MARGIN_MS - getStoreRotationJitter(id)
-          : isExpiringShopifyToken(data.accessToken) && Boolean(data.clientSecret);
-        if (expired && !rotatingIds.value[id]) {
-          rotationTasks.push(rotateToken(id));
-        }
+      if (isStoreRotationDue(id, now)) {
+        dueStoreIds.push(id);
       }
     });
 
-    if (rotationTasks.length) {
-      await Promise.allSettled(rotationTasks);
-    }
+    const results = await mapSettledWithConcurrency(
+      dueStoreIds,
+      TOKEN_ROTATION_CONCURRENCY,
+      async (id) => {
+        if (isDisposed || !isDocumentVisible()) return false;
+        if (!isStoreRotationDue(id, Date.now())) return false;
+
+        const attempted = await rotateToken(id);
+        renewTokenRotationLease(TOKEN_ROTATION_SWEEP_LEASE_ID);
+        return attempted;
+      },
+    );
+    const attemptedRotations = results.filter(
+      (result) => result.status === "fulfilled" && result.value,
+    ).length;
 
     const nextDelay = getNextRotationDelay(Date.now());
     scheduleNextCheck(
-      rotationTasks.length && nextDelay === 0
+      attemptedRotations > 0 && nextDelay === 0
         ? TOKEN_ROTATION_RETRY_DELAY_MS
         : nextDelay,
     );
+  }
+
+  function isStoreRotationDue(id: string, now: number) {
+    const data = credentialVault.getStoreData(id);
+    if (!data || typeof data !== "object" || !data.accessToken) return false;
+    if (rotatingIds.value[id]) return false;
+
+    return data.expiresTime
+      ? now >= data.expiresTime - TOKEN_ROTATION_MARGIN_MS - getStoreRotationJitter(id)
+      : isExpiringShopifyToken(data.accessToken) && Boolean(data.clientSecret);
   }
 
   function handleVisibilityChange() {
@@ -209,7 +249,7 @@ export function useTokenRotation() {
   }
 
   function handleStorageChange(event: StorageEvent) {
-    if (!event.key || formStore.knownStores.includes(event.key)) {
+    if (!event.key || event.key === CREDENTIAL_VAULT_STORAGE_KEY) {
       scheduleNextCheck(0);
     }
   }
@@ -254,62 +294,4 @@ function getStoreRotationJitter(storeId: string) {
     hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
   }
   return hash % TOKEN_ROTATION_JITTER_MS;
-}
-
-function acquireRotationLease(storeId: string) {
-  if (typeof window === "undefined") return false;
-  const key = `${TOKEN_ROTATION_LEASE_PREFIX}${storeId}`;
-  const now = Date.now();
-
-  try {
-    const existing = JSON.parse(localStorage.getItem(key) || "null") as {
-      owner?: string;
-      expiresAt?: number;
-    } | null;
-    if (
-      existing?.owner &&
-      existing.owner !== leaseOwnerForRead() &&
-      Number(existing.expiresAt) > now
-    ) {
-      return false;
-    }
-  } catch {
-    // A malformed or expired lease is safe to replace.
-  }
-
-  const owner = leaseOwnerForRead();
-  localStorage.setItem(
-    key,
-    JSON.stringify({ owner, expiresAt: now + TOKEN_ROTATION_LEASE_MS }),
-  );
-  try {
-    return JSON.parse(localStorage.getItem(key) || "null")?.owner === owner;
-  } catch {
-    return false;
-  }
-}
-
-function releaseRotationLease(storeId: string) {
-  if (typeof window === "undefined") return;
-  const key = `${TOKEN_ROTATION_LEASE_PREFIX}${storeId}`;
-  try {
-    const current = JSON.parse(localStorage.getItem(key) || "null") as {
-      owner?: string;
-    } | null;
-    if (current?.owner === leaseOwnerForRead()) localStorage.removeItem(key);
-  } catch {
-    localStorage.removeItem(key);
-  }
-}
-
-let rotationLeaseOwner = "";
-
-function leaseOwnerForRead() {
-  if (!rotationLeaseOwner) {
-    rotationLeaseOwner =
-      typeof globalThis.crypto?.randomUUID === "function"
-        ? globalThis.crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  }
-  return rotationLeaseOwner;
 }

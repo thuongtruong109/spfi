@@ -23,58 +23,36 @@
         </div>
       </div>
 
-      <div class="ops-preview" :aria-label="t('home.previewAria')">
-        <div class="preview-toolbar">
-          <span />
-          <span />
-          <span />
-          <strong>{{ t("home.previewLive") }}</strong>
-        </div>
-        <div class="preview-grid">
-          <div class="preview-panel preview-panel-large">
-            <div class="preview-panel-head">
-              <span class="panel-kicker">Live operations</span>
-              <span class="panel-pill is-ok">Quota 78%</span>
-            </div>
-            <div class="status-lines">
-              <span class="line is-long" />
-              <span class="line is-mid" />
-              <span class="line is-short" />
-            </div>
-            <div class="signal-row">
-              <span>Dashboard</span>
-              <strong>Revenue · payments · users</strong>
-            </div>
-            <div class="signal-row">
-              <span>Store workspace</span>
-              <strong>Profile · products · customers</strong>
-            </div>
-            <div class="quota-line" aria-hidden="true">
-              <span />
-            </div>
-            <div class="signal-row">
-              <span>Payment views</span>
-              <strong>Transactions · payouts · disputes</strong>
-            </div>
-          </div>
-        </div>
-      </div>
+      <LandingOperationsPreview />
     </section>
 
-    <section class="quick-links" :aria-label="t('home.workflowsAria')">
-      <NuxtLink
-        v-for="item in quickLinks"
-        :key="item.to"
-        class="workflow-card"
-        :to="item.to"
-      >
-        <component :is="item.icon" class="workflow-icon" />
+    <section class="workflow-section" :aria-label="t('home.workflowsAria')">
+      <div class="workflow-heading">
         <div>
-          <h2>{{ item.title }}</h2>
-          <p>{{ item.description }}</p>
+          <p class="eyebrow is-blue">{{ t("home.workflowsEyebrow") }}</p>
+          <h2>{{ t("home.workflowsTitle") }}</h2>
         </div>
-        <IconsArrowRight class="workflow-arrow" />
-      </NuxtLink>
+        <p>{{ t("home.workflowsBody") }}</p>
+      </div>
+
+      <div class="quick-links">
+        <NuxtLink
+          v-for="(item, index) in quickLinks"
+          :key="item.to"
+          class="workflow-card"
+          :class="{ 'is-featured': index === 0 }"
+          :to="item.to"
+        >
+          <span class="workflow-icon-wrap" :class="`is-${item.tone}`">
+            <component :is="item.icon" class="workflow-icon" aria-hidden="true" />
+          </span>
+          <div>
+            <h3>{{ item.title }}</h3>
+            <p>{{ item.description }}</p>
+          </div>
+          <IconsArrowRight class="workflow-arrow" aria-hidden="true" />
+        </NuxtLink>
+      </div>
     </section>
 
     <section class="motivation-section landing-section">
@@ -117,7 +95,7 @@
           class="assurance-item"
         >
           <div class="assurance-icon">
-            <component :is="item.icon" />
+            <component :is="item.icon" aria-hidden="true" />
           </div>
           <h3>{{ item.title }}</h3>
           <p>{{ item.description }}</p>
@@ -185,6 +163,18 @@
 </template>
 
 <script setup lang="ts">
+import {
+  Activity,
+  Boxes,
+  Gauge,
+  GitBranch,
+  LayoutDashboard,
+  PlugZap,
+  Settings2,
+  Sheet,
+  ShieldCheck,
+  Store,
+} from "@lucide/vue";
 import IconsLandingClean from "~/components/icons/landing/Clean.vue";
 import IconsLandingFlash from "~/components/icons/landing/Flash.vue";
 import IconsLandingUsefull from "~/components/icons/landing/Usefull.vue";
@@ -195,45 +185,51 @@ const quickLinks = computed(() => [
   {
     to: "/dashboard",
     title: t("nav.dashboard"),
-    description: "Review cross-store revenue, fulfillment, customers, and payments.",
-    icon: "IconsHero",
+    description: t("home.quickDashboardDescription"),
+    icon: LayoutDashboard,
+    tone: "green",
   },
   {
     to: "/setup",
     title: t("home.quickSetupTitle"),
     description: t("home.quickSetupDescription"),
-    icon: "IconsHero",
+    icon: PlugZap,
+    tone: "blue",
   },
   {
     to: "/manager",
     title: t("home.quickManagerTitle"),
     description: t("home.quickManagerDescription"),
-    icon: "IconsBulking",
+    icon: Boxes,
+    tone: "violet",
   },
   {
     to: "/store",
     title: t("nav.store"),
-    description:
-      "Open profile, orders, products, customers, transactions, payouts, and disputes.",
-    icon: "IconsRefresh",
+    description: t("home.quickStoreDescription"),
+    icon: Store,
+    tone: "amber",
   },
   {
     to: "/settings#sheets",
     title: t("home.quickSheetTitle"),
     description: t("home.quickSheetDescription"),
-    icon: "IconsCopy",
+    icon: Sheet,
+    tone: "green",
   },
   {
     to: "/status",
     title: t("home.quickStatusTitle"),
     description: t("home.quickStatusDescription"),
-    icon: "IconsCheck",
+    icon: Activity,
+    tone: "blue",
   },
   {
     to: "/settings",
     title: t("nav.settings"),
-    description: "Tune tracking credentials and cache lifetime from one admin page.",
-    icon: "IconsSync",
+    description: t("home.quickSettingsDescription"),
+    icon: Settings2,
+    tone: "violet",
   },
 ]);
 
@@ -259,17 +255,17 @@ const assuranceItems = computed(() => [
   {
     title: t("home.assuranceVaultTitle"),
     description: t("home.assuranceVaultDescription"),
-    icon: "IconsCheck",
+    icon: ShieldCheck,
   },
   {
     title: t("home.assuranceRateTitle"),
     description: t("home.assuranceRateDescription"),
-    icon: "IconsSync",
+    icon: Gauge,
   },
   {
     title: t("home.assuranceFlowTitle"),
     description: t("home.assuranceFlowDescription"),
-    icon: "IconsRefresh",
+    icon: GitBranch,
   },
 ]);
 
@@ -328,71 +324,106 @@ const faqItems = computed(() => [
 
 <style scoped>
 .landing-page {
-  width: min(1180px, calc(100% - 32px));
+  position: relative;
+  width: min(1240px, calc(100% - 40px));
   margin: 0 auto;
+}
+
+.landing-page::before {
+  position: absolute;
+  z-index: -1;
+  top: -80px;
+  right: 0;
+  width: min(720px, 60%);
+  height: 560px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(44, 178, 119, 0.1), transparent 68%);
+  content: "";
+  filter: blur(10px);
+  pointer-events: none;
 }
 
 .landing-hero {
   display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(360px, 0.8fr);
-  min-height: calc(100vh - 190px);
+  grid-template-columns: minmax(0, 1.02fr) minmax(440px, 0.98fr);
+  min-height: min(740px, calc(100vh - 92px));
   align-items: center;
-  gap: 42px;
+  gap: clamp(42px, 6vw, 78px);
+  padding: 54px 0 62px;
   animation: rise-in 0.72s ease both;
 }
 
 .hero-copy {
   display: grid;
-  gap: 18px;
+  gap: 22px;
   min-width: 0;
 }
 
 .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   margin: 0;
-  color: var(--green);
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0;
+  border: 1px solid color-mix(in srgb, var(--green) 18%, transparent);
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.065em;
   background: var(--green-soft);
   color: var(--green);
   border-radius: 999px;
-  padding: 4px 9px;
+  padding: 6px 10px;
+  text-transform: uppercase;
   width: fit-content;
+}
+
+.eyebrow::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
 }
 
 .hero-copy h1 {
   max-width: 760px;
   margin: 0;
-  color: var(--text);
-  font-size: clamp(2.35rem, 7vw, 4.75rem);
-  line-height: 0.98;
-  letter-spacing: 0;
+  background: linear-gradient(128deg, var(--text) 12%, var(--green) 72%, var(--blue));
+  color: transparent;
+  font-size: clamp(3rem, 6vw, 5.35rem);
+  line-height: 0.94;
+  letter-spacing: -0.065em;
+  background-clip: text;
 }
 
 .hero-sub {
   max-width: 640px;
   margin: 0;
   color: var(--muted);
-  font-size: 1.02rem;
-  line-height: 1.68;
+  font-size: clamp(1rem, 1.5vw, 1.12rem);
+  line-height: 1.72;
 }
 
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 4px;
+  gap: 11px;
+  margin-top: 6px;
 }
 
 .hero-btn {
   display: inline-flex;
-  min-height: 40px;
+  min-height: 46px;
   align-items: center;
   gap: 8px;
-  border-radius: 8px;
-  padding: 0 15px;
-  font-weight: 600;
+  border-radius: 12px;
+  padding: 0 17px;
+  font-size: 0.88rem;
+  font-weight: 700;
   text-decoration: none;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
 }
 
 .hero-btn :deep(svg) {
@@ -401,238 +432,190 @@ const faqItems = computed(() => [
 }
 
 .hero-btn-primary {
-  background: var(--green);
+  background: linear-gradient(
+    135deg,
+    var(--green),
+    color-mix(in srgb, var(--green) 76%, #0a7c74)
+  );
   color: var(--on-accent);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--green) 24%, transparent);
 }
 
 .hero-btn-secondary {
   border: 1px solid var(--line);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
   color: var(--text);
 }
 
-.ops-preview {
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  animation: float-in 0.86s ease 0.08s both;
+.hero-btn:hover {
+  transform: translateY(-2px);
 }
 
-.preview-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  border-bottom: 1px solid var(--line);
-  padding: 12px 14px;
-  background: var(--surface-soft);
+.hero-btn-primary:hover {
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--green) 30%, transparent);
 }
 
-.preview-toolbar span {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: var(--green);
+.hero-btn-secondary:hover {
+  border-color: color-mix(in srgb, var(--green) 34%, var(--line));
 }
 
-.preview-toolbar span:nth-child(2) {
-  background: var(--amber);
-}
-
-.preview-toolbar span:nth-child(3) {
-  background: var(--blue);
-}
-
-.preview-toolbar strong {
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 0.76rem;
-}
-
-.preview-grid {
+.workflow-section {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  padding-top: 36px;
+  animation: rise-in 0.62s ease 0.18s both;
+}
+
+.workflow-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.7fr);
+  align-items: end;
+  gap: 48px;
+}
+
+.workflow-heading > div {
+  display: grid;
   gap: 12px;
-  padding: 14px;
 }
 
-.preview-panel {
-  display: grid;
-  gap: 10px;
-  min-height: 120px;
-  align-content: start;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 14px;
-  background: var(--surface-raised);
-}
-
-.preview-panel-large {
-  grid-column: 1 / -1;
-  min-height: 220px;
-}
-
-.preview-panel-head,
-.signal-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.panel-kicker,
-.preview-panel span,
-.signal-row span {
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.panel-pill {
-  border-radius: 999px;
-  padding: 4px 9px;
-  font-size: 0.74rem;
-  font-weight: 600;
-}
-
-.panel-pill.is-ok {
-  background: var(--green-soft);
-  color: var(--green);
-}
-
-.status-lines {
-  display: grid;
-  gap: 9px;
-  padding: 16px 0 10px;
-}
-
-.line {
-  height: 10px;
-  border-radius: 999px;
-  background: var(--surface-soft);
-  transform-origin: left center;
-  animation: line-fill 0.8s ease both;
-}
-
-.line.is-long {
-  width: 92%;
-  animation-delay: 0.34s;
-}
-
-.line.is-mid {
-  width: 72%;
-  animation-delay: 0.44s;
-}
-
-.line.is-short {
-  width: 48%;
-  animation-delay: 0.54s;
-}
-
-.signal-row {
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
-}
-
-.signal-row strong,
-.preview-panel strong {
+.workflow-heading h2 {
+  max-width: 720px;
+  margin: 0;
   color: var(--text);
+  font-size: clamp(1.75rem, 4vw, 2.7rem);
+  line-height: 1.05;
+  letter-spacing: -0.045em;
 }
 
-.preview-icon {
-  display: inline-flex;
-  width: 32px;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: var(--blue-soft);
-  color: var(--blue);
-}
-
-.preview-icon.is-amber {
-  background: var(--amber-soft);
-  color: var(--amber);
-}
-
-.preview-icon.is-green {
-  background: var(--green-soft);
-  color: var(--green);
-}
-
-.quota-line {
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--surface-soft);
-}
-
-.quota-line span {
-  display: block;
-  width: 78%;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--green), var(--blue));
+.workflow-heading > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.94rem;
+  line-height: 1.65;
 }
 
 .quick-links {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-  animation: rise-in 0.62s ease 0.18s both;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .workflow-card {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 12px;
+  min-height: 180px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr;
+  gap: 18px;
   align-items: start;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: 18px;
+  padding: 20px;
   background: var(--surface);
   color: inherit;
   text-decoration: none;
   transition:
-    border-color 0.16s ease,
-    transform 0.16s ease;
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.workflow-card.is-featured {
+  grid-column: span 2;
+  background:
+    radial-gradient(circle at 90% 10%, rgba(39, 169, 112, 0.16), transparent 40%),
+    linear-gradient(145deg, var(--surface), var(--surface-soft));
 }
 
 .workflow-card:hover {
   border-color: rgba(31, 122, 77, 0.35);
+  box-shadow: 0 22px 48px rgba(20, 52, 37, 0.1);
   transform: translateY(-4px);
 }
 
+.workflow-icon-wrap {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--green) 18%, transparent);
+  border-radius: 12px;
+  background: var(--green-soft);
+}
+
+.workflow-icon-wrap.is-blue {
+  border-color: color-mix(in srgb, var(--blue) 18%, transparent);
+  background: var(--blue-soft);
+}
+
+.workflow-icon-wrap.is-blue .workflow-icon {
+  color: var(--blue);
+}
+
+.workflow-icon-wrap.is-amber {
+  border-color: color-mix(in srgb, var(--amber) 18%, transparent);
+  background: var(--amber-soft);
+}
+
+.workflow-icon-wrap.is-amber .workflow-icon {
+  color: var(--amber);
+}
+
+.workflow-icon-wrap.is-violet {
+  border-color: color-mix(in srgb, var(--violet) 18%, transparent);
+  background: var(--violet-soft);
+}
+
+.workflow-icon-wrap.is-violet .workflow-icon {
+  color: var(--violet);
+}
+
 .workflow-icon {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   color: var(--green);
 }
 
-.workflow-card h2 {
-  margin: 0 0 5px;
+.workflow-card > div {
+  grid-column: 1 / -1;
+}
+
+.workflow-card h3 {
+  margin: 0 0 7px;
   color: var(--text);
-  font-size: 0.98rem;
-  letter-spacing: 0;
+  font-size: 1rem;
+  letter-spacing: -0.02em;
 }
 
 .workflow-card p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.82rem;
-  line-height: 1.45;
+  font-size: 0.84rem;
+  line-height: 1.58;
 }
 
 .workflow-arrow {
+  width: 18px;
+  height: 18px;
   color: var(--muted);
+  transition: transform 0.18s ease;
+}
+
+.workflow-card:hover .workflow-arrow {
+  transform: translateX(3px);
+}
+
+.workflow-card:focus-visible {
+  border-color: color-mix(in srgb, var(--green) 46%, var(--line));
+  box-shadow: var(--focus-ring);
+  outline: none;
 }
 
 .landing-section {
   display: grid;
   gap: 26px;
   justify-items: center;
-  padding: 86px 0 0;
+  padding: 112px 0 0;
   text-align: center;
   animation: section-rise 0.68s ease both;
   animation-timeline: view();
@@ -641,9 +624,9 @@ const faqItems = computed(() => [
 
 .section-heading {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   justify-items: center;
-  max-width: 680px;
+  max-width: 730px;
   margin-bottom: 0;
   text-align: center;
 }
@@ -656,24 +639,26 @@ const faqItems = computed(() => [
 .landing-cta h2 {
   margin: 0;
   color: var(--text);
-  font-size: clamp(1.7rem, 4vw, 2.55rem);
-  line-height: 1.05;
-  letter-spacing: 0;
+  font-size: clamp(1.9rem, 4vw, 3rem);
+  line-height: 1.03;
+  letter-spacing: -0.045em;
 }
 
 .section-heading p:not(.eyebrow) {
   margin: 0;
   color: var(--muted);
-  font-size: 0.98rem;
+  font-size: 1rem;
   line-height: 1.7;
 }
 
 .eyebrow.is-blue {
+  border-color: color-mix(in srgb, var(--blue) 18%, transparent);
   background: var(--blue-soft);
   color: var(--blue);
 }
 
 .eyebrow.is-amber {
+  border-color: color-mix(in srgb, var(--amber) 18%, transparent);
   background: var(--amber-soft);
   color: var(--amber);
 }
@@ -681,25 +666,25 @@ const faqItems = computed(() => [
 .motivation-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px;
   width: 100%;
 }
 
 .assurance-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px;
   width: 100%;
 }
 
 .assurance-item {
   display: grid;
-  gap: 12px;
-  min-height: 210px;
+  gap: 15px;
+  min-height: 224px;
   align-content: start;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 18px;
+  border-radius: 18px;
+  padding: 24px;
   background: var(--surface);
   text-align: left;
   transition:
@@ -716,11 +701,11 @@ const faqItems = computed(() => [
 
 .assurance-icon {
   display: inline-flex;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 13px;
   background: var(--green-soft);
   color: var(--green);
 }
@@ -736,69 +721,86 @@ const faqItems = computed(() => [
 }
 
 .assurance-icon :deep(svg) {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
 }
 
 .assurance-item h3 {
   margin: 0;
   color: var(--text);
-  font-size: 1rem;
-  letter-spacing: 0;
+  font-size: 1.06rem;
+  letter-spacing: -0.02em;
 }
 
 .assurance-item p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1.62;
+  font-size: 0.91rem;
+  line-height: 1.68;
 }
 
 .metrics-strip {
   display: grid;
-  gap: 18px;
-  padding: 72px 0 0;
+  gap: 24px;
+  margin-top: 112px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  padding: 28px;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(46, 188, 126, 0.22), transparent 32%),
+    linear-gradient(135deg, #10271c, #17382a);
+  box-shadow: 0 24px 60px rgba(10, 36, 24, 0.16);
   animation: section-rise 0.68s ease both;
   animation-timeline: view();
   animation-range: entry 12% cover 34%;
 }
 
+.metrics-strip .eyebrow {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f6bd61;
+}
+
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .metric-card {
   display: grid;
   gap: 4px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  padding: 18px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(9, 28, 19, 0.48);
+  padding: 22px;
 }
 
 .metric-card strong {
-  color: var(--text);
-  font-size: clamp(1.25rem, 3vw, 1.9rem);
+  color: #f5fff9;
+  font-size: clamp(1.45rem, 3vw, 2.1rem);
   line-height: 1.1;
 }
 
 .metric-card span {
-  color: var(--muted);
+  color: rgba(228, 246, 235, 0.68);
   font-size: 0.85rem;
   font-weight: 600;
 }
 
 .motivation-card {
   display: grid;
-  gap: 12px;
+  gap: 15px;
   align-content: start;
   justify-items: center;
-  min-height: 220px;
+  min-height: 232px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 18px;
+  border-radius: 18px;
+  padding: 26px 22px;
   background: var(--surface);
   text-align: center;
   transition:
@@ -815,11 +817,11 @@ const faqItems = computed(() => [
 
 .motivation-icon {
   display: inline-flex;
-  width: 38px;
-  height: 38px;
+  width: 48px;
+  height: 48px;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 15px;
   background: var(--green-soft);
   color: var(--green);
   animation: icon-breathe 2.8s ease-in-out infinite;
@@ -836,16 +838,16 @@ const faqItems = computed(() => [
 }
 
 .motivation-icon :deep(svg) {
-  width: 20px;
-  height: 20px;
+  width: 23px;
+  height: 23px;
 }
 
 .motivation-card h3,
 .runbook-item h3 {
   margin: 0;
   color: var(--text);
-  font-size: 1rem;
-  letter-spacing: 0;
+  font-size: 1.06rem;
+  letter-spacing: -0.02em;
 }
 
 .motivation-card p,
@@ -853,8 +855,8 @@ const faqItems = computed(() => [
 .faq-item p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1.62;
+  font-size: 0.91rem;
+  line-height: 1.68;
 }
 
 .runbook-section {
@@ -866,27 +868,33 @@ const faqItems = computed(() => [
 
 .runbook-list {
   display: grid;
-  gap: 10px;
+  gap: 16px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
   margin: 0 auto;
 }
 
 .runbook-item {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   align-items: start;
   justify-content: flex-start;
   text-align: left;
-  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 24px;
+  background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
   transition:
+    border-color 0.18s ease,
     background 0.18s ease,
     transform 0.18s ease;
 }
 
 .runbook-item:hover {
-  background: color-mix(in srgb, var(--surface-raised) 48%, transparent);
-  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--blue) 24%, var(--line));
+  background: var(--surface);
+  transform: translateY(-4px);
 }
 
 .runbook-item .runbook-item-head {
@@ -901,7 +909,7 @@ const faqItems = computed(() => [
   height: 38px;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 11px;
   background: var(--surface);
   color: var(--blue);
   font-family: var(--font-mono);
@@ -919,14 +927,14 @@ const faqItems = computed(() => [
 
 .faq-list {
   display: grid;
-  gap: 10px;
-  width: min(760px, 100%);
+  gap: 12px;
+  width: min(820px, 100%);
   margin: 0 auto;
 }
 
 .faq-item {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 16px;
   background: var(--surface);
   transition:
     border-color 0.18s ease,
@@ -945,12 +953,12 @@ const faqItems = computed(() => [
   position: relative;
   display: grid;
   grid-template-columns: 1fr;
-  min-height: 58px;
+  min-height: 66px;
   align-items: center;
   justify-items: start;
   cursor: pointer;
   list-style: none;
-  padding: 0 20px;
+  padding: 0 50px 0 22px;
   color: var(--text);
   font-weight: 600;
   text-align: left;
@@ -962,9 +970,9 @@ const faqItems = computed(() => [
 
 .faq-item summary :deep(svg) {
   position: absolute;
-  right: 16px;
-  width: 16px;
-  height: 16px;
+  right: 20px;
+  width: 18px;
+  height: 18px;
   color: var(--green);
   transition: transform 0.16s ease;
 }
@@ -975,7 +983,7 @@ const faqItems = computed(() => [
 
 .faq-item p {
   border-top: 1px solid var(--line);
-  padding: 14px 16px 16px;
+  padding: 18px 22px 20px;
 }
 
 .landing-cta {
@@ -983,12 +991,14 @@ const faqItems = computed(() => [
   justify-content: space-between;
   align-items: center;
   gap: 18px;
-  margin: 86px 0 42px;
-  border-radius: 8px;
-  padding: 28px;
+  margin: 112px 0 42px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--green) 18%, var(--line));
+  border-radius: 24px;
+  padding: 38px;
   background:
-    linear-gradient(135deg, rgba(223, 244, 232, 0.92), rgba(226, 238, 249, 0.9)),
-    var(--surface-soft);
+    radial-gradient(circle at 92% 10%, rgba(43, 168, 114, 0.2), transparent 34%),
+    linear-gradient(135deg, var(--green-soft), var(--blue-soft)), var(--surface-soft);
   animation: section-rise 0.68s ease both;
   animation-timeline: view();
   animation-range: entry 12% cover 34%;
@@ -1016,18 +1026,6 @@ const faqItems = computed(() => [
   }
 }
 
-@keyframes float-in {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.98);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
 @keyframes section-rise {
   from {
     opacity: 0;
@@ -1037,16 +1035,6 @@ const faqItems = computed(() => [
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes line-fill {
-  from {
-    transform: scaleX(0.18);
-  }
-
-  to {
-    transform: scaleX(1);
   }
 }
 
@@ -1063,16 +1051,25 @@ const faqItems = computed(() => [
 
 @media (max-width: 980px) {
   .landing-hero,
-  .quick-links,
+  .workflow-heading,
   .motivation-grid,
   .assurance-grid,
-  .metrics-grid {
+  .metrics-grid,
+  .runbook-list {
     grid-template-columns: 1fr;
+  }
+
+  .quick-links {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .landing-hero {
     min-height: auto;
-    padding: 26px 0;
+    padding: 48px 0;
+  }
+
+  .workflow-card.is-featured {
+    grid-column: auto;
   }
 
   .landing-section {
@@ -1084,7 +1081,13 @@ const faqItems = computed(() => [
   }
 
   .metrics-strip {
-    padding-top: 58px;
+    margin-top: 74px;
+  }
+}
+
+@media (max-width: 680px) {
+  .quick-links {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1099,8 +1102,8 @@ const faqItems = computed(() => [
     width: 100%;
   }
 
-  .preview-grid {
-    grid-template-columns: 1fr;
+  .workflow-section {
+    padding-top: 20px;
   }
 
   .section-heading h2,
@@ -1109,26 +1112,26 @@ const faqItems = computed(() => [
   }
 
   .runbook-item {
-    padding-inline: 4px;
+    padding: 20px;
   }
 
   .faq-item summary {
-    padding: 0 40px;
+    padding: 0 46px 0 18px;
   }
 
   .landing-cta {
-    padding: 20px;
+    align-items: flex-start;
+    padding: 24px;
+    flex-direction: column;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .landing-hero,
-  .ops-preview,
   .quick-links,
   .landing-section,
   .metrics-strip,
   .landing-cta,
-  .line,
   .motivation-icon {
     animation: none;
   }

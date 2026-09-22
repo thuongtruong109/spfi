@@ -72,10 +72,11 @@ async function runAction(item: ReturnSummary, action: ReturnAction) {
     </div>
     <div
       v-else-if="store.loadingResources.includes('returns') && !store.returns.length"
-      class="ops-empty"
+      class="ops-empty is-loading"
       role="status"
     >
-      {{ t("operations.return.loading") }}
+      <ApiLoadingIcon variant="section" aria-hidden="true" />
+      <span>{{ t("operations.return.loading") }}</span>
     </div>
     <div v-else-if="store.returns.length" class="ops-table-scroll">
       <table class="ops-table">

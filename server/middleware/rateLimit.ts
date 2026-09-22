@@ -1,16 +1,14 @@
-import {
-  createError,
-  defineEventHandler,
-  getRequestIP,
-  getRequestURL,
-  setResponseHeader,
-  type H3Event,
-} from "h3";
+import { createError, defineEventHandler, getRequestURL, setResponseHeader } from "h3";
 import { useRuntimeConfig } from "#imports";
+import { resolveClientIp } from "../utils/client-ip";
 import { readRuntimeBoolean } from "../utils/runtime-config";
 import {
+  classifyApiRateLimitPolicies,
+  DEFAULT_ANALYTICS_RATE_LIMIT_PER_MINUTE,
   DEFAULT_API_RATE_LIMIT_PER_MINUTE,
+  DEFAULT_EXPORT_RATE_LIMIT_PER_MINUTE,
   DEFAULT_TOKEN_RATE_LIMIT_PER_MINUTE,
+  type ApiRateLimitPolicy,
   resolveRateLimit,
 } from "../utils/rate-limit-policy";
 
@@ -23,29 +21,24 @@ interface RateLimitEntry {
 }
 
 interface RateLimitState {
-  api: Map<string, RateLimitEntry>;
-  token: Map<string, RateLimitEntry>;
+  buckets: Record<ApiRateLimitPolicy, Map<string, RateLimitEntry>>;
   lastCleanupAt: number;
 }
 
 const state: RateLimitState = {
-  api: new Map(),
-  token: new Map(),
+  buckets: {
+    api: new Map(),
+    analytics: new Map(),
+    export: new Map(),
+    token: new Map(),
+  },
   lastCleanupAt: Date.now(),
 };
-
-function resolveClientIp(event: H3Event, trustProxyHeaders: boolean): string {
-  return (
-    getRequestIP(event, { xForwardedFor: trustProxyHeaders }) ||
-    event.node.req.socket.remoteAddress ||
-    "unknown"
-  );
-}
 
 function cleanupExpiredEntries(now: number) {
   if (now - state.lastCleanupAt < CLEANUP_INTERVAL_MS) return;
 
-  for (const bucket of [state.api, state.token]) {
+  for (const bucket of Object.values(state.buckets)) {
     for (const [key, entry] of bucket) {
       if (entry.resetAt <= now) {
         bucket.delete(key);
@@ -90,18 +83,31 @@ export default defineEventHandler((event) => {
     config.tokenRateLimitPerMinute,
     DEFAULT_TOKEN_RATE_LIMIT_PER_MINUTE,
   );
-  const isTokenRequest = pathname === "/api/generate-token";
+  const analyticsLimit = resolveRateLimit(
+    config.analyticsRateLimitPerMinute,
+    DEFAULT_ANALYTICS_RATE_LIMIT_PER_MINUTE,
+  );
+  const exportLimit = resolveRateLimit(
+    config.exportRateLimitPerMinute,
+    DEFAULT_EXPORT_RATE_LIMIT_PER_MINUTE,
+  );
+  const policyLimits: Record<ApiRateLimitPolicy, number> = {
+    api: apiLimit,
+    analytics: analyticsLimit,
+    export: exportLimit,
+    token: tokenLimit,
+  };
 
   const now = Date.now();
   cleanupExpiredEntries(now);
 
   const ip = resolveClientIp(event, readRuntimeBoolean(config.trustProxyHeaders));
-  const apiResult = apiLimit > 0 ? consume(state.api, ip, apiLimit, now) : null;
-  const tokenResult =
-    isTokenRequest && tokenLimit > 0 ? consume(state.token, ip, tokenLimit, now) : null;
-  const results = [apiResult, tokenResult].filter(
-    (result): result is NonNullable<typeof result> => result !== null,
-  );
+  const results = classifyApiRateLimitPolicies(pathname).flatMap((policy) => {
+    const limit = policyLimits[policy];
+    return limit > 0
+      ? [{ policy, ...consume(state.buckets[policy], ip, limit, now) }]
+      : [];
+  });
   const rejectedResult = results.find((result) => !result.allowed) || null;
   const headerResult = results.reduce((mostConstrained, result) =>
     result.remaining / result.limit < mostConstrained.remaining / mostConstrained.limit
@@ -115,6 +121,7 @@ export default defineEventHandler((event) => {
 
   // Generic headers describe the most constrained policy for this route.
   // Dedicated headers keep the app-wide API meter stable on token requests.
+  const apiResult = results.find((result) => result.policy === "api");
   if (apiResult) {
     setResponseHeader(event, "X-RateLimit-Api-Limit", apiResult.limit);
     setResponseHeader(event, "X-RateLimit-Api-Remaining", apiResult.remaining);
@@ -123,6 +130,14 @@ export default defineEventHandler((event) => {
       "X-RateLimit-Api-Reset",
       Math.ceil(apiResult.resetAt / 1000),
     );
+  }
+
+  for (const result of results) {
+    if (result.policy === "api") continue;
+    const prefix = `X-RateLimit-${capitalize(result.policy)}`;
+    setResponseHeader(event, `${prefix}-Limit`, result.limit);
+    setResponseHeader(event, `${prefix}-Remaining`, result.remaining);
+    setResponseHeader(event, `${prefix}-Reset`, Math.ceil(result.resetAt / 1000));
   }
 
   if (!rejectedResult) return;
@@ -136,3 +151,7 @@ export default defineEventHandler((event) => {
     message: `Rate limit exceeded. Try again in ${retryAfter} seconds.`,
   });
 });
+
+function capitalize(value: string) {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}

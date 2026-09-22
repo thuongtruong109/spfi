@@ -1,7 +1,13 @@
 .dashboard-page {
+  position: relative;
   width: min(100% - 32px, 1400px);
   margin: 0 auto;
   padding: 12px 0 44px;
+}
+
+.dashboard-content.is-gated {
+  min-height: 760px;
+  user-select: none;
 }
 
 .dashboard-refresh {

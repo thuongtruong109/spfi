@@ -156,7 +156,7 @@ async function clearSettings() {
   }
 
   try {
-    credentialVault.removeTrackingSettings();
+    await credentialVault.removeTrackingSettings();
     apiKey.value = "";
     carrier.value = "fedex";
     showApiKey.value = false;
@@ -208,58 +208,58 @@ function restoreDeploymentSheetSettings() {
           </div>
 
           <div class="settings-form">
-            <div class="field fixed-endpoint">
-              <span class="field-label">
-                <Link2 />
-                {{ t("settings.endpointLabel") }}
-              </span>
-              <code>{{ TRACKTACO_V2_BASE_URL }}/v2</code>
-            </div>
+            <div class="provider-fields">
+              <div class="field fixed-endpoint">
+                <span class="field-label">
+                  <Link2 />
+                  {{ t("settings.endpointLabel") }}
+                </span>
+                <code>{{ TRACKTACO_V2_BASE_URL }}/v2</code>
+              </div>
 
-            <label class="field">
-              <span class="field-label">
-                <KeyRound />
-                {{ t("settings.apiKeyLabel") }}
-              </span>
-              <span class="secret-input">
-                <input
-                  v-model="apiKey"
-                  :type="showApiKey ? 'text' : 'password'"
-                  autocomplete="new-password"
-                  spellcheck="false"
-                  maxlength="4096"
-                  :placeholder="t('settings.apiKeyPlaceholder')"
+              <label class="field">
+                <span class="field-label">
+                  <KeyRound />
+                  {{ t("settings.apiKeyLabel") }}
+                </span>
+                <span class="secret-input">
+                  <input
+                    v-model="apiKey"
+                    :type="showApiKey ? 'text' : 'password'"
+                    autocomplete="new-password"
+                    spellcheck="false"
+                    maxlength="4096"
+                    :placeholder="t('settings.apiKeyPlaceholder')"
+                  />
+                  <button
+                    type="button"
+                    class="secret-toggle"
+                    :aria-label="
+                      showApiKey ? t('settings.hideApiKey') : t('settings.showApiKey')
+                    "
+                    :title="
+                      showApiKey ? t('settings.hideApiKey') : t('settings.showApiKey')
+                    "
+                    @click="showApiKey = !showApiKey"
+                  >
+                    <EyeOff v-if="showApiKey" />
+                    <Eye v-else />
+                  </button>
+                </span>
+              </label>
+
+              <label class="field carrier-field">
+                <span class="field-label">
+                  <Truck />
+                  {{ t("settings.carrierLabel") }}
+                </span>
+                <BaseSelect
+                  v-model="carrier"
+                  :options="carrierOptions"
+                  :aria-label="t('settings.carrierLabel')"
                 />
-                <button
-                  type="button"
-                  class="secret-toggle"
-                  :aria-label="
-                    showApiKey ? t('settings.hideApiKey') : t('settings.showApiKey')
-                  "
-                  :title="
-                    showApiKey ? t('settings.hideApiKey') : t('settings.showApiKey')
-                  "
-                  @click="showApiKey = !showApiKey"
-                >
-                  <EyeOff v-if="showApiKey" />
-                  <Eye v-else />
-                </button>
-              </span>
-              <span class="field-hint">{{ t("settings.apiKeyHint") }}</span>
-            </label>
-
-            <label class="field">
-              <span class="field-label">
-                <Truck />
-                {{ t("settings.carrierLabel") }}
-              </span>
-              <BaseSelect
-                v-model="carrier"
-                :options="carrierOptions"
-                :aria-label="t('settings.carrierLabel')"
-              />
-              <span class="field-hint">{{ t("settings.carrierHint") }}</span>
-            </label>
+              </label>
+            </div>
 
             <p v-if="formError" class="form-error" role="alert">
               {{ formError }}
@@ -625,6 +625,23 @@ function restoreDeploymentSheetSettings() {
   padding: 20px;
 }
 
+.provider-fields {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.9fr) minmax(260px, 1.35fr) fit-content(220px);
+  align-items: start;
+  gap: 18px;
+}
+
+.carrier-field {
+  width: min(220px, 100%);
+}
+
+.carrier-field :deep(.custom-select) {
+  width: fit-content;
+  min-width: 170px;
+  max-width: 100%;
+}
+
 .field {
   display: grid;
   gap: 7px;
@@ -749,6 +766,14 @@ function restoreDeploymentSheetSettings() {
 @media (max-width: 760px) {
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .provider-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .carrier-field {
+    width: 100%;
   }
 }
 

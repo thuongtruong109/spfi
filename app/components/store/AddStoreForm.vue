@@ -55,31 +55,8 @@ async function connect() {
 
 <template>
   <section class="add-store-panel">
-    <div
-      v-if="props.showModeToggle"
-      class="add-store-mode"
-      :aria-label="t('store.addMode')"
-    >
-      <BaseButton
-        size="medium"
-        :variant="selectedMode === 'single' ? 'secondary' : 'ghost'"
-        :class="{ active: selectedMode === 'single' }"
-        :aria-pressed="selectedMode === 'single'"
-        @click="selectedMode = 'single'"
-      >
-        <template #icon><IconsCheck /></template>
-        {{ t("store.single") }}
-      </BaseButton>
-      <BaseButton
-        size="medium"
-        :variant="selectedMode === 'bulking' ? 'secondary' : 'ghost'"
-        :class="{ active: selectedMode === 'bulking' }"
-        :aria-pressed="selectedMode === 'bulking'"
-        @click="selectedMode = 'bulking'"
-      >
-        <template #icon><IconsBulking /></template>
-        {{ t("store.bulk") }}
-      </BaseButton>
+    <div v-if="props.showModeToggle" class="add-store-mode">
+      <StoreAddModeToggle v-model="selectedMode" />
     </div>
 
     <div v-if="selectedMode === 'single'" class="add-store-grid">
@@ -124,10 +101,8 @@ async function connect() {
       </label>
       <label class="field">
         <span>{{ t("store.clientSecret") }}</span>
-        <input
+        <BaseSecretInput
           v-model="form.clientSecret.value"
-          class="inp"
-          type="password"
           :placeholder="t('store.clientSecret')"
           @paste="form.handleCredentialPaste"
         />
@@ -225,12 +200,6 @@ async function connect() {
 
 .add-store-mode {
   justify-content: flex-end;
-}
-
-.add-store-mode :deep(.base-button.active) {
-  border-color: var(--green);
-  background: var(--green-soft);
-  color: var(--green);
 }
 
 .add-store-grid {

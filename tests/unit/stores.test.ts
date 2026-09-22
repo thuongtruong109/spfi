@@ -7,9 +7,13 @@ import { useMarketStore } from "~/stores/market";
 import { useNotificationStore } from "~/stores/notifications";
 import { useOrderStore } from "~/stores/order";
 import { useProductStore } from "~/stores/product";
+import { CREDENTIAL_VAULT_STORAGE_KEY } from "~~/utils/credential-vault-storage";
 import { KNOWN_STORES_STORAGE_KEY } from "~~/utils/known-stores";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("credential vault store", () => {
   beforeEach(() => {
@@ -19,24 +23,109 @@ describe("credential vault store", () => {
 
   it("normalizes saved credentials and safely ignores corrupted JSON", async () => {
     const vault = useCredentialVaultStore();
-    vault.initialize();
+    await vault.initialize();
     await vault.saveStoreData("shop-a", {
       domain: " shop-a.myshopify.com ",
-      accessToken: " token ",
+      sock: " socks5h://user:pass@8.8.8.8:1080 ",
+      clientId: " client-id ",
+      clientSecret: " client-secret ",
+      accessToken: " access-token-sensitive-value ",
       expiresTime: 9_007_199_254_740_991,
     });
 
     expect(vault.getStoreData("shop-a")).toMatchObject({
       domain: "shop-a.myshopify.com",
-      accessToken: "token",
+      accessToken: "access-token-sensitive-value",
       expiresTime: 9_007_199_254_740_991,
     });
-    expect(JSON.parse(localStorage.getItem("shop-a") || "{}")).toMatchObject({
-      value: { domain: "shop-a.myshopify.com", accessToken: "token" },
+    expect(localStorage.getItem("shop-a")).toBeNull();
+    const encryptedVault = localStorage.getItem(CREDENTIAL_VAULT_STORAGE_KEY) || "";
+    expect(JSON.parse(encryptedVault)).toMatchObject({
+      version: 1,
+      algorithm: "AES-GCM",
+    });
+    for (const plaintext of [
+      "shop-a",
+      "client-id",
+      "client-secret",
+      "socks5h://user:pass@8.8.8.8:1080",
+      "access-token-sensitive-value",
+    ]) {
+      expect(encryptedVault).not.toContain(plaintext);
+    }
+
+    setActivePinia(createPinia());
+    const reloadedVault = useCredentialVaultStore();
+    await reloadedVault.initialize();
+    expect(reloadedVault.getStoreData("shop-a")).toMatchObject({
+      clientId: "client-id",
+      clientSecret: "client-secret",
+      accessToken: "access-token-sensitive-value",
     });
 
     localStorage.setItem("broken-shop", "{not-json");
-    expect(vault.getStoreData("broken-shop")).toEqual({});
+    expect(reloadedVault.getStoreData("broken-shop")).toEqual({});
+  });
+
+  it("fails closed instead of overwriting a corrupted encrypted vault", async () => {
+    const vault = useCredentialVaultStore();
+    await vault.saveStoreData("shop-a", {
+      clientId: "client-id",
+      clientSecret: "client-secret",
+    });
+    const envelope = JSON.parse(
+      localStorage.getItem(CREDENTIAL_VAULT_STORAGE_KEY) || "{}",
+    ) as { ciphertext?: string };
+    envelope.ciphertext = "AAAA";
+    const corruptedVault = JSON.stringify(envelope);
+    localStorage.setItem(CREDENTIAL_VAULT_STORAGE_KEY, corruptedVault);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    setActivePinia(createPinia());
+    const reloadedVault = useCredentialVaultStore();
+    await reloadedVault.initialize();
+
+    expect(reloadedVault.initializationError).toContain("could not be decrypted");
+    await expect(
+      reloadedVault.saveStoreData("shop-b", { clientSecret: "new-secret" }),
+    ).rejects.toThrow("could not be decrypted");
+    expect(localStorage.getItem(CREDENTIAL_VAULT_STORAGE_KEY)).toBe(corruptedVault);
+  });
+
+  it("migrates legacy plaintext store data only after encrypting it", async () => {
+    localStorage.setItem(KNOWN_STORES_STORAGE_KEY, JSON.stringify(["legacy-shop"]));
+    localStorage.setItem(
+      "legacy-shop",
+      JSON.stringify({
+        value: {
+          domain: "legacy-shop.myshopify.com",
+          sock: "8.8.8.8:1080:user:pass",
+          clientId: "legacy-client",
+          clientSecret: "legacy-secret",
+        },
+      }),
+    );
+    localStorage.setItem("active_store_id", JSON.stringify({ value: "legacy-shop" }));
+    localStorage.setItem(
+      "spf_token_rotation_lease:legacy-shop",
+      JSON.stringify({ owner: "legacy-owner", expiresAt: Date.now() + 60_000 }),
+    );
+
+    const vault = useCredentialVaultStore();
+    await vault.initialize();
+
+    expect(vault.getStoreData("legacy-shop")).toMatchObject({
+      clientId: "legacy-client",
+      clientSecret: "legacy-secret",
+    });
+    expect(vault.activeStoreId).toBe("legacy-shop");
+    expect(localStorage.getItem(KNOWN_STORES_STORAGE_KEY)).toBeNull();
+    expect(localStorage.getItem("legacy-shop")).toBeNull();
+    expect(localStorage.getItem("active_store_id")).toBeNull();
+    expect(localStorage.getItem("spf_token_rotation_lease:legacy-shop")).toBeNull();
+    const encryptedVault = localStorage.getItem(CREDENTIAL_VAULT_STORAGE_KEY) || "";
+    expect(encryptedVault).not.toContain("legacy-shop");
+    expect(encryptedVault).not.toContain("legacy-secret");
   });
 
   it("migrates tracking settings to FedEx and persists another carrier", async () => {
@@ -45,7 +134,7 @@ describe("credential vault store", () => {
       JSON.stringify({ apiKey: " legacy-key " }),
     );
     const vault = useCredentialVaultStore();
-    vault.initialize();
+    await vault.initialize();
 
     expect(vault.trackingSettings).toEqual({
       apiKey: "legacy-key",
@@ -282,6 +371,23 @@ describe("dashboard store", () => {
     setActivePinia(createPinia());
   });
 
+  it("prepares saved stores without requesting dashboard data", async () => {
+    localStorage.setItem(
+      KNOWN_STORES_STORAGE_KEY,
+      JSON.stringify(["shop-a", "shop-b"]),
+    );
+    const request = vi.fn();
+    vi.stubGlobal("$fetch", request);
+
+    const dashboard = useDashboardStore();
+    dashboard.prepare();
+
+    expect(dashboard.isPrepared).toBe(true);
+    expect(dashboard.totalStores).toBe(2);
+    expect(dashboard.hasLoaded).toBe(false);
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it("reuses a live all-store snapshot until an explicit refresh", async () => {
     localStorage.setItem(KNOWN_STORES_STORAGE_KEY, JSON.stringify(["shop-a"]));
     const form = useFormStore();
@@ -303,5 +409,42 @@ describe("dashboard store", () => {
 
     await dashboard.load(true);
     expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it("loads only selected stores and dashboard services", async () => {
+    localStorage.setItem(
+      KNOWN_STORES_STORAGE_KEY,
+      JSON.stringify(["shop-a", "shop-b"]),
+    );
+    const vault = useCredentialVaultStore();
+    await vault.saveStoreData("shop-a", {
+      domain: "shop-a.myshopify.com",
+      accessToken: "token-a",
+    });
+    await vault.saveStoreData("shop-b", {
+      domain: "shop-b.myshopify.com",
+      accessToken: "token-b",
+    });
+    const request = vi.fn().mockResolvedValue({ storeId: "shop-b" });
+    vi.stubGlobal("$fetch", request);
+
+    const dashboard = useDashboardStore();
+    await dashboard.load(false, {
+      storeIds: ["shop-b", "unknown-shop"],
+      services: ["orders", "traffic"],
+    });
+
+    expect(dashboard.totalStores).toBe(1);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith(
+      "/api/dashboard",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          storeId: "shop-b",
+          token: "token-b",
+          services: ["orders", "traffic"],
+        }),
+      }),
+    );
   });
 });

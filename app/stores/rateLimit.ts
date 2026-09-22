@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 const API_RATE_LIMIT_HEADER_PREFIX = "x-ratelimit-api";
 const FALLBACK_RATE_LIMIT_HEADER_PREFIX = "x-ratelimit";
 const MAX_GRAPHQL_COST_STORES = 12;
+const MAX_OPERATIONAL_SAMPLES = 100;
 
 interface HeaderReader {
   get(name: string): string | null;
@@ -25,16 +26,49 @@ export interface GraphqlCostSnapshot {
   requestSequence: number;
 }
 
+interface OperationalSample {
+  failed: boolean;
+  cacheStatus: "hit" | "miss" | "stale" | null;
+  queueLatencyMs: number | null;
+}
+
 export const useRateLimitStore = defineStore("rateLimit", () => {
   const limit = ref<number | null>(null);
   const remaining = ref<number | null>(null);
   const resetAt = ref<number | null>(null);
   const lastUpdatedAt = ref<number | null>(null);
   const graphqlCosts = ref<Record<string, GraphqlCostSnapshot>>({});
+  const operationalSamples = ref<OperationalSample[]>([]);
 
   const isKnown = computed(
     () => limit.value !== null && remaining.value !== null && resetAt.value !== null,
   );
+  const cacheSamples = computed(() =>
+    operationalSamples.value.filter((sample) => sample.cacheStatus !== null),
+  );
+  const cacheHitRatio = computed<number | null>(() => {
+    if (!cacheSamples.value.length) return null;
+    const reusable = cacheSamples.value.filter(
+      (sample) => sample.cacheStatus === "hit" || sample.cacheStatus === "stale",
+    ).length;
+    return (reusable / cacheSamples.value.length) * 100;
+  });
+  const errorRate = computed<number | null>(() => {
+    if (!operationalSamples.value.length) return null;
+    return (
+      (operationalSamples.value.filter((sample) => sample.failed).length /
+        operationalSamples.value.length) *
+      100
+    );
+  });
+  const averageQueueLatencyMs = computed<number | null>(() => {
+    const values = operationalSamples.value.flatMap((sample) =>
+      sample.queueLatencyMs === null ? [] : [sample.queueLatencyMs],
+    );
+    return values.length
+      ? values.reduce((total, value) => total + value, 0) / values.length
+      : null;
+  });
 
   function updateFromHeaders(
     headers: HeaderReader,
@@ -95,6 +129,17 @@ export const useRateLimitStore = defineStore("rateLimit", () => {
     return next.remaining <= remaining.value;
   }
 
+  function recordOperationalResponse(headers: HeaderReader, failed: boolean) {
+    const cacheStatus = readCacheStatus(headers.get("x-spf-cache-status"));
+    const queueLatencyMs = readNonNegativeNumber(
+      headers.get("x-spf-shopify-queue-latency-ms"),
+    );
+    operationalSamples.value = [
+      ...operationalSamples.value,
+      { failed, cacheStatus, queueLatencyMs },
+    ].slice(-MAX_OPERATIONAL_SAMPLES);
+  }
+
   return {
     limit,
     remaining,
@@ -102,7 +147,11 @@ export const useRateLimitStore = defineStore("rateLimit", () => {
     lastUpdatedAt,
     isKnown,
     graphqlCosts,
+    cacheHitRatio,
+    errorRate,
+    averageQueueLatencyMs,
     updateFromHeaders,
+    recordOperationalResponse,
   };
 });
 
@@ -170,4 +219,13 @@ function readPositiveNumber(value: string | null) {
 function readNonNegativeNumber(value: string | null) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function readCacheStatus(value: string | null): OperationalSample["cacheStatus"] {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  return normalized === "hit" || normalized === "miss" || normalized === "stale"
+    ? normalized
+    : null;
 }

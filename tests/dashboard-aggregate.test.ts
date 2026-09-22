@@ -5,6 +5,11 @@ import {
   aggregateDashboardSnapshots,
   filterDashboardAggregateCurrency,
 } from "../utils/dashboard-aggregate.ts";
+import {
+  createDashboardTrafficAvailability,
+  createTrafficMetrics,
+  emptyDashboardTraffic,
+} from "../utils/dashboard-traffic.ts";
 
 test("all-store aggregation sums matching currencies without mixing them", () => {
   const result = aggregateDashboardSnapshots([
@@ -25,6 +30,26 @@ test("all-store aggregation sums matching currencies without mixing them", () =>
     { currency: "THB", amount: 100 },
     { currency: "USD", amount: 50 },
   ]);
+  assert.deepEqual(result.reconciliation.rows, [
+    {
+      currency: "THB",
+      orderTotal: 1500,
+      paymentGross: 40,
+      difference: -1460,
+      status: "mismatch",
+    },
+    {
+      currency: "USD",
+      orderTotal: 45,
+      paymentGross: 20,
+      difference: -25,
+      status: "mismatch",
+    },
+  ]);
+  assert.equal(result.traffic.availableStores, 3);
+  assert.equal(result.traffic.today.sessions, 1545);
+  assert.equal(result.traffic.last30Days.visitors, 1545);
+  assert.equal(result.traffic.sources[0]?.sessions, 1545);
 });
 
 test("currency filtering recalculates counts, rankings, and money series", () => {
@@ -47,8 +72,48 @@ test("currency filtering recalculates counts, rankings, and money series", () =>
   assert.equal(result.payments.availableStores, 1);
   assert.equal(result.payments.payouts.count, 1);
   assert.equal(result.payments.transactions.count, 1);
+  assert.deepEqual(
+    result.reconciliation.rows.map((row) => row.currency),
+    ["USD"],
+  );
   assert.equal(result.customerCount, 20);
   assert.strictEqual(filterDashboardAggregateCurrency(aggregate, " ALL "), aggregate);
+});
+
+test("traffic reporting denominator includes dashboard request failures", () => {
+  const reportingStore = snapshot("alpha", "USD", 10);
+  for (const range of ["24h", "7d", "30d"] as const) {
+    reportingStore.traffic.rangeData[range].availability = {
+      metrics: "available",
+      trend: "available",
+      sources: "available",
+      countries: "available",
+      devices: "available",
+    };
+  }
+
+  const result = aggregateDashboardSnapshots(
+    [reportingStore],
+    [
+      {
+        storeId: "beta",
+        label: "beta.myshopify.com",
+        reason: "request-failed",
+        message: "Dashboard request failed.",
+      },
+    ],
+  );
+
+  assert.equal(result.traffic.availableStores, 1);
+  assert.equal(result.traffic.reporting.reportingStores, 1);
+  assert.equal(result.traffic.reporting.totalStores, 2);
+  assert.deepEqual(result.traffic.reporting.coverage["24h"].sources, {
+    reportingStores: 1,
+    totalStores: 2,
+  });
+  assert.equal(result.traffic.availability.sources24Hours, "partial");
+  assert.equal(result.traffic.reporting.stores[0]?.storeId, "beta");
+  assert.equal(result.traffic.reporting.stores[0]?.status, "failed");
 });
 
 function snapshot(
@@ -150,6 +215,64 @@ function snapshot(
           },
         ],
       },
+    },
+    reconciliation: {
+      available: true,
+      dataAsOf: "2026-08-10T00:00:00.000Z",
+      rows: [
+        {
+          currency,
+          orderTotal: revenueAmount,
+          paymentGross: 20,
+          difference: 20 - revenueAmount,
+          status: revenueAmount === 20 ? "matched" : "mismatch",
+        },
+      ],
+    },
+    traffic: {
+      ...emptyDashboardTraffic(),
+      available: true,
+      availableStores: 1,
+      timeZone: "Etc/UTC",
+      timeZoneMode: "store",
+      availability: createDashboardTrafficAvailability("available"),
+      today: createTrafficMetrics({
+        sessions: revenueAmount,
+        visitors: revenueAmount,
+        pageviews: revenueAmount * 2,
+        bounces: revenueAmount / 2,
+        completedCheckouts: 1,
+        averageSessionDuration: 60,
+      }),
+      last7Days: createTrafficMetrics({
+        sessions: revenueAmount,
+        visitors: revenueAmount,
+        pageviews: revenueAmount * 2,
+      }),
+      last30Days: createTrafficMetrics({
+        sessions: revenueAmount,
+        visitors: revenueAmount,
+        pageviews: revenueAmount * 2,
+      }),
+      hourly: [
+        {
+          period: "2026-08-10T00",
+          sessions: revenueAmount,
+          visitors: revenueAmount,
+          pageviews: revenueAmount * 2,
+        },
+      ],
+      daily: [
+        {
+          period: "2026-08-10",
+          sessions: revenueAmount,
+          visitors: revenueAmount,
+          pageviews: revenueAmount * 2,
+        },
+      ],
+      sources: [{ label: "Search", sessions: revenueAmount, visitors: revenueAmount }],
+      countries: [{ label: "US", sessions: revenueAmount, visitors: revenueAmount }],
+      devices: [{ label: "Mobile", sessions: revenueAmount, visitors: revenueAmount }],
     },
     users: [],
     warnings: [],

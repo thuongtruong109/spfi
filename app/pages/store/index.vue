@@ -35,23 +35,16 @@
 
       <!-- LOADING STATE -->
       <ShopEmptyState
-        v-else-if="isPaymentTab && paymentStore.isLoading && !hasPaymentData"
-        :title="t('store.loadingPaymentData')"
-        :description="t('store.loadingPaymentDescription')"
+        v-else-if="isInitialTabLoading"
+        :title="t('store.loadingData')"
+        :description="t('store.loadingDescription')"
         loading
-      >
-        <template #icon>
-          <IconsSync />
-        </template>
-      </ShopEmptyState>
+      />
 
       <!-- EMPTY / NOT FETCHED -->
       <ShopEmptyState
         v-else-if="
-          isPaymentTab &&
-          !paymentStore.isLoading &&
-          !hasPaymentData &&
-          !paymentStore.error
+          isPaymentTab && !activeTabLoading && !hasActiveTabData && !paymentStore.error
         "
         :title="storeEmptyState.title"
         :description="storeEmptyState.description"
@@ -95,11 +88,11 @@
           {{ paymentStore.error }}
         </div>
 
-        <StoreMarketsTab v-if="activeTab === 'markets'" />
+        <StoreTrafficTab v-if="activeTab === 'traffic'" />
+
+        <StoreMarketsTab v-else-if="activeTab === 'markets'" />
 
         <StoreProductsTab v-else-if="activeTab === 'products'" />
-
-        <StoreCatalogCollectionCollectionsTab v-else-if="activeTab === 'collections'" />
 
         <div v-else-if="showsStoreSummary" class="card data-card">
           <PaymentPayoutsTab v-if="activeTab === 'payouts'" />
@@ -128,8 +121,8 @@ import { useActiveShopAuth } from "~/composables/useActiveShopAuth";
 import { useLocalization } from "~/composables/useLocalization";
 import { useStoreFeedback } from "~/composables/useStoreFeedback";
 import { useStoreTabData } from "~/composables/useStoreTabData";
+import { useStoreTabLoadingState } from "~/composables/useStoreTabLoadingState";
 import { useCustomerStore } from "~/stores/customers";
-import { useCollectionStore } from "~/stores/collection";
 import { useCommerceOpsStore } from "~/stores/commerceOps";
 import { useFormStore } from "~/stores/form";
 import { useMarketStore } from "~/stores/market";
@@ -137,12 +130,12 @@ import { useOrderStore } from "~/stores/order";
 import { usePaymentStore } from "~/stores/payment";
 import { useProductStore } from "~/stores/product";
 import { useShopProfileStore } from "~/stores/shopProfile";
+import { useTrafficStore } from "~/stores/traffic";
 import { resolveStoreTab, type StoreTab } from "~~/types/store";
 
 definePageMeta({ layout: false });
 
 const formStore = useFormStore();
-const collectionStore = useCollectionStore();
 const marketStore = useMarketStore();
 const customerStore = useCustomerStore();
 const commerceOpsStore = useCommerceOpsStore();
@@ -150,6 +143,7 @@ const orderStore = useOrderStore();
 const paymentStore = usePaymentStore();
 const productStore = useProductStore();
 const profileStore = useShopProfileStore();
+const trafficStore = useTrafficStore();
 const router = useRouter();
 const route = useRoute();
 const { token: activeToken } = useActiveShopAuth();
@@ -157,23 +151,17 @@ const { loadStoreTabData } = useStoreTabData();
 const feedback = useStoreFeedback();
 const { t } = useLocalization();
 
-const activeTab = computed<StoreTab>(() =>
-  resolveStoreTab(route.query.tab, route.query.resource),
-);
+const activeTab = computed<StoreTab>(() => resolveStoreTab(route.query.tab));
 const isPageActive = ref(true);
-
-watch(
-  [() => route.query.tab, () => route.query.resource],
-  ([tab, resource]) => {
-    const tabValue = Array.isArray(tab) ? tab[0] : tab;
-    const resourceValue = Array.isArray(resource) ? resource[0] : resource;
-    if (tabValue !== "products" || resourceValue !== "collections") return;
-    void router.replace({
-      path: "/store",
-      query: { ...route.query, tab: "collections", resource: undefined },
-    });
-  },
-  { immediate: true },
+const loadingTabKey = ref("");
+let loadSequence = 0;
+const { hasData: hasActiveTabData, isLoading: activeTabLoading } =
+  useStoreTabLoadingState(activeTab);
+const activeTabKey = computed(() => `${formStore.storeId}:${activeTab.value}`);
+const isInitialTabLoading = computed(
+  () =>
+    loadingTabKey.value === activeTabKey.value ||
+    (activeTabLoading.value && !hasActiveTabData.value),
 );
 
 function setActiveTab(tab: StoreTab) {
@@ -183,8 +171,6 @@ function setActiveTab(tab: StoreTab) {
       ...route.query,
       shop: route.query.shop || formStore.storeId || undefined,
       tab: tab === "transactions" ? undefined : tab,
-      resource: undefined,
-      collection: tab === "collections" ? route.query.collection : undefined,
     },
   });
 }
@@ -197,32 +183,17 @@ async function refreshCurrentStore() {
 
   await loadStoreTabData(activeTab.value, formStore.storeId, true);
   feedback.requestResult({
-    errorMessage: paymentStore.error,
-    successMessage: t("store.paymentDataRefreshed"),
-    fallbackError: t("store.paymentDataRefreshFailed"),
+    errorMessage: activeTabError.value,
+    successMessage: t("store.dataRefreshed"),
+    fallbackError: t("store.dataRefreshFailed"),
   });
 }
 
-const balances = computed(() => {
-  const b = paymentStore.balance;
-  if (!b) return [];
-  return Array.isArray(b) ? b : [b];
-});
-
-const transactionsCount = computed(() => paymentStore.balanceTransactions.length);
-const payoutsCount = computed(() => paymentStore.payouts.length);
 const isPaymentTab = computed(() =>
   ["transactions", "payouts", "disputes"].includes(activeTab.value),
 );
 const showsStoreSummary = computed(() =>
   ["transactions", "payouts", "disputes", "orders"].includes(activeTab.value),
-);
-const hasPaymentData = computed(
-  () =>
-    balances.value.length > 0 ||
-    transactionsCount.value > 0 ||
-    payoutsCount.value > 0 ||
-    (activeTab.value === "disputes" && paymentStore.hasFetchedDisputes),
 );
 const activeTabError = computed(() => {
   if (["transactions", "payouts", "disputes"].includes(activeTab.value)) {
@@ -230,9 +201,9 @@ const activeTabError = computed(() => {
   }
   if (activeTab.value === "orders") return orderStore.error;
   if (activeTab.value === "products") return productStore.error;
-  if (activeTab.value === "collections") return collectionStore.error;
   if (activeTab.value === "customers") return customerStore.error;
   if (activeTab.value === "markets") return marketStore.error;
+  if (activeTab.value === "traffic") return trafficStore.error;
   if (activeTab.value === "operations") return commerceOpsStore.mutationError;
   return profileStore.error;
 });
@@ -245,15 +216,16 @@ const activeTabLabel = computed(
       disputes: t("store.disputesDeadlines"),
       orders: t("store.salesConnected"),
       products: t("store.catalog"),
-      collections: t("store.collectionCatalog"),
       customers: t("store.customerDirectory"),
       markets: t("store.marketConfiguration"),
+      traffic: t("store.trafficOverview"),
       operations: "Commerce operations",
       profile: t("store.profileDetails"),
     })[activeTab.value],
 );
 const storeEmptyState = computed(() => {
   const isMarketView = activeTab.value === "markets";
+  const isTrafficView = activeTab.value === "traffic";
 
   if (!formStore.knownStores.length) {
     return {
@@ -262,7 +234,9 @@ const storeEmptyState = computed(() => {
       description: t(
         isMarketView
           ? "store.noStoresMarketDescription"
-          : "store.noStoresPaymentDescription",
+          : isTrafficView
+            ? "store.noStoresTrafficDescription"
+            : "store.noStoresPaymentDescription",
       ),
     };
   }
@@ -271,12 +245,18 @@ const storeEmptyState = computed(() => {
     return {
       kind: "no-selection",
       title: t(
-        isMarketView ? "store.chooseMarketStoreTitle" : "store.choosePaymentStoreTitle",
+        isMarketView
+          ? "store.chooseMarketStoreTitle"
+          : isTrafficView
+            ? "store.chooseTrafficStoreTitle"
+            : "store.choosePaymentStoreTitle",
       ),
       description: t(
         isMarketView
           ? "store.chooseMarketStoreDescription"
-          : "store.choosePaymentStoreDescription",
+          : isTrafficView
+            ? "store.chooseTrafficStoreDescription"
+            : "store.choosePaymentStoreDescription",
       ),
     };
   }
@@ -299,10 +279,20 @@ onDeactivated(() => {
 watch(
   [() => formStore.storeId, activeTab, activeToken, isPageActive],
   async ([storeId, tab, , pageActive]) => {
-    if (!pageActive || !storeId) return;
-    await loadStoreTabData(tab, storeId);
+    const requestId = ++loadSequence;
+    if (!pageActive || !storeId) {
+      loadingTabKey.value = "";
+      return;
+    }
+
+    loadingTabKey.value = `${storeId}:${tab}`;
+    try {
+      await loadStoreTabData(tab, storeId);
+    } finally {
+      if (requestId === loadSequence) loadingTabKey.value = "";
+    }
   },
-  { immediate: true, flush: "post" },
+  { immediate: true, flush: "sync" },
 );
 
 watch([activeTabError, activeTab], ([message]) => {
@@ -341,12 +331,14 @@ watch([activeTabError, activeTab], ([message]) => {
 .card {
   background: var(--surface);
   border-radius: 14px;
+  box-shadow: var(--shadow);
   overflow: hidden;
   margin-bottom: 16px;
 }
 
 .data-card {
   border: 1px solid var(--border);
+  box-shadow: 0 16px 44px rgba(20, 34, 27, 0.075);
 }
 
 :deep(.badge) {
