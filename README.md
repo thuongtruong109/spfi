@@ -335,6 +335,14 @@ overwrites `X-Forwarded-For`; the bundled nginx and Compose configuration do.
 API request bodies are capped at 2 MiB in both Nitro and the bundled nginx
 proxy. Oversized declared or chunked bodies receive HTTP `413` before route
 logic runs.
+The bundled nginx also bounds slow clients with a 10-second header timeout,
+30-second body/send timeouts, a 30-second keep-alive timeout, and a maximum of
+256 concurrent in-flight requests. The connection cap is server-wide rather
+than keyed by the direct peer address, so deployments behind a TLS reverse
+proxy do not accidentally treat every downstream user as one client.
+The desktop webview target list lives in `config/webview-targets.json`, outside
+the Docker-ignored Tauri wrapper, because both the Nuxt build and the desktop
+wrapper consume that shared configuration.
 
 Automatic tracking is configured from `/settings`. The app uses Tracktaco API
 v2 on `https://v2.tracktaco.com`: it searches candidate tracking numbers for

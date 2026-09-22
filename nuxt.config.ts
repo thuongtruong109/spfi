@@ -8,10 +8,7 @@ import { readFileSync } from "node:fs";
 import { DEFAULT_WEBHOOK_STREAM_LIMITS } from "./server/utils/webhook-stream-limiter";
 
 const desktopWebviewTargets = JSON.parse(
-  readFileSync(
-    new URL("./wrapper/src-tauri/webview-targets.json", import.meta.url),
-    "utf8",
-  ),
+  readFileSync(new URL("./config/webview-targets.json", import.meta.url), "utf8"),
 ) as Array<{ label: string; url: string }>;
 const desktopWebviewUrls = desktopWebviewTargets
   .map(({ label, url }) => `${label}|${url}`)

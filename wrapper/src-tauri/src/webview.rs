@@ -9,7 +9,7 @@ use crate::webview_preferences;
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 const CONNECTION_ATTEMPT_TIMEOUT: Duration = Duration::from_millis(1200);
-const TARGETS_JSON: &str = include_str!("../webview-targets.json");
+const TARGETS_JSON: &str = include_str!("../../../config/webview-targets.json");
 
 #[derive(serde::Deserialize)]
 struct WebviewTarget {
