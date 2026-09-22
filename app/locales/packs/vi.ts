@@ -1666,6 +1666,7 @@ const messages: Record<MessageKey, string> = {
   "profile.proxy": "Sock/Proxy",
   "profile.storeCurrency": "Tiền tệ của store",
   "profile.credentialsRequired": "Client ID và Client Secret không được để trống.",
+  "profile.secretUnchangedPlaceholder": "Để trống để giữ nguyên secret hiện tại",
   "profile.credentialsSaveFailed": "Không thể lưu credentials.",
   "profile.configuredDomain": "Domain đã cấu hình",
   "profile.tokenStatus": "Trạng thái token",

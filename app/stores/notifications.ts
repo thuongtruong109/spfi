@@ -243,8 +243,13 @@ export const useNotificationStore = defineStore("notifications", () => {
     }
 
     if (notification.topic === "APP_UNINSTALLED") {
-      credentialVault.removeStoreData(notification.storeId);
-      formStore.removeKnownStore(notification.storeId);
+      void formStore.removeKnownStore(notification.storeId).catch((error) => {
+        console.error(
+          error instanceof Error
+            ? error.message
+            : "The uninstalled store could not be removed from the credential vault.",
+        );
+      });
       registrationsByStore.delete(notification.storeId);
       notifications.value = notifications.value.filter(
         (item) => item.storeId !== notification.storeId,

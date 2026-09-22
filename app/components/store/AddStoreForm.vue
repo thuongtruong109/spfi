@@ -101,10 +101,8 @@ async function connect() {
       </label>
       <label class="field">
         <span>{{ t("store.clientSecret") }}</span>
-        <input
+        <BaseSecretInput
           v-model="form.clientSecret.value"
-          class="inp"
-          type="password"
           :placeholder="t('store.clientSecret')"
           @paste="form.handleCredentialPaste"
         />

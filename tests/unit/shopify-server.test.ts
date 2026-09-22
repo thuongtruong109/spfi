@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import healthHandler from "~~/server/api/health.get";
 import {
+  hasInvisibleOrControlChars,
   inspectProxyInput,
   maskProxyUrl,
   normalizeProxyUrl,
@@ -31,6 +32,15 @@ describe("callShopifyApi helpers", () => {
     expect(resolveStoreAdminDomain("custom.example", "shop-a.myshopify.com")).toBe(
       "shop-a.myshopify.com",
     );
+  });
+
+  it("detects invisible proxy characters consistently across repeated calls", () => {
+    const input = "socks5h://user:pass@8.8.8.8:1080\u200B";
+
+    expect(hasInvisibleOrControlChars(input)).toBe(true);
+    expect(hasInvisibleOrControlChars(input)).toBe(true);
+    expect(inspectProxyInput(input).hasInvisibleChars).toBe(true);
+    expect(inspectProxyInput(input).hasInvisibleChars).toBe(true);
   });
 });
 

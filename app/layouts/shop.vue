@@ -141,7 +141,7 @@ function syncShopFromRoute(shouldFetch = false) {
     // Prepare every scoped cache before synchronous store-id watchers can fetch.
     hydrateStoreData(queryShop);
   }
-  formStore.setActiveStore(queryShop);
+  void formStore.setActiveStore(queryShop).catch(reportVaultError);
 
   if (!getRouteShop()) {
     void router.replace({ query: { ...route.query, shop: queryShop } });
@@ -163,7 +163,7 @@ function onSelectStore(id: string) {
 
   // Prepare scoped caches before synchronous store-id watchers can fetch.
   hydrateStoreData(id);
-  formStore.setActiveStore(id);
+  void formStore.setActiveStore(id).catch(reportVaultError);
 
   // Sync URL query param
   router.replace({ query: { ...route.query, shop: id } });
@@ -277,8 +277,15 @@ async function deleteStoreOption(id: string) {
   ) {
     return;
   }
-  formStore.removeKnownStore(id);
-  credentialVault.removeStoreData(id);
+  await formStore.removeKnownStore(id);
+}
+
+function reportVaultError(error: unknown) {
+  console.error(
+    error instanceof Error
+      ? error.message
+      : "The encrypted credential vault could not be updated.",
+  );
 }
 </script>
 

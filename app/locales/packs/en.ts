@@ -1555,6 +1555,7 @@ const messages = {
   "profile.proxy": "Sock/Proxy",
   "profile.storeCurrency": "Store currency",
   "profile.credentialsRequired": "Client ID and Client Secret cannot be empty.",
+  "profile.secretUnchangedPlaceholder": "Leave blank to keep the existing secret",
   "profile.credentialsSaveFailed": "Unable to save credentials.",
   "profile.configuredDomain": "Configured domain",
   "profile.tokenStatus": "Token status",

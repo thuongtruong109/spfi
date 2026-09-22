@@ -9,6 +9,7 @@ import {
   renewTokenRotationLease,
   TOKEN_ROTATION_SWEEP_LEASE_ID,
 } from "~~/utils/token-rotation-lease";
+import { CREDENTIAL_VAULT_STORAGE_KEY } from "~~/utils/credential-vault-storage";
 
 type IdleDeadlineLike = {
   didTimeout: boolean;
@@ -248,7 +249,7 @@ export function useTokenRotation() {
   }
 
   function handleStorageChange(event: StorageEvent) {
-    if (!event.key || formStore.knownStores.includes(event.key)) {
+    if (!event.key || event.key === CREDENTIAL_VAULT_STORAGE_KEY) {
       scheduleNextCheck(0);
     }
   }

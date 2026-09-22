@@ -156,7 +156,7 @@ async function clearSettings() {
   }
 
   try {
-    credentialVault.removeTrackingSettings();
+    await credentialVault.removeTrackingSettings();
     apiKey.value = "";
     carrier.value = "fedex";
     showApiKey.value = false;

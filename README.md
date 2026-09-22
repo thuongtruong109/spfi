@@ -550,6 +550,8 @@ routes expose app `camelCase` fields. Shopify responses also send
 
 - Do not commit `server/service_account.json`, `.env` files, logs, or generated build output.
 - Store credentials and proxy details should be treated as sensitive operational data.
+- Browser-side store IDs, proxy credentials, client credentials, access tokens, the active store, and tracking credentials are persisted in one AES-GCM encrypted vault. Existing plaintext records are migrated automatically and removed only after the encrypted write succeeds. The device key is stored as a non-exportable Web Crypto key in IndexedDB when the browser supports it.
+- Client-side encryption limits accidental disclosure from direct localStorage inspection or export; it does not protect secrets from code already executing with the app's origin. Continue to prevent XSS and restrict operator/device access.
 - Browser API calls are same-origin unless explicitly listed in `NUXT_ALLOWED_ORIGINS`.
 - Shopify access tokens for GET and DELETE routes must use the `X-Shopify-Access-Token` header; query-string tokens are rejected.
 - CORS is a browser boundary, not user authentication. Keep deployments on localhost, a trusted network, or behind a VPN/reverse proxy when public access is not intended.

@@ -42,7 +42,16 @@ export function releaseTokenRotationLease(storeId: string) {
 }
 
 function getLeaseKey(storeId: string) {
-  return `${TOKEN_ROTATION_LEASE_PREFIX}${storeId}`;
+  return `${TOKEN_ROTATION_LEASE_PREFIX}${hashLeaseScope(storeId)}`;
+}
+
+function hashLeaseScope(value: string) {
+  let hash = 0x811c9dc5;
+  for (const character of String(value || "")) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 function readLease(key: string): TokenRotationLease | null {

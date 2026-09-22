@@ -81,7 +81,10 @@ interface SocksProxyAgentInternals {
 
 const SHOPIFY_JSON_CONTENT_TYPE = "application/json";
 const DEFAULT_TIMEOUT_MS = 15000;
-const INVISIBLE_OR_CONTROL_CHARS = /[\u0000-\u001F\u007F\u00A0\u200B-\u200D\uFEFF]/g;
+const INVISIBLE_OR_CONTROL_CHAR_PATTERN =
+  /[\u0000-\u001F\u007F\u00A0\u200B-\u200D\uFEFF]/;
+const INVISIBLE_OR_CONTROL_CHARS_GLOBAL =
+  /[\u0000-\u001F\u007F\u00A0\u200B-\u200D\uFEFF]/g;
 const PROXY_PROTOCOL_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 const SOCKS5_PROTOCOL_PATTERN = /^socks5h?:\/\//i;
 const SOCKS5H_PROTOCOL = "socks5h:";
@@ -98,7 +101,7 @@ function safeDecode(value: string) {
 
 function sanitizePart(value: string) {
   return String(value || "")
-    .replace(INVISIBLE_OR_CONTROL_CHARS, "")
+    .replace(INVISIBLE_OR_CONTROL_CHARS_GLOBAL, "")
     .trim();
 }
 
@@ -107,7 +110,7 @@ function normalizeCredential(value: string) {
 }
 
 export function hasInvisibleOrControlChars(value: string): boolean {
-  return INVISIBLE_OR_CONTROL_CHARS.test(String(value || ""));
+  return INVISIBLE_OR_CONTROL_CHAR_PATTERN.test(String(value || ""));
 }
 
 export function inspectProxyInput(input: string): ProxyInputMeta {

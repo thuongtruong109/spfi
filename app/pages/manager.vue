@@ -168,8 +168,7 @@ async function deleteStore(id: string) {
     return;
   }
 
-  formStore.removeKnownStore(id);
-  credentialVault.removeStoreData(id);
+  await formStore.removeKnownStore(id);
 }
 
 // ── Edit store ───────────────────────────────────────────────────────────────
@@ -188,7 +187,8 @@ function openEditModal(id: string) {
   editDomain.value = data.domain || "";
   editSock.value = data.sock || "";
   editClientId.value = data.clientId || "";
-  editClientSecret.value = data.clientSecret || "";
+  // Never inject an existing secret into the DOM. A blank value keeps it unchanged.
+  editClientSecret.value = "";
   editError.value = "";
   showEditModal.value = true;
 }
@@ -209,7 +209,8 @@ async function saveEditedStore() {
   const id = editingStoreId.value;
   const previous = credentialVault.getStoreData(id);
 
-  if (!editClientId.value.trim() || !editClientSecret.value.trim()) {
+  const nextClientSecret = editClientSecret.value.trim();
+  if (!editClientId.value.trim() || (!nextClientSecret && !previous.clientSecret)) {
     editError.value = "Client ID và Client Secret không được để trống.";
     return;
   }
@@ -219,7 +220,7 @@ async function saveEditedStore() {
     domain: editDomain.value.trim(),
     sock: editSock.value.trim(),
     clientId: editClientId.value.trim(),
-    clientSecret: editClientSecret.value.trim(),
+    clientSecret: nextClientSecret || previous.clientSecret,
   });
 
   feedback.success(`Store \"${id}\" updated successfully.`);
@@ -545,7 +546,10 @@ function getProxyCheckErrorMessage(error?: ProxyCheckError) {
             </div>
             <div class="field field-1">
               <label class="field-label">Client Secret</label>
-              <input v-model="editClientSecret" type="text" class="inp" />
+              <BaseSecretInput
+                v-model="editClientSecret"
+                placeholder="Leave blank to keep the existing secret"
+              />
             </div>
           </div>
 

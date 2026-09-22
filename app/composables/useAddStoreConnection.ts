@@ -156,9 +156,9 @@ export function useAddStoreConnection() {
             domain,
             sock: credentials.proxy,
           });
-          formStore.addKnownStore(credentials.storeId);
+          await formStore.addKnownStore(credentials.storeId);
           if (requestedDomains.length === 1) {
-            formStore.setActiveStore(credentials.storeId);
+            await formStore.setActiveStore(credentials.storeId);
           }
           successCount += 1;
           setStep("DONE", "done");

@@ -1,47 +1,56 @@
+import { computed } from "vue";
 import { defineStore } from "pinia";
-import { ref } from "vue";
-import { useLocalStorage } from "~/composables/useLocalStorage";
-import { readKnownStores, writeKnownStores } from "~~/utils/known-stores";
-
-const ACTIVE_STORE_STORAGE_KEY = "active_store_id";
+import { useCredentialVaultStore } from "~/stores/credentialVault";
+import { normalizeKnownStores } from "~~/utils/known-stores";
 
 export const useFormStore = defineStore("form", () => {
-  const { state: storeId } = useLocalStorage(ACTIVE_STORE_STORAGE_KEY, "");
+  const credentialVault = useCredentialVaultStore();
 
-  // List of all store IDs that have a saved cookie
-  const knownStores = ref<string[]>([]);
+  const storeId = computed({
+    get: () => credentialVault.activeStoreId,
+    set: (value: string) => {
+      credentialVault.activeStoreId = String(value || "").trim();
+      void credentialVault.setActiveStore(value).catch(reportPersistenceError);
+    },
+  });
+  const knownStores = computed({
+    get: () => credentialVault.knownStoreIds,
+    set: (value: string[]) => {
+      credentialVault.knownStoreIds = normalizeKnownStores(value);
+      void credentialVault.replaceKnownStoreIds(value).catch(reportPersistenceError);
+    },
+  });
 
   function loadKnownStores() {
-    if (typeof window === "undefined") return;
-    knownStores.value = readKnownStores();
-    if (storeId.value && !knownStores.value.includes(storeId.value)) {
-      storeId.value = "";
-    }
+    return credentialVault.initialize();
   }
 
   function setActiveStore(id: string) {
-    storeId.value = String(id || "").trim();
+    const normalized = String(id || "").trim();
+    credentialVault.activeStoreId = normalized;
+    return credentialVault.setActiveStore(normalized);
   }
 
   function saveKnownStores() {
-    writeKnownStores(knownStores.value);
+    return credentialVault.replaceKnownStoreIds(credentialVault.knownStoreIds);
   }
 
   function addKnownStore(id: string) {
-    if (id && !knownStores.value.includes(id)) {
-      knownStores.value.push(id);
-      saveKnownStores();
+    const normalized = String(id || "").trim();
+    if (!normalized || credentialVault.knownStoreIds.includes(normalized)) {
+      return Promise.resolve();
     }
+
+    credentialVault.knownStoreIds = [...credentialVault.knownStoreIds, normalized];
+    return credentialVault.addKnownStore(normalized);
   }
 
   function removeKnownStore(id: string) {
-    knownStores.value = knownStores.value.filter((s) => s !== id);
-    saveKnownStores();
-    // Clear the store cookie using the simplified key
+    const normalized = String(id || "").trim();
     if (typeof document !== "undefined") {
-      document.cookie = `${id}=; Max-Age=0; path=/`;
+      document.cookie = `${normalized}=; Max-Age=0; path=/`;
     }
-    if (storeId.value === id) setActiveStore("");
+    return credentialVault.removeStoreData(normalized);
   }
 
   return {
@@ -51,5 +60,14 @@ export const useFormStore = defineStore("form", () => {
     setActiveStore,
     addKnownStore,
     removeKnownStore,
+    saveKnownStores,
   };
 });
+
+function reportPersistenceError(error: unknown) {
+  console.error(
+    error instanceof Error
+      ? error.message
+      : "The encrypted credential vault could not be updated.",
+  );
+}
