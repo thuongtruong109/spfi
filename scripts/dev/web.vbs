@@ -12,10 +12,7 @@ Const SERVER_TIMEOUT = 30
 Dim shell, fso
 Dim currentDir
 Dim command
-Dim exec
-Dim output
 Dim i
-Dim portFree
 Dim serverReady
 
 Set shell = CreateObject("WScript.Shell")
@@ -25,26 +22,18 @@ currentDir = fso.GetParentFolderName(WScript.ScriptFullName)
 
 
 ' =========================================================
-' FUNCTION: Get process information on PORT
+' FUNCTION: Build a hidden PowerShell command
 ' =========================================================
 
-Function GetPortProcesses(port)
+Function HiddenPowerShell(script)
 
-    Dim psCommand
-    Dim execResult
-    Dim result
-
-    ' Get only TCP connections on exact port
-    psCommand = "powershell -NoProfile -Command " & _
-                """Get-NetTCPConnection -LocalPort " & port & _
-                " -State Listen -ErrorAction SilentlyContinue | " & _
-                " Select-Object -ExpandProperty OwningProcess"""
-
-    Set execResult = shell.Exec(psCommand)
-
-    result = execResult.StdOut.ReadAll
-
-    GetPortProcesses = Trim(result)
+    HiddenPowerShell = _
+        "powershell.exe " & _
+        "-NoLogo " & _
+        "-NoProfile " & _
+        "-NonInteractive " & _
+        "-WindowStyle Hidden " & _
+        "-Command """ & script & """"
 
 End Function
 
@@ -55,15 +44,24 @@ End Function
 
 Function IsPortFree(port)
 
-    Dim result
+    Dim psScript
+    Dim exitCode
 
-    result = GetPortProcesses(port)
+    psScript = _
+        "$connections = @(Get-NetTCPConnection " & _
+        "-LocalPort " & port & " " & _
+        "-State Listen " & _
+        "-ErrorAction SilentlyContinue); " & _
+        "if ($connections.Count -eq 0) { exit 0 }; " & _
+        "exit 1"
 
-    If result = "" Then
-        IsPortFree = True
-    Else
-        IsPortFree = False
-    End If
+    exitCode = shell.Run( _
+        HiddenPowerShell(psScript), _
+        0, _
+        True _
+    )
+
+    IsPortFree = (exitCode = 0)
 
 End Function
 
@@ -72,53 +70,27 @@ End Function
 ' FUNCTION: Kill all processes on PORT
 ' =========================================================
 
-Function KillPortProcesses(port)
+Sub KillPortProcesses(port)
 
-    Dim pids
-    Dim pidArray
-    Dim pid
-    Dim j
-    Dim killCommand
+    Dim psScript
 
-    pids = GetPortProcesses(port)
+    psScript = _
+        "Get-NetTCPConnection " & _
+        "-LocalPort " & port & " " & _
+        "-State Listen " & _
+        "-ErrorAction SilentlyContinue | " & _
+        "Select-Object -ExpandProperty OwningProcess -Unique | " & _
+        "Where-Object { $_ -gt 0 -and $_ -ne $PID } | " & _
+        "ForEach-Object { " & _
+        "Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue " & _
+        "}"
 
-    If pids = "" Then
-        KillPortProcesses = True
-        Exit Function
-    End If
+    shell.Run _
+        HiddenPowerShell(psScript), _
+        0, _
+        True
 
-    ' PowerShell can return multiple PIDs
-    pidArray = Split(pids, vbCrLf)
-
-    For j = 0 To UBound(pidArray)
-
-        pid = Trim(pidArray(j))
-
-        If pid <> "" Then
-
-            ' Avoid killing PID 0
-            If IsNumeric(pid) Then
-
-                If CLng(pid) > 0 Then
-
-                    killCommand = "taskkill /F /PID " & pid
-
-                    shell.Run _
-                        "cmd /c " & killCommand, _
-                        0, _
-                        True
-
-                End If
-
-            End If
-
-        End If
-
-    Next
-
-    KillPortProcesses = True
-
-End Function
+End Sub
 
 
 ' =========================================================
@@ -126,14 +98,11 @@ End Function
 ' CLEAN PORT 3000
 ' =========================================================
 
-portFree = False
-
 For i = 1 To KILL_RETRIES
 
     ' Check first
     If IsPortFree(PORT) Then
 
-        portFree = True
         Exit For
 
     End If
@@ -154,12 +123,9 @@ Next
 
 If Not IsPortFree(PORT) Then
 
-    output = GetPortProcesses(PORT)
-
     MsgBox _
         "Không thể giải phóng port " & PORT & "." & vbCrLf & vbCrLf & _
-        "PID vẫn đang LISTEN:" & vbCrLf & _
-        output & vbCrLf & vbCrLf & _
+        "Vẫn còn process đang LISTEN trên port này." & vbCrLf & vbCrLf & _
         "npm run dev sẽ không được chạy.", _
         vbCritical, _
         "Port " & PORT & " đang bị chiếm"

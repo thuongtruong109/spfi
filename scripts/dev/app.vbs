@@ -24,7 +24,6 @@ Dim projectDir
 Dim tauriExe
 
 Dim command
-Dim output
 
 Dim i
 Dim serverReady
@@ -73,28 +72,18 @@ tauriExe = _
 
 ' =========================================================
 ' FUNCTION
-' Get all PIDs listening on exact PORT
+' Build a PowerShell command that always runs without a visible window
 ' =========================================================
 
-Function GetPortProcesses(port)
+Function HiddenPowerShell(script)
 
-    Dim psCommand
-    Dim execResult
-    Dim result
-
-    psCommand = _
-        "powershell -NoProfile -Command " & _
-        """Get-NetTCPConnection " & _
-        "-LocalPort " & port & _
-        " -State Listen " & _
-        "-ErrorAction SilentlyContinue | " & _
-        "Select-Object -ExpandProperty OwningProcess"""
-
-    Set execResult = shell.Exec(psCommand)
-
-    result = execResult.StdOut.ReadAll
-
-    GetPortProcesses = Trim(result)
+    HiddenPowerShell = _
+        "powershell.exe " & _
+        "-NoLogo " & _
+        "-NoProfile " & _
+        "-NonInteractive " & _
+        "-WindowStyle Hidden " & _
+        "-Command """ & script & """"
 
 End Function
 
@@ -106,11 +95,24 @@ End Function
 
 Function IsPortFree(port)
 
-    Dim result
+    Dim psScript
+    Dim exitCode
 
-    result = GetPortProcesses(port)
+    psScript = _
+        "$connections = @(Get-NetTCPConnection " & _
+        "-LocalPort " & port & " " & _
+        "-State Listen " & _
+        "-ErrorAction SilentlyContinue); " & _
+        "if ($connections.Count -eq 0) { exit 0 }; " & _
+        "exit 1"
 
-    IsPortFree = (result = "")
+    exitCode = shell.Run( _
+        HiddenPowerShell(psScript), _
+        0, _
+        True _
+    )
+
+    IsPortFree = (exitCode = 0)
 
 End Function
 
@@ -122,45 +124,23 @@ End Function
 
 Sub KillPortProcesses(port)
 
-    Dim pids
-    Dim pidArray
-    Dim pid
-    Dim j
-    Dim killCommand
+    Dim psScript
 
-    pids = GetPortProcesses(port)
+    psScript = _
+        "Get-NetTCPConnection " & _
+        "-LocalPort " & port & " " & _
+        "-State Listen " & _
+        "-ErrorAction SilentlyContinue | " & _
+        "Select-Object -ExpandProperty OwningProcess -Unique | " & _
+        "Where-Object { $_ -gt 0 -and $_ -ne $PID } | " & _
+        "ForEach-Object { " & _
+        "Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue " & _
+        "}"
 
-    If pids = "" Then
-        Exit Sub
-    End If
-
-    pidArray = Split(pids, vbCrLf)
-
-    For j = 0 To UBound(pidArray)
-
-        pid = Trim(pidArray(j))
-
-        If pid <> "" Then
-
-            If IsNumeric(pid) Then
-
-                If CLng(pid) > 0 Then
-
-                    killCommand = _
-                        "taskkill /F /PID " & pid
-
-                    shell.Run _
-                        "cmd /c " & killCommand, _
-                        0, _
-                        True
-
-                End If
-
-            End If
-
-        End If
-
-    Next
+    shell.Run _
+        HiddenPowerShell(psScript), _
+        0, _
+        True
 
 End Sub
 
@@ -193,12 +173,9 @@ Next
 
 If Not IsPortFree(PORT) Then
 
-    output = GetPortProcesses(PORT)
-
     MsgBox _
         "Không thể giải phóng port " & PORT & "." & vbCrLf & vbCrLf & _
-        "PID vẫn đang LISTEN:" & vbCrLf & _
-        output, _
+        "Vẫn còn process đang LISTEN trên port này.", _
         vbCritical, _
         "Port " & PORT & " đang bị chiếm"
 
