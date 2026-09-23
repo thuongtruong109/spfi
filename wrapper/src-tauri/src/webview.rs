@@ -1,14 +1,8 @@
-use std::{
-  error::Error,
-  net::{TcpStream, ToSocketAddrs},
-  time::{Duration, Instant},
-};
+use std::error::Error;
 use tauri::{AppHandle, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-use crate::webview_preferences;
+use crate::{webview_health, webview_preferences};
 
-const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
-const CONNECTION_ATTEMPT_TIMEOUT: Duration = Duration::from_millis(1200);
 const TARGETS_JSON: &str = include_str!("../../../config/webview-targets.json");
 
 #[derive(serde::Deserialize)]
@@ -37,8 +31,16 @@ fn configured_target_url(url: &str) -> Result<tauri::Url, String> {
 
 fn startup_target_url(saved_url: Option<&str>) -> Result<tauri::Url, String> {
   let targets = configured_targets()?;
+  let saved_url = saved_url.and_then(|url| tauri::Url::parse(url).ok());
   let selected = saved_url
-    .and_then(|saved| targets.iter().find(|target| target.url == saved))
+    .as_ref()
+    .and_then(|saved| {
+      targets.iter().find(|target| {
+        tauri::Url::parse(&target.url)
+          .map(|configured| configured == *saved)
+          .unwrap_or(false)
+      })
+    })
     .or_else(|| targets.first())
     .ok_or_else(|| "No WebView targets are configured.".to_string())?;
 
@@ -46,65 +48,75 @@ fn startup_target_url(saved_url: Option<&str>) -> Result<tauri::Url, String> {
     .map_err(|_| "The configured startup WebView URL is invalid.".to_string())
 }
 
+struct StartupTarget {
+  url: tauri::Url,
+  is_reachable: bool,
+  used_fallback: bool,
+}
+
+fn resolve_startup_target<F>(
+  saved_url: Option<&str>,
+  mut probe: F,
+) -> Result<StartupTarget, String>
+where
+  F: FnMut(&str) -> Result<(), String>,
+{
+  let preferred = startup_target_url(saved_url)?;
+  let mut candidates = vec![preferred.clone()];
+
+  for target in configured_targets()? {
+    let candidate = tauri::Url::parse(&target.url)
+      .map_err(|_| "The configured startup WebView URL is invalid.".to_string())?;
+    if !candidates.contains(&candidate) {
+      candidates.push(candidate);
+    }
+  }
+
+  for candidate in candidates {
+    match probe(candidate.as_str()) {
+      Ok(()) => {
+        return Ok(StartupTarget {
+          used_fallback: candidate != preferred,
+          url: candidate,
+          is_reachable: true,
+        });
+      }
+      Err(error) => log::warn!("WebView endpoint health check failed for {candidate}: {error}"),
+    }
+  }
+
+  Ok(StartupTarget {
+    url: preferred,
+    is_reachable: false,
+    used_fallback: false,
+  })
+}
+
 pub fn create_main_window(app: &AppHandle) -> Result<(), Box<dyn Error>> {
   let saved_url = webview_preferences::load(app).unwrap_or_else(|error| {
     log::warn!("Could not load the saved WebView target: {error}");
     None
   });
-  let target = startup_target_url(saved_url.as_deref()).map_err(std::io::Error::other)?;
+  let target = resolve_startup_target(saved_url.as_deref(), webview_health::probe_webview_url)
+    .map_err(std::io::Error::other)?;
 
-  WebviewWindowBuilder::new(app, "main", WebviewUrl::External(target))
+  if target.used_fallback {
+    webview_preferences::save(app, target.url.as_str()).unwrap_or_else(|error| {
+      log::warn!("Could not save the fallback WebView target: {error}");
+    });
+  }
+
+  WebviewWindowBuilder::new(app, "main", WebviewUrl::External(target.url))
     .title("Spfi - Telescope the Shopify storefront in pipeline from one desk")
     .inner_size(1280.0, 800.0)
     .min_inner_size(900.0, 600.0)
     .resizable(true)
-    .decorations(false)
+    .decorations(!target.is_reachable)
     .fullscreen(false)
     .center()
     .build()?;
 
   Ok(())
-}
-
-fn probe_webview_url(url: &str) -> Result<(), String> {
-  let parsed = tauri::Url::parse(url).map_err(|_| "The WebView URL is invalid.".to_string())?;
-  if !matches!(parsed.scheme(), "http" | "https") {
-    return Err("Only HTTP and HTTPS WebView URLs are supported.".to_string());
-  }
-
-  let host = parsed
-    .host_str()
-    .ok_or_else(|| "The WebView URL does not include a host.".to_string())?;
-  let port = parsed
-    .port_or_known_default()
-    .ok_or_else(|| "The WebView URL does not include a usable port.".to_string())?;
-  let addresses = (host, port)
-    .to_socket_addrs()
-    .map_err(|error| format!("Could not resolve {host}: {error}"))?;
-  let deadline = Instant::now() + PROBE_TIMEOUT;
-  let mut last_error = None;
-
-  for address in addresses {
-    let remaining = deadline.saturating_duration_since(Instant::now());
-    if remaining.is_zero() {
-      break;
-    }
-
-    match TcpStream::connect_timeout(&address, remaining.min(CONNECTION_ATTEMPT_TIMEOUT)) {
-      Ok(stream) => {
-        drop(stream);
-        return Ok(());
-      }
-      Err(error) => last_error = Some(error),
-    }
-  }
-
-  Err(format!(
-    "Could not connect to {host}:{port}: {}",
-    last_error
-      .map(|error| error.to_string())
-      .unwrap_or_else(|| "connection timed out".to_string())
-  ))
 }
 
 #[tauri::command]
@@ -115,33 +127,21 @@ pub async fn open_webview_url(
 ) -> Result<(), String> {
   let target = configured_target_url(&url)?;
   let probe_url = url.clone();
-  tauri::async_runtime::spawn_blocking(move || probe_webview_url(&probe_url))
+  tauri::async_runtime::spawn_blocking(move || webview_health::probe_webview_url(&probe_url))
     .await
     .map_err(|error| format!("WebView connectivity check failed: {error}"))??;
 
-  webview_preferences::save(&app, &url)?;
   webview
     .navigate(target)
-    .map_err(|error| format!("Could not open the WebView: {error}"))
+    .map_err(|error| format!("Could not open the WebView: {error}"))?;
+  webview_preferences::save(&app, &url)
 }
 
 #[cfg(test)]
 mod tests {
-  use super::{configured_target_url, probe_webview_url, startup_target_url};
-  use std::net::TcpListener;
-
-  #[test]
-  fn rejects_non_http_urls() {
-    assert!(probe_webview_url("file:///tmp/app.html").is_err());
-  }
-
-  #[test]
-  fn accepts_a_reachable_http_endpoint() {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test endpoint");
-    let address = listener.local_addr().expect("read test endpoint address");
-
-    assert!(probe_webview_url(&format!("http://{address}")).is_ok());
-  }
+  use super::{
+    configured_target_url, configured_targets, resolve_startup_target, startup_target_url,
+  };
 
   #[test]
   fn only_accepts_configured_targets() {
@@ -160,10 +160,10 @@ mod tests {
   #[test]
   fn restores_a_saved_configured_target() {
     assert_eq!(
-      startup_target_url(Some("https://spfi.thuongtruong.me"))
+      startup_target_url(Some("https://spfi.netlify.app"))
         .expect("saved target")
         .as_str(),
-      "https://spfi.thuongtruong.me/"
+      "https://spfi.netlify.app/"
     );
   }
 
@@ -175,6 +175,34 @@ mod tests {
         .as_str(),
       "http://localhost:3000/"
     );
+  }
+
+  #[test]
+  fn falls_back_to_a_reachable_target_at_startup() {
+    let target = resolve_startup_target(Some("https://spfi.netlify.app"), |url| {
+      if url.starts_with("http://localhost:3000") {
+        Ok(())
+      } else {
+        Err("endpoint is unavailable".to_string())
+      }
+    })
+    .expect("resolve startup target");
+
+    assert_eq!(target.url.as_str(), "http://localhost:3000/");
+    assert!(target.is_reachable);
+    assert!(target.used_fallback);
+  }
+
+  #[test]
+  fn keeps_native_decorations_when_every_target_is_unavailable() {
+    let target = resolve_startup_target(Some("https://spfi.netlify.app"), |_| {
+      Err("endpoint is unavailable".to_string())
+    })
+    .expect("resolve startup target");
+
+    assert_eq!(target.url.as_str(), "https://spfi.netlify.app/");
+    assert!(!target.is_reachable);
+    assert!(!target.used_fallback);
   }
 
   #[test]
@@ -196,5 +224,33 @@ mod tests {
 
     let permission = include_str!("../permissions/webview.toml");
     assert!(permission.contains("open_webview_url"));
+  }
+
+  #[test]
+  fn remote_window_controls_cover_every_configured_target() {
+    let capability: serde_json::Value = serde_json::from_str(include_str!(
+      "../capabilities/remote-window-controls.json"
+    ))
+    .expect("remote capability is valid JSON");
+    let patterns = capability["remote"]["urls"]
+      .as_array()
+      .expect("remote capability URLs are an array")
+      .iter()
+      .map(|value| {
+        value
+          .as_str()
+          .expect("remote capability URL is a string")
+          .parse::<tauri::utils::acl::RemoteUrlPattern>()
+          .expect("remote capability URL is a valid pattern")
+      })
+      .collect::<Vec<_>>();
+
+    for target in configured_targets().expect("WebView targets are configured") {
+      let url = tauri::Url::parse(&target.url).expect("configured target URL is valid");
+      assert!(
+        patterns.iter().any(|pattern| pattern.test(&url)),
+        "no remote capability URL matches {url}"
+      );
+    }
   }
 }

@@ -5,7 +5,7 @@
   "windows": ["main"],
   "local": false,
   "remote": {
-    "urls": ["http://*/*", "https://*/*"]
+    "urls": ["http://localhost:3000/*", "https://spfi.netlify.app/*"]
   },
   "permissions": [
     "allow-open-webview-url",

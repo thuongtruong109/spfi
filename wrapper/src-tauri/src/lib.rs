@@ -1,4 +1,5 @@
 mod webview;
+mod webview_health;
 mod webview_preferences;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

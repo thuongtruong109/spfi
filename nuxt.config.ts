@@ -1,10 +1,10 @@
+import { readFileSync } from "node:fs";
 import {
   DEFAULT_ANALYTICS_RATE_LIMIT_PER_MINUTE,
   DEFAULT_API_RATE_LIMIT_PER_MINUTE,
   DEFAULT_EXPORT_RATE_LIMIT_PER_MINUTE,
   DEFAULT_TOKEN_RATE_LIMIT_PER_MINUTE,
 } from "./server/utils/rate-limit-policy";
-import { readFileSync } from "node:fs";
 import { DEFAULT_WEBHOOK_STREAM_LIMITS } from "./server/utils/webhook-stream-limiter";
 
 const desktopWebviewTargets = JSON.parse(
@@ -98,7 +98,14 @@ export default defineNuxtConfig({
       },
     ],
     optimizeDeps: {
-      include: ["@vue/devtools-core", "@vue/devtools-kit", "@lucide/vue", "papaparse"],
+      include: [
+        "@vue/devtools-core",
+        "@vue/devtools-kit",
+        "@lucide/vue",
+        "papaparse",
+        "@tauri-apps/api/window",
+        "@tauri-apps/api/core",
+      ],
     },
   },
   // Auto-import utils

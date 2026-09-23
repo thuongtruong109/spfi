@@ -29,7 +29,9 @@ export function useDesktopWindow() {
         void refreshMaximizedState();
       });
     } catch {
-      isDesktopApp.value = false;
+      // The Tauri runtime is still present even if an optional window-state
+      // permission or listener is unavailable. Keep the custom title bar
+      // visible so a decorationless desktop window is never left without UI.
       return undefined;
     }
   }
