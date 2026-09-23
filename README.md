@@ -78,6 +78,8 @@
 
 ## ⚡ Quick Start
 
+Requirements: Node.js 24.x and npm 10 or newer.
+
 1. Install dependencies:
 
 ```bash
@@ -112,10 +114,11 @@ Run the main verification suite before shipping changes:
 npm test
 npm run typecheck
 npm run lint
+npm run format:check
 ```
 
-Use Prettier on changed files before committing when you touch Markdown, CSS, or
-TypeScript.
+Use `npm run format` to apply Prettier fixes locally when you touch Markdown,
+CSS, or TypeScript.
 
 ## ⚙️ Configuration
 
@@ -418,7 +421,7 @@ the Compose listener private, redirect HTTP to HTTPS at that outer proxy, and
 set HSTS there after HTTPS is verified. Set `NGINX_BIND_ADDRESS` only when the
 selected address is protected by that TLS proxy or a trusted private network.
 
-The app service is tagged as `ghcr.io/sonidia/spfi:latest` by default. Override
+The app service is tagged as `ghcr.io/thuongtruong109/spfi:latest` by default. Override
 it with `APP_IMAGE` when you want to run another image tag.
 
 Make sure the Google service account file exists before starting the stack:
@@ -470,7 +473,7 @@ pushes to `main`, `master`, version tags like `v1.2.3`, or manual dispatch.
 Published image:
 
 ```text
-ghcr.io/sonidia/spfi
+ghcr.io/thuongtruong109/spfi
 ```
 
 Tag rules:
@@ -562,10 +565,15 @@ routes expose app `camelCase` fields. Shopify responses also send
 
 ## 📜 Scripts
 
-| Command               | Description                                          |
-| --------------------- | ---------------------------------------------------- |
-| `npm run dev`         | Start the Nuxt development server.                   |
-| `npm run build`       | Build the production client and Nitro server.        |
-| `npm run preview`     | Run a local preview of the production build.         |
-| `npm run generate`    | Generate a static output where supported by the app. |
-| `npm run postinstall` | Prepare Nuxt after dependency installation.          |
+| Command                | Description                                          |
+| ---------------------- | ---------------------------------------------------- |
+| `npm run dev`          | Start the Nuxt development server.                   |
+| `npm run build`        | Build the production client and Nitro server.        |
+| `npm run preview`      | Run a local preview of the production build.         |
+| `npm run generate`     | Generate a static output where supported by the app. |
+| `npm run postinstall`  | Prepare Nuxt after dependency installation.          |
+| `npm test`             | Run the Node.js and Vitest test suites.              |
+| `npm run typecheck`    | Check Nuxt and TypeScript types.                     |
+| `npm run lint`         | Run ESLint with zero allowed warnings.               |
+| `npm run format`       | Format the repository with Prettier.                 |
+| `npm run format:check` | Check repository formatting without modifying files. |

@@ -2,7 +2,7 @@ name: spf
 
 services:
   app:
-    image: "${APP_IMAGE:-ghcr.io/sonidia/spfi:latest}"
+    image: "${APP_IMAGE:-ghcr.io/thuongtruong109/spfi:latest}"
     build:
       context: .
       dockerfile: Dockerfile
