@@ -675,9 +675,7 @@ export const usePaymentStore = defineStore("payment", () => {
       delete payoutMetadata.value[payoutId];
     }
     if (!response.issues?.transactions) {
-      transactionsByPayout.value[payoutId] = enrichTransactions(
-        response.transactions,
-      );
+      transactionsByPayout.value[payoutId] = enrichTransactions(response.transactions);
       payoutDetailPageInfo.value[payoutId] = { ...response.pageInfo };
     }
   }
@@ -686,10 +684,7 @@ export const usePaymentStore = defineStore("payment", () => {
     return payoutDetailStates.value[payoutId] || createPayoutDetailState();
   }
 
-  function setPayoutDetailState(
-    payoutId: string,
-    state: PayoutDetailLoadState,
-  ) {
+  function setPayoutDetailState(payoutId: string, state: PayoutDetailLoadState) {
     payoutDetailStates.value[payoutId] = state;
   }
 

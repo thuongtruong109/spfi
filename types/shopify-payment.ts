@@ -27,13 +27,7 @@ export interface ShopifyBalanceTransactionFilters {
 }
 
 export type PayoutDetailStatus =
-  | "idle"
-  | "loading"
-  | "success"
-  | "not-found"
-  | "unauthorized"
-  | "partial"
-  | "error";
+  "idle" | "loading" | "success" | "not-found" | "unauthorized" | "partial" | "error";
 
 export interface PayoutDetailLoadState {
   status: PayoutDetailStatus;

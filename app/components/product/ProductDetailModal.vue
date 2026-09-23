@@ -268,7 +268,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-         <div class="detail-section detail-info-grid">
+        <div class="detail-section detail-info-grid">
           <div>
             <div class="detail-section-title">{{ t("product.productType") }}</div>
             <div class="detail-value">{{ product.product_type || "-" }}</div>

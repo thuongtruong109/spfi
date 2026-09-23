@@ -24,21 +24,13 @@ const { t } = useLocalization();
 </script>
 
 <template>
-  <section
-    class="payout-data-issue"
-    :class="{ 'is-compact': compact }"
-    role="alert"
-  >
+  <section class="payout-data-issue" :class="{ 'is-compact': compact }" role="alert">
     <AlertTriangle class="issue-icon" aria-hidden="true" />
     <div class="issue-copy">
       <strong>{{ title }}</strong>
       <p v-if="message">{{ message }}</p>
     </div>
-    <BaseButton
-      v-if="retryable"
-      :loading="loading"
-      @click="$emit('retry')"
-    >
+    <BaseButton v-if="retryable" :loading="loading" @click="$emit('retry')">
       {{ t("common.retry") }}
     </BaseButton>
   </section>

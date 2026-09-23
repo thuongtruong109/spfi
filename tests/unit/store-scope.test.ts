@@ -31,7 +31,10 @@ describe("store scope hydration", () => {
     const request = new Promise<DashboardTrafficSummary>((resolve) => {
       resolveRequest = resolve;
     });
-    vi.stubGlobal("$fetch", vi.fn(() => request));
+    vi.stubGlobal(
+      "$fetch",
+      vi.fn(() => request),
+    );
     const trafficStore = useTrafficStore();
 
     expect(trafficStore.hydrate("shop-a")).toBe(false);
@@ -56,9 +59,9 @@ describe("store scope hydration", () => {
       isStoreActive: vi.fn(() => false),
     };
 
-    expect(
-      hydrateInactiveStoreScopes("shop-a", [activeScope, inactiveScope]),
-    ).toBe(true);
+    expect(hydrateInactiveStoreScopes("shop-a", [activeScope, inactiveScope])).toBe(
+      true,
+    );
     expect(activeScope.hydrate).not.toHaveBeenCalled();
     expect(inactiveScope.hydrate).toHaveBeenCalledOnce();
     expect(inactiveScope.hydrate).toHaveBeenCalledWith("shop-a");

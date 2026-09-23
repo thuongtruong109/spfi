@@ -3,10 +3,7 @@ export interface StoreScopeCache {
   isStoreActive(storeId: string): boolean;
 }
 
-export function hydrateInactiveStoreScopes(
-  storeId: string,
-  scopes: StoreScopeCache[],
-) {
+export function hydrateInactiveStoreScopes(storeId: string, scopes: StoreScopeCache[]) {
   if (!storeId) return false;
 
   let hydrated = false;

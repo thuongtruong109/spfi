@@ -65,10 +65,7 @@ export default defineEventHandler(async (event) => {
   } satisfies PayoutDetailResponse;
 });
 
-function toPayoutDetailIssue(
-  error: unknown,
-  fallback: string,
-): PayoutDetailIssue {
+function toPayoutDetailIssue(error: unknown, fallback: string): PayoutDetailIssue {
   return {
     message: getAppErrorMessage(error, fallback),
     statusCode: getAppErrorStatusCode(error) || 500,
